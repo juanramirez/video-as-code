@@ -1,0 +1,24 @@
+project:
+  id: simple
+  title: "Simple example"
+  fps: 25
+  width: 160
+  height: 90
+
+bin:
+  - id: photo
+    path: assets/photo.png
+  - id: clip
+    path: assets/clip.mp4
+  - id: tone
+    path: assets/tone.mp3
+
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {clip: tone, start: 0, out: 3, fade_out: 0.5}
+    - type: video
+      clips:
+        - {clip: photo, start: 0, duration: 1.5, fade_in: 0.5}
+        - {clip: clip, start: 1.5, duration: 2}

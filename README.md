@@ -30,6 +30,10 @@ Reconstructing one from an already-rendered video plus an assets folder is a
 different, much harder problem (content-based matching, not XML parsing) —
 see `ROADMAP.md`.
 
+See `examples/simple/` for a minimal working project (tiny generated
+assets, one audio + one video track, fades and trims):
+`kdgen build examples/simple/project.yaml`.
+
 ### Language
 
 All user-facing text (validation errors, CLI output, import warnings) goes
@@ -90,11 +94,6 @@ this limitation — it's not a test that was loosened carelessly.
 
 ## Pending
 
-- [ ] **Example project with tiny committed assets** — the
-  `examples/simple/assets` directory exists but is empty; still need the
-  example YAML and minimal assets (unlike the tests, which generate their
-  own assets on the fly with `ffmpeg` via `tests/conftest.py` and don't
-  commit them).
 - [ ] **Validation against a real `melt` binary** — `tests/conftest.py`
   already has a `melt` fixture (locates the binary inside kdenlive's snap
   if `melt` isn't on PATH), but it's only partially exercised so far
