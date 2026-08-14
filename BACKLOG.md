@@ -59,14 +59,35 @@ it moves to `ROADMAP.md` under that version; it stays here until then.
     clean — real match scored 0.97 (normalized peak), an unrelated
     distractor tone scored ~0.00. A "not present" threshold looks easy to
     set here.
-  - **Not yet tested:** real footage with actual motion/texture (only
-    tried ffmpeg `testsrc` synthetic patterns and solid colors, both
-    easier than handheld video); precise trim-point recovery when only a
-    sub-range of a longer source asset appears in the render (only tested
-    whole-asset offset matching); scene-cut segmentation on a render with
-    more than two back-to-back clips.
+  - **Not yet tested:** scene-cut segmentation on a render with more than
+    two back-to-back clips.
   - **Bottom line:** matching is feasible and the audio side looks solid;
     the video side needs a real (non-degenerate) frame signature, not
-    off-the-shelf aHash, before going further. Worth prototyping trim-point
-    precision and real footage next, still before committing to an
-    architecture.
+    off-the-shelf aHash. Trim-point recovery and real (textured/moving)
+    footage were tested next (see below) and turned up something bigger
+    than expected.
+
+  **Trim-point + real-footage follow-up (2026-08-14):** tried recovering
+  the precise in-point of a render that only used a *middle slice* of a
+  longer source clip, using textured/moving synthetic footage (an evolving
+  mandelbrot zoom, not flat colors or a static test pattern) instead of the
+  first prototype's easy content. The recovered offset was confidently
+  wrong — not noisy/ambiguous, just wrong, by a suspiciously clean amount.
+  Chased it down and it wasn't the matching approach at all: **it's an
+  upstream MLT bug.** An XML-defined producer/chain with a non-zero `in`
+  attribute, read for more than one frame, starts reading from `2×in`
+  instead of `in`. Confirmed independent of kdgen, of this project's
+  sandboxed melt invocation (reproduces on a clean `apt`-installed melt
+  too), of GOP/keyframe structure, and of the qtblend/Qt6-missing
+  limitation documented elsewhere in this repo. Filed upstream:
+  https://github.com/mltframework/mlt/issues/1282.
+
+  This also means **our melt-validation tests
+  (`tests/test_melt_validation.py`) wouldn't have caught this** — they
+  check duration, not per-frame pixel content, and this bug doesn't change
+  duration, only which frames show up. Worth a follow-up test once/if the
+  upstream bug is fixed (or a workaround is found) — probably not
+  worthwhile before that, since a real fix path doesn't exist yet.
+  Trim-point recovery for the reconstruct-from-video idea itself is
+  blocked on the same fix (or a workaround, e.g. avoid relying on a single
+  producer's `in`/`out` for a sub-range read).
