@@ -272,3 +272,50 @@ timeline:
     assert g > r and g > b, (
         f"expected the middle (green) band from in=2.0, got mean rgb=({r:.0f}, {g:.0f}, {b:.0f})"
     )
+
+
+def test_melt_renders_a_real_video_fade(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check, not just structural: renders a fade_in and confirms
+    the image actually gets brighter across the fade span. Regression test
+    for a real bug: xmlgen.py used to keyframe the brightness filter's
+    `alpha` property while leaving `level` fixed at 1, which produces no
+    visible change at all when rendered - `level` is the property that
+    actually scales pixel values (see xmlgen.py's _add_video_fade_filters,
+    and MLT's own filter_brightness.yml docs: "alpha ... No alpha channel
+    adjustment occurs if this is not set or it equals 1")."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 2, fade_in: 1.5}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def brightness(t: float) -> float:
+        r, g, b = _mean_rgb(rendered, timestamp=t)
+        return (r + g + b) / 3
+
+    dark = brightness(0.0)
+    mid = brightness(0.6)
+    bright = brightness(1.4)
+
+    assert dark < mid < bright, (
+        f"expected brightness to ramp up across the fade_in, got "
+        f"dark={dark:.1f} mid={mid:.1f} bright={bright:.1f}"
+    )

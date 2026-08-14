@@ -108,15 +108,22 @@ def _add_video_default_filter(ids: _IdCounters, entry: ET.Element, width: int, h
 
 
 def _add_video_fade_filters(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """The `level` property carries the animated brightness ramp; `alpha`
+    stays fixed at -1 ("follows level", per MLT's own filter_brightness.yml
+    docs) rather than being keyframed itself. Confirmed by rendering and
+    measuring actual pixel brightness: keyframing `alpha` with `level`
+    fixed at 1 (the original version of this function) produces no visible
+    change at all - `level` is the property that actually scales pixel
+    values, independent of any alpha/compositing behavior."""
     p_in, p_out = placement.in_frame, placement.out_frame
     if placement.fade_in_frames > 0:
         L = placement.fade_in_frames
         f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
         _prop(f, "start", 1)
-        _prop(f, "level", 1)
+        _prop(f, "level", f"0=0;{L - 1}=1")
         _prop(f, "mlt_service", "brightness")
         _prop(f, "kdenlive_id", "fade_from_black")
-        _prop(f, "alpha", f"0=0;{L - 1}=1")
+        _prop(f, "alpha", -1)
         _prop(f, "kdenlive:collapsed", 0)
     if placement.fade_out_frames > 0:
         L = placement.fade_out_frames
@@ -126,10 +133,10 @@ def _add_video_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
             {"id": ids.next("filter"), "in": str(p_out - L + 1), "out": str(p_out)},
         )
         _prop(f, "start", 1)
-        _prop(f, "level", 1)
+        _prop(f, "level", f"0=1;{L - 1}=0")
         _prop(f, "mlt_service", "brightness")
         _prop(f, "kdenlive_id", "fade_to_black")
-        _prop(f, "alpha", f"0=1;{L - 1}=0")
+        _prop(f, "alpha", -1)
         _prop(f, "kdenlive:collapsed", 0)
 
 
