@@ -1,21 +1,30 @@
 """Validation against a real `melt` (MLT engine) binary: if the binary isn't
 available on this system, these tests are skipped (see the `melt` fixture in
 conftest.py) instead of failing — they're an extra confidence check, not a
-requirement for generating projects."""
+requirement for generating projects.
+
+We deliberately don't use `-consumer null`: in this sandboxed dev
+environment it hangs indefinitely, even on a trivial built-in producer with
+nothing of ours involved (`melt color:red -consumer null`). `-consumer
+avformat:<file>` renders for real (actual frame decode/encode, audio muxed
+in) and returns promptly, so we use that instead — it also lets us verify
+the render's actual duration, not just that melt accepted the file.
+"""
 from __future__ import annotations
 
 import os
 import subprocess
 from pathlib import Path
 
-from kdenlive_generator import xmlgen
+import pytest
+
+from kdenlive_generator import probe, xmlgen
+from kdenlive_generator.models import ResolvedProject
 from kdenlive_generator.schema import load_and_resolve
 
 
-def _build(tmp_path: Path, assets_dir: Path) -> Path:
-    yaml_path = tmp_path / "project.yaml"
-    yaml_path.write_text(
-        f"""
+def _project_yaml(assets_dir: Path) -> str:
+    return f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
 bin:
   - id: photo
@@ -33,30 +42,26 @@ timeline:
       clips:
         - {{clip: photo, start: 0, duration: 1.5, fade_in: 0.5}}
         - {{clip: clip, start: 1.5, duration: 2}}
-""",
-        encoding="utf-8",
-    )
+"""
+
+
+def _build(tmp_path: Path, assets_dir: Path) -> tuple[Path, ResolvedProject]:
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(_project_yaml(assets_dir), encoding="utf-8")
     resolved = load_and_resolve(yaml_path)
     out_path = tmp_path / "project.kdenlive"
     xmlgen.write(resolved, out_path)
-    return out_path
+    return out_path, resolved
 
 
-def test_melt_can_load_generated_project(tmp_path: Path, assets_dir: Path, melt):
+def _run_melt(melt, args: list[str], timeout: int = 60) -> subprocess.CompletedProcess:
     exe, extra_env = melt
-    out_path = _build(tmp_path, assets_dir)
-    xml_out = tmp_path / "roundtrip.xml"
-
     env = {**os.environ, **extra_env}
-    result = subprocess.run(
-        [exe, str(out_path), "-consumer", f"xml:{xml_out}", "all_frames=0"],
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=60,
-    )
+    return subprocess.run([exe, *args], capture_output=True, text=True, env=env, timeout=timeout)
 
-    stderr_lines = [
+
+def _non_fatal_stderr(result: subprocess.CompletedProcess) -> list[str]:
+    return [
         line
         for line in result.stderr.splitlines()
         # the test runner invokes the snap's melt-7 "raw", outside its
@@ -65,7 +70,60 @@ def test_melt_can_load_generated_project(tmp_path: Path, assets_dir: Path, melt)
         # is available. This isn't a failure of the generated XML.
         if "qtblend" not in line and "libmltqt6" not in line
     ]
-    fatal = [l for l in stderr_lines if "Failed to load" in l and "project.kdenlive" in l]
 
+
+def _assert_no_fatal_load_error(result: subprocess.CompletedProcess) -> list[str]:
+    stderr_lines = _non_fatal_stderr(result)
+    fatal = [l for l in stderr_lines if "Failed to load" in l and "project.kdenlive" in l]
     assert not fatal, "melt failed to load the generated project:\n" + "\n".join(stderr_lines)
+    return stderr_lines
+
+
+def test_melt_can_load_generated_project(tmp_path: Path, assets_dir: Path, melt):
+    out_path, _resolved = _build(tmp_path, assets_dir)
+    xml_out = tmp_path / "roundtrip.xml"
+
+    result = _run_melt(melt, [str(out_path), "-consumer", f"xml:{xml_out}", "all_frames=0"])
+
+    _assert_no_fatal_load_error(result)
     assert xml_out.exists() and xml_out.stat().st_size > 0
+
+
+def test_melt_can_render_generated_project(tmp_path: Path, assets_dir: Path, melt):
+    """Stronger than the structural check above: actually decodes and
+    re-encodes every frame instead of just dumping the parsed structure, and
+    confirms the rendered output's duration matches what kdgen computed —
+    catching cases where melt loads a project fine but silently misreads a
+    property (wrong duration, dropped clip) that a structural dump alone
+    wouldn't reveal."""
+    if not probe.ffprobe_available():
+        pytest.skip("ffprobe not available: can't inspect the rendered output")
+
+    out_path, resolved = _build(tmp_path, assets_dir)
+    rendered = tmp_path / "rendered.mp4"
+
+    result = _run_melt(melt, [str(out_path), "-consumer", f"avformat:{rendered}"])
+
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    probed = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(rendered),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    rendered_duration = float(probed.stdout.strip())
+    expected_duration = resolved.fps.frames_to_seconds(resolved.total_frames)
+    frame = 1 / resolved.fps.fps
+    assert abs(rendered_duration - expected_duration) <= frame, (
+        f"rendered duration {rendered_duration}s doesn't match the "
+        f"{expected_duration}s kdgen computed ({resolved.total_frames} frames @ {resolved.fps.fps}fps)"
+    )

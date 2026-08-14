@@ -4,11 +4,6 @@ Unordered pool of things we want to do at some point — no priority, no
 version assigned. When one of these gets scheduled into an actual release,
 it moves to `ROADMAP.md` under that version; it stays here until then.
 
-- Validate against a real `melt` binary. `tests/conftest.py` already has a
-  `melt` fixture (locates the binary inside kdenlive's snap if `melt` isn't
-  on PATH), but it's only partially exercised so far
-  (`tests/test_melt_validation.py`); coverage needs review.
-
 - Audio fades are unverified. `_add_audio_fade_filters` in `xmlgen.py` is
   marked in the code itself as best-effort: it hasn't been checked against
   a real kdenlive project with audio fades (only video fades were
