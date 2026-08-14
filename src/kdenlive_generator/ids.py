@@ -1,9 +1,10 @@
 """Deterministic identifier generation.
 
 No `uuid.uuid4()` or timestamps: if the input YAML doesn't change, the
-generated XML output must be byte-for-byte identical. That's what keeps Git
-diffs of the generated .kdenlive (if it ever gets versioned) readable, and
-it's essential for testing generation reproducibly.
+generated XML output must be byte-for-byte identical. That's what keeps
+version-control diffs of the generated .kdenlive (if it ever gets
+versioned) readable, and it's essential for testing generation
+reproducibly.
 """
 from __future__ import annotations
 

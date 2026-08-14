@@ -63,6 +63,6 @@ def _find_melt() -> tuple[str, dict] | None:
 def melt():
     found = _find_melt()
     if found is None:
-        pytest.skip("no se ha encontrado un binario 'melt' (motor MLT) utilizable en este sistema")
+        pytest.skip("no usable 'melt' (MLT engine) binary found on this system")
     exe, extra_env = found
     return exe, extra_env

@@ -1,8 +1,8 @@
 # kdenlive-generator
 
 Programmatic generator for [kdenlive](https://kdenlive.org) projects from a
-declarative YAML description, meant for versioning videos with Git: the
-`.yaml` is what you commit; the `.kdenlive` (XML/MLT) is regenerated
+declarative YAML description, meant for versioning videos with a VCS (like
+Git): the `.yaml` is what you check in; the `.kdenlive` (XML/MLT) is regenerated
 deterministically with `kdgen build` and doesn't need to live in the repo.
 
 ## Install
