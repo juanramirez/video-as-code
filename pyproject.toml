@@ -12,6 +12,10 @@ dependencies = [
 dev = [
     "pytest>=7.0",
 ]
+reconstruct = [
+    "numpy>=1.21",
+    "Pillow>=9.0",
+]
 
 [project.scripts]
 kdgen = "kdenlive_generator.cli:main"
