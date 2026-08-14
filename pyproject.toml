@@ -1,0 +1,28 @@
+[project]
+name = "kdenlive-generator"
+version = "0.1.0"
+description = "Generador programático de proyectos kdenlive a partir de una descripción declarativa en YAML, pensado para versionar vídeos con Git."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+kdgen = "kdenlive_generator.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

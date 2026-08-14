@@ -1,0 +1,298 @@
+"""Reverse converter: .kdenlive (XML/MLT) -> declarative YAML.
+
+Goal: recognize exactly what this generator knows how to produce (video/
+audio tracks, trimmed clips, fade to/from black, volume fades, simple
+qtblend picture-in-picture compositing) and translate it to YAML.
+
+Anything that's NOT recognized — other effects, non-standard transitions,
+clips with speed changes, titles, subtitles, extra nested sequences,
+groupings, guides... — is **not discarded**: it's attached as-is (original
+XML) under the `x_kdenlive_raw:` key at the end of the YAML, along with a
+summary printed to the terminal, so the user can decide what to do with it
+(port it by hand, ignore it, or keep using the original .kdenlive for that
+part).
+"""
+from __future__ import annotations
+
+import xml.etree.ElementTree as ET
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
+
+from . import probe
+from .i18n import msg
+from .timecode import FrameRate, resolve_fps
+
+DEFAULT_TRACK_FILTER_IDS = {"qtblend"}  # default filter the generator itself adds
+
+
+@dataclass
+class RawItem:
+    where: str
+    xml: str
+
+
+@dataclass
+class ImportResult:
+    data: dict
+    raw_items: list[RawItem] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+def _pretty(el: ET.Element) -> str:
+    ET.indent(el, space="  ")
+    return ET.tostring(el, encoding="unicode")
+
+
+def _props(el: ET.Element) -> dict[str, str]:
+    return {p.get("name"): (p.text or "") for p in el.findall("property")}
+
+
+def _parse_frame_value(value: Optional[str], fps: FrameRate) -> int:
+    if not value:
+        return 0
+    value = value.strip()
+    if ":" in value:
+        h, m, s = value.split(":")
+        seconds = int(h) * 3600 + int(m) * 60 + float(s)
+        return fps.seconds_to_frames(seconds)
+    return int(round(float(value)))
+
+
+class Importer:
+    def __init__(self, root: ET.Element, kdenlive_path: Path):
+        self.root = root
+        self.path = kdenlive_path
+        self.base_dir = kdenlive_path.parent
+        self.by_id: dict[str, ET.Element] = {
+            el.get("id"): el for el in root.iter() if el.get("id") is not None
+        }
+        self.raw_items: list[RawItem] = []
+        self.warnings: list[str] = []
+        self.bin_by_path: dict[str, str] = {}
+        self.bin_entries: list[dict] = []
+
+        profile = root.find("profile")
+        if profile is None:
+            raise ValueError(msg("reverse.no_profile"))
+        self.width = int(profile.get("width"))
+        self.height = int(profile.get("height"))
+        self.colorspace = int(profile.get("colorspace", "709"))
+        num = int(profile.get("frame_rate_num"))
+        den = int(profile.get("frame_rate_den", "1"))
+        self.fps = FrameRate(num, den)
+
+        self.black_ids = {
+            el.get("id")
+            for el in list(root.findall("producer")) + list(root.findall("chain"))
+            if _props(el).get("resource") == "black"
+        }
+
+    # -- localizar la secuencia activa ------------------------------------
+
+    def find_main_sequence(self) -> ET.Element:
+        main_bin = self.by_id.get("main_bin")
+        active_uuid = None
+        if main_bin is not None:
+            active_uuid = _props(main_bin).get("kdenlive:docproperties.activetimeline")
+        if active_uuid and active_uuid in self.by_id:
+            return self.by_id[active_uuid]
+        for tractor in self.root.findall("tractor"):
+            if "kdenlive:uuid" in _props(tractor):
+                return tractor
+        raise ValueError(msg("reverse.no_sequence_found"))
+
+    def other_sequences(self, main: ET.Element) -> list[ET.Element]:
+        return [
+            t
+            for t in self.root.findall("tractor")
+            if "kdenlive:uuid" in _props(t) and t is not main
+        ]
+
+    # -- registro de assets -------------------------------------------------
+
+    def register_bin_clip(self, resource: str) -> str:
+        if resource in self.bin_by_path:
+            return self.bin_by_path[resource]
+        p = Path(resource)
+        try:
+            rel = Path(resource).resolve().relative_to(self.base_dir.resolve())
+            display_path = str(rel)
+        except ValueError:
+            display_path = resource
+        base_id = p.stem or "clip"
+        clip_id, n = base_id, 2
+        existing_ids = {c["id"] for c in self.bin_entries}
+        while clip_id in existing_ids:
+            clip_id = f"{base_id}_{n}"
+            n += 1
+        self.bin_entries.append({"id": clip_id, "path": display_path})
+        self.bin_by_path[resource] = clip_id
+        return clip_id
+
+    # -- pistas ---------------------------------------------------------------
+
+    def resolve_track_playlist(self, track_el: ET.Element, ctx: str) -> tuple[ET.Element, str]:
+        """From the sequence's <track producer="..."/>, walks back to the
+        playlist with the real entries and determines if it's video or audio."""
+        ref = self.by_id.get(track_el.get("producer"))
+        if ref is None:
+            raise ValueError(msg("reverse.broken_reference", ctx=ctx, ref=track_el.get("producer")))
+
+        if ref.tag == "playlist":
+            kind = "audio" if "kdenlive:audio_track" in _props(ref) else "video"
+            return ref, kind
+
+        if ref.tag == "tractor":
+            sub_tracks = ref.findall("track")
+            candidates = []
+            for st in sub_tracks:
+                pl = self.by_id.get(st.get("producer"))
+                if pl is None or pl.tag != "playlist":
+                    continue
+                hide = st.get("hide", "")
+                kind = "audio" if hide == "video" else "video"
+                has_entries = pl.find("entry") is not None
+                candidates.append((pl, kind, has_entries))
+            non_empty = [c for c in candidates if c[2]]
+            if len(non_empty) > 1:
+                for pl, _kind, _ in non_empty[1:]:
+                    self.raw_items.append(RawItem(msg("reverse.secondary_playlist_with_content", ctx=ctx), _pretty(pl)))
+                self.warnings.append(msg("reverse.mix_track_warning", ctx=ctx))
+            if non_empty:
+                return non_empty[0][0], non_empty[0][1]
+            if candidates:
+                return candidates[0][0], candidates[0][1]
+
+        raise ValueError(msg("reverse.unrecognized_track_structure", ctx=ctx, tag=ref.tag))
+
+    def convert_clip_filter(self, filter_el: ET.Element, entry_in: int, entry_out: int, ctx: str) -> dict:
+        """Returns partial keys (fade_in/fade_out/position/size) to merge into
+        the placement, or {} if it doesn't add anything recognized (and has
+        already been dumped to raw_items)."""
+        props = _props(filter_el)
+        service = props.get("mlt_service")
+        kid = props.get("kdenlive_id")
+        f_in = _parse_frame_value(filter_el.get("in"), self.fps) if filter_el.get("in") else entry_in
+        f_out = _parse_frame_value(filter_el.get("out"), self.fps) if filter_el.get("out") else entry_out
+        length_s = self.fps.frames_to_seconds(f_out - f_in + 1)
+
+        if service == "brightness" and kid == "fade_from_black":
+            return {"fade_in": round(length_s, 3)}
+        if service == "brightness" and kid == "fade_to_black":
+            return {"fade_out": round(length_s, 3)}
+        if service == "volume" and kid == "fadeInVolume":
+            return {"fade_in": round(length_s, 3)}
+        if service == "volume" and kid == "fadeOutVolume":
+            return {"fade_out": round(length_s, 3)}
+        if service == "qtblend" and kid == "qtblend":
+            rect = props.get("rect", "")
+            keyframes = rect.split(";") if rect else []
+            if len(keyframes) <= 1:
+                try:
+                    _, vals = rect.split("=", 1)
+                    x, y, w, h, o = vals.split()
+                    x, y, w, h, o = float(x), float(y), float(w), float(h), float(o)
+                except (ValueError, IndexError):
+                    self.raw_items.append(RawItem(msg("reverse.qtblend_rect_unreadable", ctx=ctx), _pretty(filter_el)))
+                    return {}
+                is_default = (x, y, w, h, o) == (0, 0, float(self.width), float(self.height), 1)
+                if is_default:
+                    return {}
+                return {"position": [x, y], "size": [w, h]}
+            self.raw_items.append(RawItem(msg("reverse.qtblend_animated_position", ctx=ctx), _pretty(filter_el)))
+            return {}
+
+        self.raw_items.append(RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service or "?", kid=kid or "?"), _pretty(filter_el)))
+        return {}
+
+    def convert_playlist(self, playlist: ET.Element, kind: str, ctx: str) -> list[dict]:
+        clips = []
+        cursor = 0
+        for child in playlist:
+            if child.tag == "property":
+                continue
+            if child.tag == "blank":
+                cursor += _parse_frame_value(child.get("length"), self.fps)
+                continue
+            if child.tag != "entry":
+                self.raw_items.append(RawItem(msg("reverse.unexpected_playlist_element", ctx=ctx, tag=child.tag), _pretty(child)))
+                continue
+
+            producer_id = child.get("producer")
+            producer_el = self.by_id.get(producer_id)
+            if producer_el is None:
+                self.warnings.append(msg("reverse.entry_missing_producer", ctx=ctx, producer_id=producer_id))
+                continue
+            props = _props(producer_el)
+            resource = props.get("resource") or props.get("warp_resource")
+            if not resource or resource == "black":
+                self.raw_items.append(RawItem(msg("reverse.clip_no_resource", ctx=ctx, tag=producer_el.tag, producer_id=producer_id), _pretty(child)))
+                continue
+            if props.get("mlt_service") == "timewarp" or ":" in resource.split("/")[0]:
+                self.raw_items.append(RawItem(msg("reverse.timewarp_unsupported", ctx=ctx), _pretty(child) + "\n" + _pretty(producer_el)))
+                cursor += _parse_frame_value(child.get("out"), self.fps) - _parse_frame_value(child.get("in"), self.fps) + 1
+                continue
+
+            clip_id = self.register_bin_clip(resource)
+            in_frame = _parse_frame_value(child.get("in"), self.fps)
+            out_frame = _parse_frame_value(child.get("out"), self.fps)
+            entry_ctx = f"{ctx}[{clip_id}@{cursor}]"
+
+            placement = {
+                "clip": clip_id,
+                "start": round(self.fps.frames_to_seconds(cursor), 3),
+            }
+            if in_frame != 0:
+                placement["in"] = round(self.fps.frames_to_seconds(in_frame), 3)
+            placement["out"] = round(self.fps.frames_to_seconds(out_frame + 1), 3)
+
+            for filt in child.findall("filter"):
+                placement.update(self.convert_clip_filter(filt, in_frame, out_frame, entry_ctx))
+
+            clips.append(placement)
+            cursor += out_frame - in_frame + 1
+        return clips
+
+    def run(self) -> ImportResult:
+        sequence = self.find_main_sequence()
+        for extra in self.other_sequences(sequence):
+            self.raw_items.append(RawItem(msg("reverse.extra_sequence_not_imported"), _pretty(extra)))
+
+        title = _props(sequence).get("kdenlive:clipname", self.path.stem)
+        track_els = [t for t in sequence.findall("track") if t.get("producer") not in self.black_ids]
+
+        tracks_yaml = []
+        for i, track_el in enumerate(track_els):
+            ctx = f"timeline.tracks[{i}]"
+            try:
+                playlist, kind = self.resolve_track_playlist(track_el, ctx)
+            except ValueError as exc:
+                self.warnings.append(str(exc))
+                self.raw_items.append(RawItem(msg("reverse.track_not_imported", ctx=ctx), _pretty(track_el)))
+                continue
+            clips = self.convert_playlist(playlist, kind, ctx)
+            tracks_yaml.append({"type": kind, "name": f"{'V' if kind == 'video' else 'A'}{i + 1}", "clips": clips})
+
+        data = {
+            "project": {
+                "id": self.path.stem,
+                "title": title,
+                "fps": self.fps.num if self.fps.den == 1 else round(self.fps.fps, 3),
+                "width": self.width,
+                "height": self.height,
+                "colorspace": self.colorspace,
+            },
+            "bin": self.bin_entries,
+            "timeline": {"tracks": tracks_yaml},
+        }
+        if self.raw_items:
+            data["x_kdenlive_raw"] = [{"where": r.where, "xml": r.xml} for r in self.raw_items]
+
+        return ImportResult(data=data, raw_items=self.raw_items, warnings=self.warnings)
+
+
+def import_kdenlive(path: str | Path) -> ImportResult:
+    path = Path(path).resolve()
+    tree = ET.parse(path)
+    return Importer(tree.getroot(), path).run()

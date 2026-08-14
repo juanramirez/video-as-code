@@ -1,0 +1,19 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+
+# Local Claude Code settings (permissions etc.): per-machine, not project config.
+.claude/settings.local.json
+
+# Build artifacts: regenerated deterministically with `kdgen build`.
+# Don't version these unless you want to freeze a specific copy.
+*.kdenlive
+!examples/**/*.kdenlive.expected
+
+# Caches created by kdenlive/melt when opening a project
+*.kdenlive.tmp
+cachefiles/
