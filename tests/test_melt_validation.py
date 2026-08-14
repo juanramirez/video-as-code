@@ -127,3 +127,64 @@ def test_melt_can_render_generated_project(tmp_path: Path, assets_dir: Path, mel
         f"rendered duration {rendered_duration}s doesn't match the "
         f"{expected_duration}s kdgen computed ({resolved.total_frames} frames @ {resolved.fps.fps}fps)"
     )
+
+
+def _mean_volume_db(path: Path, start: float, duration: float) -> float:
+    result = subprocess.run(
+        [
+            "ffmpeg", "-hide_banner",
+            "-i", str(path),
+            "-ss", str(start), "-t", str(duration),
+            "-af", "volumedetect",
+            "-f", "null", "-",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    for line in result.stderr.splitlines():
+        if "mean_volume:" in line:
+            return float(line.split("mean_volume:")[1].strip().split(" ")[0])
+    raise RuntimeError(f"could not parse mean_volume from ffmpeg output:\n{result.stderr}")
+
+
+def test_melt_renders_a_real_audio_fade(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check, not just structural: renders a fade_in and confirms
+    the audio actually gets louder across the fade span, instead of only
+    asserting the filter XML looks plausible. This is what "audio fades are
+    unverified" (see BACKLOG.md, now resolved) was about — the gain/end
+    property names and kdenlive_id were previously guessed by analogy with
+    the video fade filter and didn't match kdenlive's real "fadein"/
+    "fadeout" audio effects (see xmlgen.py's _add_audio_fade_filters)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 3, fade_in: 1.5}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.wav"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    quiet = _mean_volume_db(rendered, start=0.0, duration=0.15)
+    mid = _mean_volume_db(rendered, start=0.6, duration=0.15)
+    loud = _mean_volume_db(rendered, start=2.0, duration=0.15)
+
+    assert quiet < mid < loud, (
+        f"expected volume to ramp up across the fade_in, got "
+        f"quiet={quiet}dB mid={mid}dB loud={loud}dB"
+    )

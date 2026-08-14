@@ -4,12 +4,6 @@ Unordered pool of things we want to do at some point — no priority, no
 version assigned. When one of these gets scheduled into an actual release,
 it moves to `ROADMAP.md` under that version; it stays here until then.
 
-- Audio fades are unverified. `_add_audio_fade_filters` in `xmlgen.py` is
-  marked in the code itself as best-effort: it hasn't been checked against
-  a real kdenlive project with audio fades (only video fades were
-  available in the sample project used as reference). Revisit once there's
-  a reference project with audio.
-
 - Only `en`/`es` exist in the i18n catalog (`i18n.py`). Adding a locale is
   just adding another dict and an entry in `CATALOGS` — no architecture
   change needed, just translation work.

@@ -181,9 +181,9 @@ class Importer:
             return {"fade_in": round(length_s, 3)}
         if service == "brightness" and kid == "fade_to_black":
             return {"fade_out": round(length_s, 3)}
-        if service == "volume" and kid == "fadeInVolume":
+        if service == "volume" and kid == "fadein":
             return {"fade_in": round(length_s, 3)}
-        if service == "volume" and kid == "fadeOutVolume":
+        if service == "volume" and kid == "fadeout":
             return {"fade_out": round(length_s, 3)}
         if service == "qtblend" and kid == "qtblend":
             rect = props.get("rect", "")

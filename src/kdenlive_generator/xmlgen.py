@@ -134,16 +134,23 @@ def _add_video_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
 
 
 def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
-    """Best-effort: this hasn't been verified against a real project saved by
-    kdenlive (the sample project available only had video fades). Manually
-    review the result if you use fade_in/fade_out on audio tracks."""
+    """Matches kdenlive's own "Fade in"/"Fade out" audio effects: mlt_service
+    "volume", kdenlive_id "fadein"/"fadeout", plain linear `gain`/`end`
+    (0..1) rather than a dB-keyframed `level`. Confirmed against the effect
+    definitions and filter presets shipped with kdenlive itself
+    (share/kdenlive/effects/fadein.xml, share/mlt-7/presets/filter/volume/
+    fade_in) — not just modeled by analogy with the video fade filter, as
+    the previous version of this function was (it used a nonexistent
+    kdenlive_id and a dB keyframe string on a property, "gain", that MLT's
+    own filter docs mark as ignoring animation when "level" isn't set)."""
     p_in, p_out = placement.in_frame, placement.out_frame
     if placement.fade_in_frames > 0:
         L = placement.fade_in_frames
         f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
         _prop(f, "mlt_service", "volume")
-        _prop(f, "kdenlive_id", "fadeInVolume")
-        _prop(f, "gain", f"0=-60dB;{L - 1}=0dB")
+        _prop(f, "kdenlive_id", "fadein")
+        _prop(f, "gain", 0)
+        _prop(f, "end", 1)
         _prop(f, "kdenlive:collapsed", 0)
     if placement.fade_out_frames > 0:
         L = placement.fade_out_frames
@@ -153,8 +160,9 @@ def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
             {"id": ids.next("filter"), "in": str(p_out - L + 1), "out": str(p_out)},
         )
         _prop(f, "mlt_service", "volume")
-        _prop(f, "kdenlive_id", "fadeOutVolume")
-        _prop(f, "gain", f"0=0dB;{L - 1}=-60dB")
+        _prop(f, "kdenlive_id", "fadeout")
+        _prop(f, "gain", 1)
+        _prop(f, "end", 0)
         _prop(f, "kdenlive:collapsed", 0)
 
 
