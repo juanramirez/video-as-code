@@ -235,3 +235,68 @@ timeline:
     fade_in = reconstruct.detect_audio_fade(waveform, reconstruct.AUDIO_SAMPLE_RATE, window_s=window_s)
 
     assert abs(fade_in - 1.0) <= window_s * 3, f"expected fade_in ~1.0s, got {fade_in}"
+
+
+def test_reconstruct_end_to_end_round_trip(tmp_path: Path, assets_dir: Path, melt):
+    """The full pipeline: build a known project, render it, reconstruct a
+    YAML from just the render + the assets folder (no access to the
+    original YAML), and check the recovered placements against the
+    originals. No fades here on purpose - fades change a segment's actual
+    pixel/sample content relative to the plain source asset, which the
+    matching step (correctly) treats as a real content difference; that
+    interaction is a known, documented limitation (see reconstruct.py's
+    module docstring / BACKLOG.md), not what this test is checking."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 3}}
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1.5}}
+        - {{clip: clip, start: 1.5, in: 0.3, out: 2.3}}
+"""
+    rendered = _render(tmp_path, yaml_text, melt)
+
+    result = reconstruct.reconstruct(rendered, assets_dir)
+
+    assert "x_reconstruct_unmatched" not in result.data, (
+        f"expected everything to match confidently, got: {result.data.get('x_reconstruct_unmatched')}"
+    )
+
+    tracks = {t["type"]: t for t in result.data["timeline"]["tracks"]}
+    video_clips = tracks["video"]["clips"]
+    audio_clips = tracks["audio"]["clips"]
+
+    assert len(video_clips) == 2
+    tol = reconstruct.COARSE_SAMPLE_INTERVAL * 2
+
+    photo_clip, clip_clip = video_clips
+    assert abs(photo_clip["start"] - 0.0) <= tol
+    assert abs(photo_clip["duration"] - 1.5) <= tol
+    assert "in" not in photo_clip  # photo is a still image, no trim to recover
+
+    assert abs(clip_clip["start"] - 1.5) <= tol
+    assert abs(clip_clip.get("in", 0.0) - 0.3) <= tol
+    assert abs(clip_clip["duration"] - 2.0) <= tol
+
+    assert len(audio_clips) == 1
+    assert abs(audio_clips[0]["start"] - 0.0) <= tol
+    assert abs(audio_clips[0]["duration"] - 3.0) <= tol
+
+    # The recovered YAML must also be valid against our own schema, not
+    # just "look right" - same bar test_reverse.py's round-trip tests hold
+    # reverse.py's output to.
+    reconstructed_yaml = tmp_path / "reconstructed.yaml"
+    import yaml as pyyaml
+    reconstructed_yaml.write_text(pyyaml.dump(result.data, sort_keys=False), encoding="utf-8")
+    load_and_resolve(reconstructed_yaml)  # must not raise

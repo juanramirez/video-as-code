@@ -65,6 +65,33 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reconstruct(args: argparse.Namespace) -> int:
+    video_path = Path(args.video)
+    assets_dir = Path(args.assets_dir)
+    output = Path(args.output) if args.output else video_path.with_suffix(".yaml")
+
+    try:
+        from . import reconstruct
+    except ImportError:
+        print(msg("cli.reconstruct_missing_extra"), file=sys.stderr)
+        return 1
+
+    try:
+        result = reconstruct.reconstruct(video_path, assets_dir)
+    except reconstruct.ReconstructError as exc:
+        print(msg("cli.reconstruct_error", path=video_path, exc=exc), file=sys.stderr)
+        return 1
+
+    output.write_text(_dump_yaml(result.data), encoding="utf-8")
+    print(msg("cli.reconstruct_done", output=output))
+    for w in result.warnings:
+        print(msg("cli.warning_prefix", w=w), file=sys.stderr)
+    unmatched = result.data.get("x_reconstruct_unmatched")
+    if unmatched:
+        print(msg("cli.reconstruct_unmatched_notice", n=len(unmatched), output=output))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kdgen", description=msg("cli.help.description"))
     sub = parser.add_subparsers(dest="command", required=True)
@@ -82,6 +109,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_import.add_argument("kdenlive_file", help=msg("cli.help.kdenlive_path"))
     p_import.add_argument("-o", "--output", help=msg("cli.help.import_output"))
     p_import.set_defaults(func=cmd_import)
+
+    p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
+    p_reconstruct.add_argument("video", help=msg("cli.help.reconstruct_video"))
+    p_reconstruct.add_argument("assets_dir", help=msg("cli.help.reconstruct_assets_dir"))
+    p_reconstruct.add_argument("-o", "--output", help=msg("cli.help.reconstruct_output"))
+    p_reconstruct.set_defaults(func=cmd_reconstruct)
 
     return parser
 

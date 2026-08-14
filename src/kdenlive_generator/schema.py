@@ -34,7 +34,7 @@ from .models import (
 )
 from .timecode import FrameRate, resolve_fps
 
-RESERVED_TOP_LEVEL_KEYS = {"project", "bin", "timeline", "scenes", "x_kdenlive_raw"}
+RESERVED_TOP_LEVEL_KEYS = {"project", "bin", "timeline", "scenes", "x_kdenlive_raw", "x_reconstruct_unmatched"}
 
 
 def load_yaml(path: str | Path) -> ProjectDoc:

@@ -19,34 +19,45 @@ backlog.
 
 ## v0.2 — scoped (2026-08-14)
 
-- **`kdgen reconstruct`**: reconstruct a YAML from an already-rendered
-  video + an assets folder, via content-based matching (not XML parsing —
-  there's no structure to walk, just pixels and audio samples). A separate
-  tool/subcommand, not an extension of `reverse.py` — doesn't share
-  `Importer`'s XML-tree-walking logic, needs its own tolerance-for-error
-  model (this will never be as exact as the `.kdenlive` import), its own
-  tests.
+- **`kdgen reconstruct`** — **implemented** (2026-08-14, branch
+  `kdgen-reconstruct`, not yet merged): reconstructs a YAML from an
+  already-rendered video + an assets folder, via content-based matching
+  (not XML parsing — there's no structure to walk, just pixels and audio
+  samples). Its own module (`reconstruct.py`) and CLI subcommand
+  (`kdgen reconstruct <video> <assets_dir> [-o output.yaml]`), not an
+  extension of `reverse.py` — doesn't share `Importer`'s XML-tree-walking
+  logic. Needs the optional `reconstruct` extra (`numpy`, `Pillow`); the
+  base install stays light, `cli.py` imports it lazily.
 
-  Prototype findings so far (2026-08-14, throwaway scripts, not in the
-  repo):
-  - *Video matching*: naive average-hash (aHash: resize 8x8, threshold
-    against the frame's own mean) mostly worked, but has a sharp failure
-    mode — any flat/solid-color frame hashes to the same all-zero vector
-    regardless of hue, since every pixel equals the mean. An unrelated
-    distractor frame matched a real asset perfectly (distance 0) because
-    of this. Fix: compare raw downsampled RGB values directly (Euclidean
-    distance), not a binarized hash.
-  - *Audio matching*: cross-correlation of downsampled (8kHz) waveforms is
-    strong and clean — real match scored 0.97 (normalized peak), an
-    unrelated distractor scored ~0.00.
-  - *Trim-point recovery*: initially looked broken on textured/moving
-    content, but wasn't a matching problem — it surfaced a real kdgen bug
-    (nonzero `in:` was double-applied when generating XML; see the v0.1
-    fix, `xmlgen.py`/`_build_track`, and
-    https://github.com/mltframework/mlt/issues/1282). Now unblocked.
-  - **Not yet tested**: real (non-synthetic) footage with actual
-    motion/texture; scene-cut segmentation on a render with more than two
-    back-to-back clips.
+  Pipeline: frame/audio signature banks per candidate asset -> scene-cut
+  segmentation of the render (frame-to-frame signature distance, flagged
+  as a cut via a median+MAD statistical outlier, not mean+stdev — a real
+  cut is such an extreme value among a handful of samples that mean/stdev
+  get dragged toward it, nearly masking it) -> per-segment asset
+  identification (nearest-neighbor signature distance for video,
+  FFT-based cross-correlation for audio, no `scipy` dependency) ->
+  trim-point recovery (sliding-window signature search) -> fade detection
+  (brightness/RMS ramp, thresholds relative to each segment's own plateau
+  level, not an absolute cutoff). Low-confidence or unmatched segments are
+  never guessed — they land under `x_reconstruct_unmatched:` instead, the
+  same way `reverse.py` uses `x_kdenlive_raw:`. Verified end-to-end against
+  real `melt` renders, not just structurally
+  (`tests/test_reconstruct.py::test_reconstruct_end_to_end_round_trip`).
+
+  Along the way this surfaced two real, unrelated bugs, both found and
+  fixed on `master`: the nonzero-`in:` double-trim
+  (https://github.com/mltframework/mlt/issues/1282) and video
+  fade_in/fade_out having no visible effect when rendered (`level`/`alpha`
+  swapped in the `brightness` filter).
+
+  **Known limitation:** matching compares against each asset's *plain*
+  content, so a segment that's mid-fade (darkened/quieted relative to the
+  source) can score too poorly to match confidently, and segmentation can
+  split a fade into extra spurious segments. Fails safe (lands in
+  `x_reconstruct_unmatched` rather than guessing wrong), but not yet
+  addressed at the root. Also not yet tried against real (non-synthetic)
+  handheld footage — only synthetic test patterns and a textured
+  mandelbrot-style stand-in so far.
 - **Titles/text clips**: generate kdenlive title clips from YAML (not just
   recognize them on import — extends the generator side, not only
   `reverse.py`). Currently unsupported in both directions.

@@ -15,12 +15,24 @@ every solid color hashes identically regardless of hue — found while
 prototyping this). Audio matching is FFT-based cross-correlation of
 downsampled waveforms, implemented directly on `numpy.fft` rather than
 adding a `scipy` dependency for a single function.
+
+Known limitation: matching compares against each asset's *plain* content,
+so a segment that's actually mid-fade (pixels darkened/audio quieted
+relative to the source) can score too poorly to match confidently, and
+scene-cut segmentation can split a fade region into extra spurious
+segments (a fade is itself a run of changing frames). Both fail safe -
+they land in `x_reconstruct_unmatched` instead of a wrong guess - but a
+fade at a segment boundary is more likely to need manual review than a
+plain cut. Not yet addressed: segmentation/matching that account for a
+possible in-progress fade rather than assuming plain content throughout.
 """
 from __future__ import annotations
 
+import json
 import subprocess
+import tempfile
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -28,10 +40,21 @@ import numpy as np
 from PIL import Image
 
 from . import probe
+from .timecode import resolve_fps
 
 SIGNATURE_SIZE = 8  # frame signatures are SIGNATURE_SIZE x SIGNATURE_SIZE x 3 floats
 COARSE_SAMPLE_INTERVAL = 0.2  # seconds, for identifying which asset a segment came from
 AUDIO_SAMPLE_RATE = 8000  # Hz, downsampled for cross-correlation
+
+# Confidence cutoffs below which a match isn't trusted and gets flagged
+# instead of guessed. Seeded from prototype/test measurements: real video
+# matches stayed well under 500 (near-zero for a clean match, low hundreds
+# under heavy recompression) while distractors scored 1000+; real audio
+# matches stayed above 0.7 (even for an unusually hard periodic test tone)
+# while distractors scored ~0.0. Deliberately conservative gaps, not tight
+# to the observed numbers - tune down as more real-world cases come in.
+VIDEO_MATCH_DISTANCE_THRESHOLD = 500.0
+AUDIO_MATCH_SCORE_THRESHOLD = 0.3
 
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tiff", ".tif"}
@@ -61,18 +84,56 @@ def _signature_from_image(img: Image.Image) -> np.ndarray:
     return np.asarray(small, dtype=np.float64).flatten()
 
 
-def extract_frame_signatures(path: Path, tmp_dir: Path, *, fps: float) -> list[np.ndarray]:
-    """Bulk-extracts frames at `fps` and returns one signature per frame, in
-    order. Bulk extraction (one ffmpeg call, `-vf fps=`) instead of one call
-    per timestamp — much faster for anything beyond a handful of frames."""
-    out_dir = tmp_dir / f"frames_{path.stem}_{fps}"
+def extract_frame_signatures(
+    path: Path,
+    tmp_dir: Path,
+    *,
+    fps: float,
+    start_s: float = 0.0,
+    duration_s: Optional[float] = None,
+) -> list[np.ndarray]:
+    """Bulk-extracts frames at `fps` (optionally just a `[start_s, start_s +
+    duration_s)` window) and returns one signature per frame, in order.
+    Bulk extraction (one ffmpeg call, `-vf fps=`) instead of one call per
+    timestamp — much faster for anything beyond a handful of frames."""
+    out_dir = tmp_dir / f"frames_{path.stem}_{fps}_{start_s}_{duration_s}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    _run_ffmpeg(["-i", str(path), "-vf", f"fps={fps}", str(out_dir / "f_%06d.png")])
+    args = []
+    if start_s > 0:
+        args += ["-ss", str(start_s)]
+    args += ["-i", str(path)]
+    if duration_s is not None:
+        args += ["-t", str(duration_s)]
+    args += ["-vf", f"fps={fps}", str(out_dir / "f_%06d.png")]
+    _run_ffmpeg(args)
     signatures = []
     for png in sorted(out_dir.glob("f_*.png")):
         with Image.open(png) as img:
             signatures.append(_signature_from_image(img))
     return signatures
+
+
+def probe_video_info(path: Path) -> dict:
+    """width/height/fps of a video's first stream, via ffprobe."""
+    result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height,r_frame_rate",
+            "-of", "json",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    streams = json.loads(result.stdout).get("streams", [])
+    if not streams:
+        raise ReconstructError(f"'{path}' has no video stream")
+    stream = streams[0]
+    num, den = (int(x) for x in stream["r_frame_rate"].split("/"))
+    return {"width": int(stream["width"]), "height": int(stream["height"]), "fps": num / den}
 
 
 def extract_image_signature(path: Path) -> np.ndarray:
@@ -233,24 +294,38 @@ class AudioMatch:
     asset_name: str
     offset_s: float
     score: float  # normalized correlation peak, ~1.0 for a clean match, ~0.0 for unrelated audio
+    asset_is_longer: bool  # see identify_audio_asset
 
 
 def identify_audio_asset(segment_waveform: np.ndarray, bank: dict[str, AudioAsset], *, sample_rate: int = AUDIO_SAMPLE_RATE) -> Optional[AudioMatch]:
+    """`_valid_correlate` needs the reference to be at least as long as the
+    query, so whichever of (segment, asset) is longer is used as the
+    reference - a segment isn't necessarily shorter than the asset it came
+    from: e.g. reconstruct() matches a whole render's audio track against
+    each candidate, and the render is commonly longer than any single
+    audio clip used partway through it (trailing/leading silence once the
+    audio has ended but the video hasn't).
+
+    `AudioMatch.offset_s` means different things depending on which side
+    was longer (`asset_is_longer`): if the asset is the (>=) reference,
+    it's the trim-in point *within the asset* where the segment's content
+    starts; if the segment is the reference, it's where *within the
+    segment* the asset's content starts."""
     if segment_waveform.size == 0 or not bank:
         return None
-    query = segment_waveform / (np.linalg.norm(segment_waveform) + 1e-9)
+    segment_norm = segment_waveform / (np.linalg.norm(segment_waveform) + 1e-9)
     best: Optional[AudioMatch] = None
     for name, asset in bank.items():
-        if asset.waveform.size < query.size:
-            continue
-        reference = asset.waveform / (np.linalg.norm(asset.waveform) + 1e-9)
+        asset_norm = asset.waveform / (np.linalg.norm(asset.waveform) + 1e-9)
+        asset_is_longer = asset.waveform.size >= segment_waveform.size
+        reference, query = (asset_norm, segment_norm) if asset_is_longer else (segment_norm, asset_norm)
         corr = _valid_correlate(reference, query)
         if corr.size == 0:
             continue
         peak_idx = int(np.argmax(corr))
         score = float(corr[peak_idx])
         if best is None or score > best.score:
-            best = AudioMatch(asset_name=name, offset_s=peak_idx / sample_rate, score=score)
+            best = AudioMatch(asset_name=name, offset_s=peak_idx / sample_rate, score=score, asset_is_longer=asset_is_longer)
     return best
 
 
@@ -378,3 +453,222 @@ def detect_audio_fade(waveform: np.ndarray, sample_rate: int, *, window_s: float
     if at_end:
         normalized = normalized[::-1]
     return _detect_ramp_duration(normalized, window_s)
+
+
+def _active_audio_duration(waveform: np.ndarray, sample_rate: int, *, window_s: float = 0.1, threshold_fraction: float = 0.02) -> float:
+    """How much of `waveform`, from the start, actually has audio content
+    (RMS above a small fraction of the loudest window) - trims trailing
+    silence. Needed because a render's video track commonly runs longer
+    than its audio track (e.g. audio ends at 3s, but a following video-only
+    clip keeps the render going to 3.5s): without this, a matched asset
+    that's at least as long as the *whole* render gets credited with that
+    whole duration, well past where its actual content stopped."""
+    levels = _audio_rms_windows(waveform, sample_rate, window_s)
+    if not levels:
+        return 0.0
+    threshold = max(levels) * threshold_fraction
+    last_active = 0
+    for i, level in enumerate(levels):
+        if level > threshold:
+            last_active = i
+    return (last_active + 1) * window_s
+
+
+# -- YAML assembly --------------------------------------------------------------
+
+
+@dataclass
+class ReconstructResult:
+    data: dict
+    warnings: list[str] = field(default_factory=list)
+
+
+def _make_asset_ids(names: set[str]) -> dict[str, str]:
+    """Maps asset filenames (bank keys) to short kdgen bin ids: the
+    filename stem, disambiguated the same way reverse.py's
+    register_bin_clip is if two different assets happen to share one."""
+    ids: dict[str, str] = {}
+    used: set[str] = set()
+    for name in sorted(names):
+        base = Path(name).stem or "clip"
+        candidate, n = base, 2
+        while candidate in used:
+            candidate = f"{base}_{n}"
+            n += 1
+        used.add(candidate)
+        ids[name] = candidate
+    return ids
+
+
+def _quantized_duration(seconds: float, fps: float) -> float:
+    """Rounds `seconds` the same way schema.py will when it resolves the
+    generated YAML (seconds -> whole frames -> seconds), so a duration
+    computed here doesn't drift from what `kdgen validate` independently
+    re-derives from the same source file - ffprobe's raw duration and its
+    frame-quantized equivalent can differ by a frame or more (e.g. a
+    3.056s source becomes 3.04s at 25fps), and clamping against the wrong
+    one still lets a slightly-too-long `in + duration` through."""
+    frame_rate = resolve_fps(fps)
+    return frame_rate.frames_to_seconds(frame_rate.seconds_to_frames(seconds))
+
+
+def reconstruct(video_path: Path, assets_dir: Path) -> ReconstructResult:
+    """Top-level entry point: given an already-rendered video and a folder
+    of candidate source assets, produces a kdgen-compatible YAML dict by
+    content-based matching (see the module docstring - there's no
+    guaranteed correct answer here). Unmatched or low-confidence segments
+    are never silently guessed: they're flagged under
+    `x_reconstruct_unmatched` instead, the same way `reverse.py` doesn't
+    discard what it doesn't recognize under `x_kdenlive_raw`.
+
+    Audio is treated as a single clip spanning the whole render, not
+    segmented to match the video cuts: background audio commonly doesn't
+    align with visual cuts at all, and segmenting audio by *its own*
+    content changes is a real, much harder, separate problem this doesn't
+    attempt."""
+    video_path = video_path.resolve()
+    assets_dir = assets_dir.resolve()
+    warnings: list[str] = []
+    unmatched: list[dict] = []
+
+    with tempfile.TemporaryDirectory(prefix="kdgen-reconstruct-") as tmp:
+        tmp_dir = Path(tmp)
+        info = probe_video_info(video_path)
+        fps, width, height = info["fps"], info["width"], info["height"]
+
+        visual_bank = build_visual_bank(assets_dir, tmp_dir)
+        audio_bank = build_audio_bank(assets_dir, tmp_dir)
+        asset_ids = _make_asset_ids(set(visual_bank) | set(audio_bank))
+
+        coarse_signatures = extract_frame_signatures(video_path, tmp_dir, fps=1 / COARSE_SAMPLE_INTERVAL)
+        segments = segment_by_scene_cuts(coarse_signatures)
+
+        video_clips: list[dict] = []
+        fine_asset_cache: dict[str, list[np.ndarray]] = {}
+
+        for segment in segments:
+            start_idx = round(segment.start_s / COARSE_SAMPLE_INTERVAL)
+            end_idx = round(segment.end_s / COARSE_SAMPLE_INTERVAL)
+            duration_s = segment.end_s - segment.start_s
+            match = identify_visual_asset(coarse_signatures[start_idx:end_idx], visual_bank)
+
+            if match is None or match.mean_distance > VIDEO_MATCH_DISTANCE_THRESHOLD:
+                where = f"video [{segment.start_s:.2f}s-{segment.end_s:.2f}s]"
+                unmatched.append({
+                    "where": where,
+                    "best_guess": match.asset_name if match else None,
+                    "confidence": None if match is None else round(match.mean_distance, 1),
+                })
+                warnings.append(f"{where}: no confident asset match")
+                continue
+
+            asset = visual_bank[match.asset_name]
+            clip: dict = {"clip": asset_ids[match.asset_name], "start": round(segment.start_s, 3)}
+            fade_in = fade_out = 0.0
+
+            if asset.kind == "video":
+                segment_fine = extract_frame_signatures(
+                    video_path, tmp_dir, fps=fps, start_s=segment.start_s, duration_s=duration_s
+                )
+                if match.asset_name not in fine_asset_cache:
+                    fine_asset_cache[match.asset_name] = extract_frame_signatures(asset.path, tmp_dir, fps=fps)
+                trim = find_trim_offset(segment_fine, fine_asset_cache[match.asset_name])
+                in_s = (trim[0] / fps) if trim else 0.0
+                if in_s > 1e-6:
+                    clip["in"] = round(in_s, 3)
+                # Trim recovery has a real, expected +/- 1-2 frame margin of
+                # error (compression noise, sampling granularity - see
+                # find_trim_offset); clamp so a slightly-over in+duration
+                # from that noise never claims more of the source than it
+                # actually has, which schema.py would otherwise reject.
+                duration_s = min(duration_s, _quantized_duration(asset.duration_s, fps) - in_s)
+                interval = 1 / fps
+                fade_in = detect_video_fade(segment_fine, interval)
+                fade_out = detect_video_fade(segment_fine, interval, at_end=True)
+
+            clip["duration"] = round(duration_s, 3)
+            if fade_in > 0:
+                clip["fade_in"] = round(fade_in, 3)
+            if fade_out > 0:
+                clip["fade_out"] = round(fade_out, 3)
+            video_clips.append(clip)
+
+        audio_clips: list[dict] = []
+        full_waveform = extract_audio_waveform(video_path, tmp_dir)
+        if full_waveform.size > 0 and audio_bank:
+            audio_match = identify_audio_asset(full_waveform, audio_bank)
+            if audio_match is None or audio_match.score < AUDIO_MATCH_SCORE_THRESHOLD:
+                unmatched.append({
+                    "where": "audio [full track]",
+                    "best_guess": audio_match.asset_name if audio_match else None,
+                    "confidence": None if audio_match is None else round(audio_match.score, 3),
+                })
+                warnings.append("audio [full track]: no confident asset match")
+            else:
+                clip = {"clip": asset_ids[audio_match.asset_name], "start": 0.0}
+                if audio_match.asset_is_longer:
+                    # The asset covers (at least) the whole render: offset_s
+                    # is the trim-in point within the asset.
+                    if audio_match.offset_s > 1e-6:
+                        clip["in"] = round(audio_match.offset_s, 3)
+                    asset_duration_s = _quantized_duration(audio_bank[audio_match.asset_name].duration_s, fps)
+                    # Not the render's full duration: the render's video
+                    # track commonly runs longer than its audio (silent
+                    # tail), so use where the audio content actually stops.
+                    active_duration_s = _active_audio_duration(full_waveform, AUDIO_SAMPLE_RATE)
+                    # Same clamp as the video branch: correlation-based
+                    # offset recovery has a small margin of error, don't
+                    # let it claim more of the source than it actually has.
+                    clip["duration"] = round(min(active_duration_s, asset_duration_s - audio_match.offset_s), 3)
+                    clip_waveform = full_waveform[:round(active_duration_s * AUDIO_SAMPLE_RATE)]
+                else:
+                    # The render's full track is longer than the asset (e.g.
+                    # trailing/leading silence once the audio ends but the
+                    # video doesn't): offset_s is where in the render the
+                    # asset's own content starts.
+                    clip["start"] = round(audio_match.offset_s, 3)
+                    asset_duration_s = _quantized_duration(audio_bank[audio_match.asset_name].duration_s, fps)
+                    clip["duration"] = round(asset_duration_s, 3)
+                    start_sample = round(audio_match.offset_s * AUDIO_SAMPLE_RATE)
+                    end_sample = start_sample + round(asset_duration_s * AUDIO_SAMPLE_RATE)
+                    clip_waveform = full_waveform[start_sample:end_sample]
+
+                fade_in = detect_audio_fade(clip_waveform, AUDIO_SAMPLE_RATE)
+                fade_out = detect_audio_fade(clip_waveform, AUDIO_SAMPLE_RATE, at_end=True)
+                if fade_in > 0:
+                    clip["fade_in"] = round(fade_in, 3)
+                if fade_out > 0:
+                    clip["fade_out"] = round(fade_out, 3)
+                audio_clips.append(clip)
+
+        used_ids = {c["clip"] for c in video_clips} | {c["clip"] for c in audio_clips}
+        name_by_id = {asset_id: name for name, asset_id in asset_ids.items()}
+        bin_entries = [
+            {
+                "id": used_id,
+                "path": str((visual_bank.get(name_by_id[used_id]) or audio_bank[name_by_id[used_id]]).path),
+            }
+            for used_id in sorted(used_ids)
+        ]
+
+        tracks = []
+        if video_clips:
+            tracks.append({"type": "video", "name": "V1", "clips": video_clips})
+        if audio_clips:
+            tracks.append({"type": "audio", "name": "A1", "clips": audio_clips})
+
+        data: dict = {
+            "project": {
+                "id": video_path.stem,
+                "title": video_path.stem,
+                "fps": int(fps) if fps == int(fps) else round(fps, 3),
+                "width": width,
+                "height": height,
+            },
+            "bin": bin_entries,
+            "timeline": {"tracks": tracks},
+        }
+        if unmatched:
+            data["x_reconstruct_unmatched"] = unmatched
+
+        return ReconstructResult(data=data, warnings=warnings)
