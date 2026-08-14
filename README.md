@@ -95,8 +95,6 @@ this limitation — it's not a test that was loosened carelessly.
   example YAML and minimal assets (unlike the tests, which generate their
   own assets on the fly with `ffmpeg` via `tests/conftest.py` and don't
   commit them).
-- [ ] **Initial git commit** — the repo has no commits yet (everything is
-  still untracked).
 - [ ] **Validation against a real `melt` binary** — `tests/conftest.py`
   already has a `melt` fixture (locates the binary inside kdenlive's snap
   if `melt` isn't on PATH), but it's only partially exercised so far
