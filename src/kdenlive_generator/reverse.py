@@ -88,7 +88,7 @@ class Importer:
             if _props(el).get("resource") == "black"
         }
 
-    # -- localizar la secuencia activa ------------------------------------
+    # -- locate the active sequence ------------------------------------------
 
     def find_main_sequence(self) -> ET.Element:
         main_bin = self.by_id.get("main_bin")
@@ -109,7 +109,28 @@ class Importer:
             if "kdenlive:uuid" in _props(t) and t is not main
         ]
 
-    # -- registro de assets -------------------------------------------------
+    # -- asset registration ---------------------------------------------------
+
+    def preregister_bin_order(self) -> None:
+        """Seeds bin order from `main_bin`'s own entries before anything else
+        registers a clip. `main_bin` lists bin clips in their original
+        declaration order (see xmlgen.py's `generate`); without this, clips
+        would instead get registered in whatever order the timeline tracks
+        happen to reference them, which usually differs and makes the
+        reimported `bin:` order — and therefore each clip's `kdenlive:id`
+        on the next build — diverge from the original for no reason tied to
+        the actual timeline content."""
+        main_bin = self.by_id.get("main_bin")
+        if main_bin is None:
+            return
+        for entry in main_bin.findall("entry"):
+            producer_el = self.by_id.get(entry.get("producer"))
+            if producer_el is None:
+                continue
+            resource = _props(producer_el).get("resource")
+            if not resource or resource == "black":
+                continue
+            self.register_bin_clip(resource)
 
     def register_bin_clip(self, resource: str) -> str:
         if resource in self.bin_by_path:
@@ -130,7 +151,7 @@ class Importer:
         self.bin_by_path[resource] = clip_id
         return clip_id
 
-    # -- pistas ---------------------------------------------------------------
+    # -- tracks -----------------------------------------------------------------
 
     def resolve_track_playlist(self, track_el: ET.Element, ctx: str) -> tuple[ET.Element, str]:
         """From the sequence's <track producer="..."/>, walks back to the
@@ -255,6 +276,8 @@ class Importer:
         return clips
 
     def run(self) -> ImportResult:
+        self.preregister_bin_order()
+
         sequence = self.find_main_sequence()
         for extra in self.other_sequences(sequence):
             self.raw_items.append(RawItem(msg("reverse.extra_sequence_not_imported"), _pretty(extra)))

@@ -8,13 +8,6 @@ it moves to `ROADMAP.md` under that version; it stays here until then.
   just adding another dict and an entry in `CATALOGS` — no architecture
   change needed, just translation work.
 
-- No test locks down full round-trip idempotence byte-for-byte.
-  `tests/test_reverse.py::test_second_round_trip_is_a_fixed_point` compares
-  the full reimported YAML dict across two cycles, but there's no
-  equivalent check comparing the *generated `.kdenlive` XML* itself
-  (`kdenlive1 == kdenlive2`, not just the YAML each produces) — worth
-  adding if `xmlgen.py`/`reverse.py` ever need heavier refactoring.
-
 - **Reconstruct a YAML from a rendered video + an assets folder.** Given a
   finished/exported video file (not a `.kdenlive` project — an actual
   `.mp4` or similar) and a folder of the source assets that presumably

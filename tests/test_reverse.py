@@ -139,3 +139,66 @@ timeline:
     data2 = _round_trip(yaml1_path, tmp_path / "round2")
 
     assert data2 == data1
+
+
+def test_second_build_produces_identical_kdenlive_xml(tmp_path: Path, assets_dir: Path):
+    """Stronger than test_second_round_trip_is_a_fixed_point: that test only
+    compares the intermediate YAML each cycle produces. This one compares
+    the actual generated `.kdenlive` XML byte-for-byte across two cycles,
+    confirming xmlgen.py's output is truly stable once round-tripped once —
+    not just that the YAML representation happens to converge while the
+    XML it produces could still drift (different filter ordering, stray
+    property, etc.)."""
+    import yaml as pyyaml
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: "Mi Proyecto", fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 3, fade_out: 0.5}}
+    - type: video
+      clips:
+        - {{clip: photo, start: 0.5, duration: 2, fade_in: 0.4, fade_out: 0.4}}
+""",
+        encoding="utf-8",
+    )
+
+    # Both YAMLs live directly in tmp_path (not a subdirectory each), so the
+    # `root` attribute in the generated XML (derived from the YAML's own
+    # directory, not the .kdenlive output path) matches for both builds and
+    # doesn't need to be filtered out to compare the rest.
+    #
+    # The .kdenlive's project id ("p1") is never written anywhere readable
+    # in the XML, so on import reverse.py has no way to recover it and falls
+    # back to the output file's own stem instead (see Importer.run). That
+    # id seeds every deterministic UUID in the file (kdenlive:control_uuid,
+    # the sequence UUID, the document id), so naming this file anything
+    # other than "p1.kdenlive" would make the second build's UUIDs diverge
+    # from the first even though nothing about the timeline changed. This
+    # mirrors the CLI's own default naming (`kdgen build p1.yaml` ->
+    # `p1.kdenlive`, `kdgen import p1.kdenlive` -> `p1.yaml`), which keeps
+    # the stem consistent automatically — it's only a foot-gun if you
+    # rename the file in between.
+    resolved1 = load_and_resolve(yaml_path)
+    kdenlive1_path = tmp_path / "p1.kdenlive"
+    xmlgen.write(resolved1, kdenlive1_path)
+
+    result1 = reverse.import_kdenlive(kdenlive1_path)
+    assert result1.raw_items == [], f"there should be no unrecognized items: {result1.raw_items}"
+    yaml1_path = tmp_path / "reimported.yaml"
+    yaml1_path.write_text(pyyaml.dump(result1.data, sort_keys=False), encoding="utf-8")
+
+    resolved2 = load_and_resolve(yaml1_path)
+    kdenlive2_path = tmp_path / "round2.kdenlive"
+    xmlgen.write(resolved2, kdenlive2_path)
+
+    assert kdenlive1_path.read_text() == kdenlive2_path.read_text()
