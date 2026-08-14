@@ -188,3 +188,87 @@ timeline:
         f"expected volume to ramp up across the fade_in, got "
         f"quiet={quiet}dB mid={mid}dB loud={loud}dB"
     )
+
+
+def _mean_rgb(path: Path, timestamp: float = 0.0) -> tuple[float, float, float]:
+    result = subprocess.run(
+        [
+            "ffmpeg", "-v", "error",
+            "-ss", str(timestamp), "-i", str(path),
+            "-frames:v", "1",
+            "-f", "rawvideo", "-pix_fmt", "rgb24",
+            "-",
+        ],
+        capture_output=True,
+        timeout=30,
+        check=True,
+    )
+    data = result.stdout
+    n = len(data) // 3
+    return (sum(data[0::3]) / n, sum(data[1::3]) / n, sum(data[2::3]) / n)
+
+
+def test_melt_respects_nonzero_clip_in_point(tmp_path: Path, melt):
+    """Regression test for a real upstream MLT behavior: a playlist
+    <entry>'s in/out are relative to the producer/chain it references, not
+    absolute frame numbers. xmlgen.py used to set the same trim on both the
+    chain and the entry, so the effective read position was offset further
+    into the source than intended whenever `in` was nonzero (reported as
+    mltframework/mlt#1282; closed "not planned" since it's documented
+    behavior, not a bug — the chain must carry the full source range and
+    only the entry should trim). The exact wrong frame isn't a clean
+    formula — it seemed to depend on the specific in/out values and the
+    source's keyframes, not a fixed "2x in" in every case — so this uses
+    values confirmed to reproduce it reliably against the pre-fix code, not
+    just plausible-looking ones. Verified with a real render, not just XML
+    structure: builds a red/green/blue three-band source, trims to just the
+    middle (green) band, and checks the rendered pixels are actually green
+    - not red or blue."""
+    # Band width and `in`/`out` matter: a 1s-per-band asset with in=1.0/out=2.0
+    # didn't reliably reproduce the bug (whatever wrong offset it read still
+    # landed inside the same band, by coincidence of these particular
+    # numbers/this asset's keyframes) even though the underlying arithmetic
+    # error is real. 2s-per-band with in=2.0/out=4.5 does reproduce it
+    # reliably (verified against the pre-fix code) - keep these values.
+    bands = tmp_path / "bands.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "lavfi", "-i", "color=c=red:size=32x32:duration=2:rate=25",
+            "-f", "lavfi", "-i", "color=c=green:size=32x32:duration=2:rate=25",
+            "-f", "lavfi", "-i", "color=c=blue:size=32x32:duration=2:rate=25",
+            "-filter_complex", "[0:v][1:v][2:v]concat=n=3:v=1:a=0",
+            str(bands),
+        ],
+        check=True,
+        timeout=30,
+    )
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 32, height: 32}}
+bin:
+  - id: bands
+    path: {bands}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: bands, start: 0, in: 2.0, out: 4.5}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    r, g, b = _mean_rgb(rendered, timestamp=0.0)
+    assert g > r and g > b, (
+        f"expected the middle (green) band from in=2.0, got mean rgb=({r:.0f}, {g:.0f}, {b:.0f})"
+    )

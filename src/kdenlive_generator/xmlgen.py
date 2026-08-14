@@ -184,12 +184,19 @@ def _build_track(
     for placement in track.placements:
         if placement.start_frame > cursor:
             ET.SubElement(playlist_main, "blank", {"length": str(placement.start_frame - cursor)})
+        # The chain gets the clip's *full* source range, not the placement's
+        # trim: a playlist <entry>'s in/out are relative to the producer's
+        # own in point, not absolute frame numbers (confirmed upstream:
+        # https://github.com/mltframework/mlt/issues/1282). If the chain
+        # itself were also trimmed to in_frame..out_frame, the entry's
+        # in_frame would be added on top of it, reading from 2x in_frame
+        # instead of in_frame.
         el, xml_id = _build_media_element(
             ids,
             path=placement.bin_clip.path,
             kind=placement.bin_clip.kind,
-            in_frame=placement.in_frame,
-            out_frame=placement.out_frame,
+            in_frame=0,
+            out_frame=placement.bin_clip.duration_frames - 1,
             fast=True,
             numeric_id=placement.bin_clip.numeric_id,
             control_uuid=control_uuid_for[placement.bin_clip.id],

@@ -72,22 +72,23 @@ it moves to `ROADMAP.md` under that version; it stays here until then.
   longer source clip, using textured/moving synthetic footage (an evolving
   mandelbrot zoom, not flat colors or a static test pattern) instead of the
   first prototype's easy content. The recovered offset was confidently
-  wrong — not noisy/ambiguous, just wrong, by a suspiciously clean amount.
-  Chased it down and it wasn't the matching approach at all: **it's an
-  upstream MLT bug.** An XML-defined producer/chain with a non-zero `in`
-  attribute, read for more than one frame, starts reading from `2×in`
-  instead of `in`. Confirmed independent of kdgen, of this project's
-  sandboxed melt invocation (reproduces on a clean `apt`-installed melt
-  too), of GOP/keyframe structure, and of the qtblend/Qt6-missing
-  limitation documented elsewhere in this repo. Filed upstream:
-  https://github.com/mltframework/mlt/issues/1282.
+  wrong — not noisy/ambiguous, just wrong. Chased it down and it wasn't the
+  matching approach at all: it traced to how `xmlgen.py` built the XML.
+  Filed upstream (https://github.com/mltframework/mlt/issues/1282) and
+  closed "not planned": a playlist `<entry>`'s `in`/`out` are **relative to
+  its producer/chain's own `in` point**, not absolute frame numbers —
+  documented behavior, not a bug. `xmlgen.py` set the same trim on both the
+  chain *and* the entry, so the effective read position was offset further
+  into the source than intended. (The exact wrong frame isn't a clean "2×
+  in" in every case — it seemed to also depend on the specific values and
+  the source's keyframes — so don't read too much into the precise offset
+  from the first report.)
 
-  This also means **our melt-validation tests
-  (`tests/test_melt_validation.py`) wouldn't have caught this** — they
-  check duration, not per-frame pixel content, and this bug doesn't change
-  duration, only which frames show up. Worth a follow-up test once/if the
-  upstream bug is fixed (or a workaround is found) — probably not
-  worthwhile before that, since a real fix path doesn't exist yet.
-  Trim-point recovery for the reconstruct-from-video idea itself is
-  blocked on the same fix (or a workaround, e.g. avoid relying on a single
-  producer's `in`/`out` for a sub-range read).
+  **Fixed** (2026-08-14): the per-placement `<chain>` now gets the clip's
+  full source range (`in=0`, `out=duration-1`), and only the playlist
+  `<entry>` carries the placement's actual trim — matching how the bin's
+  own master copy of each clip was already built. Regression test:
+  `tests/test_melt_validation.py::test_melt_respects_nonzero_clip_in_point`
+  (real render + pixel check, not just XML structure — confirmed it fails
+  against the pre-fix code and passes after). Trim-point recovery for the
+  reconstruct-from-video idea is unblocked.
