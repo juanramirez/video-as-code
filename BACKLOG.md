@@ -4,10 +4,6 @@ Unordered pool of things we want to do at some point — no priority, no
 version assigned. When one of these gets scheduled into an actual release,
 it moves to `ROADMAP.md` under that version; it stays here until then.
 
-- Only `en`/`es` exist in the i18n catalog (`i18n.py`). Adding a locale is
-  just adding another dict and an entry in `CATALOGS` — no architecture
-  change needed, just translation work.
-
 - **Reconstruct a YAML from a rendered video + an assets folder.** Given a
   finished/exported video file (not a `.kdenlive` project — an actual
   `.mp4` or similar) and a folder of the source assets that presumably
