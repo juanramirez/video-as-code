@@ -28,7 +28,7 @@ output YAML so you can decide by hand what to do with it.
 This only reconstructs a YAML from an existing `.kdenlive` *project* file.
 Reconstructing one from an already-rendered video plus an assets folder is a
 different, much harder problem (content-based matching, not XML parsing) —
-see `ROADMAP.md`.
+see `BACKLOG.md`.
 
 See `examples/simple/` for a minimal working project (tiny generated
 assets, one audio + one video track, fades and trims):
@@ -92,16 +92,7 @@ number), but at least it's consistent and predictable. The 1-frame
 tolerance in the round-trip tests (`tests/test_reverse.py`) accounts for
 this limitation — it's not a test that was loosened carelessly.
 
-## Pending
+## What's next
 
-- [ ] **Validation against a real `melt` binary** — `tests/conftest.py`
-  already has a `melt` fixture (locates the binary inside kdenlive's snap
-  if `melt` isn't on PATH), but it's only partially exercised so far
-  (`tests/test_melt_validation.py`); coverage needs review.
-- [ ] Audio fades (`_add_audio_fade_filters` in `xmlgen.py`) are marked in
-  the code itself as best-effort: they haven't been checked against a real
-  kdenlive project with audio fades (only video fades were available in
-  the sample project used as reference). Revisit once there's a reference
-  project with audio.
-- [ ] Only `en`/`es` exist in the i18n catalog (`i18n.py`) for now; adding a
-  locale is just adding another dict and an entry in `CATALOGS`.
+See `BACKLOG.md` for the unordered pool of known gaps and ideas, and
+`ROADMAP.md` for what's shipped and what's scheduled for the next version.
