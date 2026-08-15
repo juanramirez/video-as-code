@@ -290,6 +290,17 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         errors.append(msg("validation.reveal_invalid", ctx=ctx, reveal=reveal))
         reveal = None
 
+    chroma_key = item.get("chroma_key")
+    if chroma_key is not None:
+        chroma_key = str(chroma_key)
+
+    chroma_key_distance = float(item.get("chroma_key_distance", 0.35))
+    if not (0.0 <= chroma_key_distance <= 1.0):
+        errors.append(
+            msg("validation.chroma_key_distance_invalid", ctx=ctx, chroma_key_distance=chroma_key_distance)
+        )
+        chroma_key_distance = 0.35
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -304,6 +315,8 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         position=_pair("position"),
         size=_pair("size"),
         reveal_style=reveal,
+        chroma_key=chroma_key,
+        chroma_key_distance=chroma_key_distance,
     )
 
 
@@ -535,6 +548,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     preserve_pitch=placement.preserve_pitch,
                     rect=rect,
                     reveal_style=placement.reveal_style,
+                    chroma_key=placement.chroma_key,
+                    chroma_key_distance=placement.chroma_key_distance,
                 )
             )
 

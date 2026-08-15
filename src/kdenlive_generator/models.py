@@ -57,6 +57,8 @@ class ClipPlacementSpec:
     position: Optional[tuple[float, float]] = None
     size: Optional[tuple[float, float]] = None
     reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" - see ResolvedPlacement
+    chroma_key: Optional[str] = None  # color to key out (e.g. "#00ff00"), None = no chroma-key
+    chroma_key_distance: float = 0.35  # frei0r.bluescreen0r "Distance" - only used when chroma_key is set
 
 
 @dataclass
@@ -169,6 +171,13 @@ class ResolvedPlacement:
     # so it isn't a reveal/composite in any sense, just a brief distortion
     # burst dressing a plain cut (see scenes.py's `GLITCH_TRACK_NAME`).
     reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch"
+    # Green/blue-screen compositing (frei0r.bluescreen0r) - unlike
+    # reveal_style, this spans the clip's *whole* duration, not a brief
+    # transition window, and composites through the same per-track
+    # qtblend chain every video track already gets against the ones
+    # below it (no new mechanism needed - verified by real render).
+    chroma_key: Optional[str] = None
+    chroma_key_distance: float = 0.35
 
     @property
     def length_frames(self) -> int:

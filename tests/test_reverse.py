@@ -502,6 +502,41 @@ scenes:
     load_and_resolve(reimported_path)
 
 
+def test_round_trip_preserves_chroma_key(tmp_path: Path, assets_dir: Path):
+    """`chroma_key:`/`chroma_key_distance:` (new this cycle, v0.5's
+    headline feature) round-trip through a real generated .kdenlive:
+    unlike `reveal:`, color/distance are plain user-facing values (not a
+    keyframed animation this generator itself constructs), so any value
+    round-trips, not just ones this generator would have produced -
+    `chroma_key_distance` is only emitted when it differs from the
+    0.35 default, matching how other optional fields stay sparse."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1, chroma_key: "#00ff00", chroma_key_distance: 0.5}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["chroma_key"] == "#00ff00"
+    assert clip["chroma_key_distance"] == 0.5
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -

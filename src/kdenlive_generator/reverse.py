@@ -378,6 +378,29 @@ class Importer:
             return {"fade_out": round(length_s, 3)}
         if service == "volume" and kid == "mute":
             return {"mute": True}
+        if service == "frei0r.bluescreen0r":
+            # Unlike iris/flip/glitch (which encode a keyframed animation
+            # this generator itself constructs, so only exact matches are
+            # trustworthy), chroma_key's color/distance are plain
+            # user-facing values directly representable in the schema -
+            # any value round-trips, not just ones this generator would
+            # have produced. Only "Invert" (param 2) isn't supported yet
+            # (no invert: field exists), so that's the one thing that
+            # still falls back to raw_items.
+            color = props.get("0")
+            if color is None or props.get("2", "0") != "0":
+                self.raw_items.append(
+                    RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
+                )
+                return {}
+            result: dict = {"chroma_key": color}
+            try:
+                distance = float(props.get("1", "0.35"))
+            except ValueError:
+                distance = None
+            if distance is not None and abs(distance - 0.35) > 1e-6:
+                result["chroma_key_distance"] = round(distance, 3)
+            return result
         if service in ("frei0r.alphaspot", "frei0r.3dflippo", "frei0r.glitch0r"):
             matched = self._match_reveal_filter(filter_el, props, f_in, f_out)
             if matched is not None:

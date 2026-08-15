@@ -477,17 +477,30 @@ more small filter capability.
     during v0.4, deliberately left unexposed then to keep that item's
     scope narrow. Same shape as `hidden:`, just the other bit - needs a
     distinct name (not `mute:`, already taken at the clip level).
-- **Chroma-key / green-screen compositing** — the headline feature
-  (already in BACKLOG.md under "effects other NLEs have", moved here
-  rather than re-investigated from scratch): `avfilter.chromakey`
-  (confirmed present via `melt -query filter=avfilter.chromakey`) keys
-  out a color range on one clip, composited via the `qtblend` this
-  project already emits per video track - green/blue-screen
-  compositing, one of the most commonly requested real editing
-  capabilities. To be verified with a real render the same way
-  `iris`/`flip` were: a solid-color background clip should key out
-  entirely, revealing the track below, not just "the filter got
-  attached without erroring."
+- **Chroma-key / green-screen compositing** — **implemented**, the
+  headline feature, **mechanism changed from what was planned**:
+  `avfilter.chromakey` (the originally planned filter) produced a real
+  "Cannot set src colorspace" warning and **no visible keying effect at
+  all** on this project's real melt build - the same failure
+  `avfilter.rgbashift` had (see `glitch`'s entry). `frei0r.bluescreen0r`
+  was used instead - kdenlive's own actual mechanism for this (its UI
+  ships this exact filter) - verified by real render to cleanly key a
+  solid-color background to transparency (revealing the track below)
+  while leaving a differently-colored subject untouched, confirmed with
+  two different key colors (green and blue) before wiring it in.
+
+  New `chroma_key:`/`chroma_key_distance:` fields directly on a clip
+  placement (`timeline.tracks[].clips[]`, and as a `scenes:`-clip
+  extra alongside `mute:`/`speed:`/`position:`) - unlike
+  `reveal_style`, this spans the clip's *whole* duration (no
+  fade_in/fade_out window, no keyframes) and needs no second-track/
+  transition setup of its own: it composites through the same
+  per-track `qtblend` chain every video track already gets against the
+  ones below it, so a user just needs a background clip on a lower
+  track and a `chroma_key:` clip on a track above it. Recognized on
+  import too - unlike `reveal:`'s exact-keyframe-match requirement,
+  color/distance are plain user-facing values, so any value round-trips
+  (only `Invert`, unsupported, still falls back to `x_kdenlive_raw`).
 - **New transition: `glitch`** — **implemented**, **`broken-tv` dropped
   after verification**: both were investigated first, same discipline
   that dropped `affine`'s `spin`/`cube` from v0.3.

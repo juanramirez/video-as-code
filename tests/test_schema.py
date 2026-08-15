@@ -351,6 +351,43 @@ transitions:
     assert at.start_frame == 38  # 1.5s @ 25fps, round-half-up
 
 
+def test_chroma_key_distance_out_of_range_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1, chroma_key: "#00ff00", chroma_key_distance: 1.5}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "chroma_key_distance" in str(exc.value)
+
+
+def test_chroma_key_resolves(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1, chroma_key: "#00ff00", chroma_key_distance: 0.4}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    placement = resolved.tracks[0].placements[0]
+    assert placement.chroma_key == "#00ff00"
+    assert placement.chroma_key_distance == 0.4
+
+
 def test_valid_project_resolves(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

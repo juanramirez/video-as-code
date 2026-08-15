@@ -204,3 +204,20 @@ scenes:
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(path)
     assert "glitch" in str(exc.value)
+
+
+def test_scene_clip_dict_form_carries_chroma_key(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    clips:
+      - {{path: {assets_dir / "photo.png"}, chroma_key: "#00ff00", chroma_key_distance: 0.4}}
+    duration: 2.0
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    track = next(t for t in resolved.tracks if t.placements)
+    placement = track.placements[0]
+    assert placement.chroma_key == "#00ff00"
+    assert placement.chroma_key_distance == 0.4

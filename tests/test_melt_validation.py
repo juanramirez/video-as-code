@@ -1124,6 +1124,80 @@ scenes:
     )
 
 
+def test_chroma_key_reveals_the_track_below(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """Empirical check for `chroma_key:` (new this cycle, v0.5's headline
+    feature): a green-screen clip (green background + a red subject
+    square) on top of a blue background clip should render with the
+    green keyed out to blue while the red subject stays red - not
+    `frei0r.alphaspot`/`3dflippo`'s "same fade shape" story, and not
+    `avfilter.chromakey` either (tried first: a real "Cannot set src
+    colorspace" warning and no visible keying effect at all on this
+    project's real melt build). `frei0r.bluescreen0r` - kdenlive's own
+    mechanism for this - is what's actually used."""
+    greenscreen = tmp_path / "greenscreen.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=0x00ff00:size=320x240",
+            "-vf", "drawbox=x=110:y=70:w=100:h=100:color=red:t=fill",
+            "-frames:v", "1", str(greenscreen),
+        ],
+        check=True,
+    )
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: bg
+    path: {assets_dir / "photo2.png"}
+  - id: fg
+    path: {greenscreen}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: bg, start: 0, duration: 1}}
+    - type: video
+      clips:
+        - {{clip: fg, start: 0, duration: 1, chroma_key: "#00ff00"}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def mean_rgb_in_box(x: int, y: int) -> tuple[float, float, float]:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", "0.1", "-i", str(rendered), "-frames:v", "1",
+             "-vf", f"crop=10:10:{x}:{y}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, timeout=30, check=True,
+        )
+        data = result.stdout
+        n = len(data) // 3
+        return (sum(data[0::3]) / n, sum(data[1::3]) / n, sum(data[2::3]) / n)
+
+    # photo2.png (assets_dir) is blue; the green corner (well outside the
+    # red subject square, which spans x:110..210 y:70..170) should key
+    # out to it, while the subject itself (sampled at its center) stays
+    # red.
+    corner_r, corner_g, corner_b = mean_rgb_in_box(10, 10)
+    assert corner_b > corner_g + 20 and corner_b > corner_r + 20, (
+        f"expected the green background to key out to blue, got {(corner_r, corner_g, corner_b)}"
+    )
+
+    subject_r, subject_g, subject_b = mean_rgb_in_box(155, 115)
+    assert subject_r > subject_g + 20 and subject_r > subject_b + 20, (
+        f"expected the red subject to stay red, got {(subject_r, subject_g, subject_b)}"
+    )
+
+
 def test_melt_respects_video_speed_change(tmp_path: Path, assets_dir: Path, melt):
     """Empirical check for `speed:` (timewarp) on a video clip: at 2x, the
     3s testsrc clip (assets_dir) should occupy 1.5s on the timeline - not

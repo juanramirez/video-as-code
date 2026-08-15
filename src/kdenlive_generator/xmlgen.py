@@ -321,6 +321,28 @@ def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
         _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_chroma_key_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """Green/blue-screen compositing via `frei0r.bluescreen0r` - this is
+    kdenlive's own mechanism for it (confirmed: kdenlive's UI ships this
+    exact filter). Deliberately not `avfilter.chromakey`: that
+    FFmpeg-bridged filter produced a "Cannot set src colorspace" warning
+    and no visible keying effect at all on this project's real melt
+    build (same failure `avfilter.rgbashift` had, see `glitch`'s
+    ROADMAP entry) - `bluescreen0r` was verified instead, cleanly keying
+    a solid-color background to reveal the track below while leaving a
+    differently-colored subject untouched. Unlike `reveal_style`, this
+    spans the clip's whole duration (no fade_in/fade_out window,
+    no keyframes needed) and needs no second track/qtblend-reveal setup
+    of its own - it just composites through the same per-track qtblend
+    chain every video track already gets against the ones below it."""
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "frei0r.bluescreen0r")
+    _prop(f, "0", placement.chroma_key)  # Color
+    _prop(f, "1", placement.chroma_key_distance)  # Distance
+    _prop(f, "2", 0)  # Invert
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _add_mute_filter(ids: _IdCounters, entry: ET.Element) -> None:
     """Matches kdenlive's own "Mute" effect (share/kdenlive/effects/mute.xml):
     mlt_service "volume", kdenlive_id "mute", a fixed gain of 0 with no
@@ -394,6 +416,8 @@ def _build_track(
             else:
                 _add_video_fade_filters(ids, entry, placement)
             _add_video_default_filter(ids, entry, project.width, project.height, placement.rect)
+            if placement.chroma_key:
+                _add_chroma_key_filter(ids, entry, placement)
         if placement.mute:
             _add_mute_filter(ids, entry)
         cursor = placement.start_frame + placement.length_frames

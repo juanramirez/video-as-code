@@ -258,6 +258,17 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         if size is not None:
             extras["size"] = size
 
+        chroma_key = raw.get("chroma_key")
+        if chroma_key is not None:
+            extras["chroma_key"] = str(chroma_key)
+            chroma_key_distance = float(raw.get("chroma_key_distance", 0.35))
+            if not (0.0 <= chroma_key_distance <= 1.0):
+                errors.append(
+                    msg("validation.chroma_key_distance_invalid", ctx=entry_ctx, chroma_key_distance=chroma_key_distance)
+                )
+            else:
+                extras["chroma_key_distance"] = chroma_key_distance
+
         return extras
 
     track_clips: tuple[list[ClipPlacementSpec], list[ClipPlacementSpec]] = ([], [])
@@ -404,6 +415,8 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                 position=extras.get("position"),
                 size=extras.get("size"),
                 reveal_style=reveal_style,
+                chroma_key=extras.get("chroma_key"),
+                chroma_key_distance=extras.get("chroma_key_distance", 0.35),
             )
             if transition == "glitch":
                 track_clips_glitch.append(placement)
