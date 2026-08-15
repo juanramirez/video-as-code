@@ -10,6 +10,7 @@ installed — this is optional functionality, not part of the base
 """
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,8 @@ from kdenlive_generator import reconstruct, xmlgen  # noqa: E402
 from kdenlive_generator.schema import load_and_resolve  # noqa: E402
 
 from test_melt_validation import _assert_no_fatal_load_error, _run_melt  # noqa: E402
+
+PUBLIC_DOMAIN_DIR = Path(__file__).parent / "fixtures" / "public_domain"
 
 
 def _render(tmp_path: Path, yaml_text: str, melt, out_name: str = "rendered.mp4") -> Path:
@@ -191,6 +194,102 @@ timeline:
     assert abs(segments[2].end_s - 4.0) <= tolerance
 
 
+def test_segment_photo_to_photo(tmp_path: Path, assets_dir: Path, melt):
+    """The one asset-type transition test_segment_by_scene_cuts doesn't
+    cover: it goes photo->video->photo, never a direct photo->photo cut
+    with no video in between."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+  - id: photo2
+    path: {assets_dir / "photo2.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1}}
+        - {{clip: photo2, start: 1, duration: 1}}
+"""
+    rendered = _render(tmp_path, yaml_text, melt)
+
+    signatures = reconstruct.extract_frame_signatures(rendered, tmp_path, fps=1 / reconstruct.COARSE_SAMPLE_INTERVAL)
+    segments = reconstruct.segment_by_scene_cuts(signatures)
+
+    assert len(segments) == 2, f"expected 2 segments, got {[(s.start_s, s.end_s) for s in segments]}"
+    tolerance = reconstruct.COARSE_SAMPLE_INTERVAL * 2
+    assert abs(segments[0].end_s - 1.0) <= tolerance
+    assert abs(segments[1].end_s - 2.0) <= tolerance
+
+    bank = reconstruct.build_visual_bank(assets_dir, tmp_path)
+    midpoint = len(signatures) // 2
+    first = reconstruct.identify_visual_asset(signatures[:midpoint], bank)
+    second = reconstruct.identify_visual_asset(signatures[midpoint:], bank)
+
+    assert first is not None and first.asset_name == "photo.png"
+    assert second is not None and second.asset_name == "photo2.png"
+
+
+def test_segment_video_to_video(tmp_path: Path, assets_dir: Path, melt):
+    """The other asset-type transition test_segment_by_scene_cuts doesn't
+    cover: two different video clips back to back, no still image in
+    between. Uses the real calcutta.mp4 fixture alongside a synthetic clip
+    so the two video sources are genuinely distinguishable content, not
+    just two different-looking patterns.
+
+    The synthetic clip is generated at calcutta.mp4's own resolution
+    (320x180), not the shared `assets_dir` fixture's clip.mp4 (320x240):
+    this test's sandboxed `melt` can't load the `qtblend` service (see
+    `test_melt_validation.py`), so a project whose dimensions don't match
+    a bin clip's native resolution renders that clip uncomposited (blank)
+    instead of scaled - a test-environment limitation, not something
+    reconstruct.py's matching needs to tolerate."""
+    calcutta = PUBLIC_DOMAIN_DIR / "calcutta.mp4"
+    clip = tmp_path / "clip180.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=320x180:rate=25:duration=3",
+         "-pix_fmt", "yuv420p", str(clip)],
+        check=True,
+    )
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 180}}
+bin:
+  - id: clip
+    path: {clip}
+  - id: calcutta
+    path: {calcutta}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, duration: 1.5}}
+        - {{clip: calcutta, start: 1.5, duration: 1.5}}
+"""
+    rendered = _render(tmp_path, yaml_text, melt)
+
+    signatures = reconstruct.extract_frame_signatures(rendered, tmp_path, fps=1 / reconstruct.COARSE_SAMPLE_INTERVAL)
+    segments = reconstruct.segment_by_scene_cuts(signatures)
+
+    assert len(segments) == 2, f"expected 2 segments, got {[(s.start_s, s.end_s) for s in segments]}"
+    tolerance = reconstruct.COARSE_SAMPLE_INTERVAL * 2
+    assert abs(segments[0].end_s - 1.5) <= tolerance
+    assert abs(segments[1].end_s - 3.0) <= tolerance
+
+    bank_dir = tmp_path / "bank"
+    bank_dir.mkdir()
+    (bank_dir / "clip.mp4").write_bytes(clip.read_bytes())
+    (bank_dir / "calcutta.mp4").write_bytes(calcutta.read_bytes())
+    bank = reconstruct.build_visual_bank(bank_dir, tmp_path)
+
+    midpoint = len(signatures) // 2
+    first = reconstruct.identify_visual_asset(signatures[:midpoint], bank)
+    second = reconstruct.identify_visual_asset(signatures[midpoint:], bank)
+
+    assert first is not None and first.asset_name == "clip.mp4"
+    assert second is not None and second.asset_name == "calcutta.mp4"
+
+
 def test_detect_video_fade(tmp_path: Path, assets_dir: Path, melt):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
@@ -300,3 +399,50 @@ timeline:
     import yaml as pyyaml
     reconstructed_yaml.write_text(pyyaml.dump(result.data, sort_keys=False), encoding="utf-8")
     load_and_resolve(reconstructed_yaml)  # must not raise
+
+
+def test_matches_real_photographic_and_film_content(tmp_path: Path, assets_dir: Path, melt):
+    """Everything else in this file uses synthetic content (solid colors,
+    ffmpeg testsrc, mandelbrot zooms). This is the one real-world check:
+    an actual photograph (a cat, CC0) and an actual archival film clip
+    (public domain, real people/architecture/camera motion) - see
+    fixtures/public_domain/SOURCES.md for provenance. Confirms matching
+    isn't secretly relying on properties only synthetic test content has."""
+    cat = PUBLIC_DOMAIN_DIR / "cat.jpg"
+    calcutta = PUBLIC_DOMAIN_DIR / "calcutta.mp4"
+
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 180}}
+bin:
+  - id: cat
+    path: {cat}
+  - id: calcutta
+    path: {calcutta}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: cat, start: 0, duration: 1.5}}
+        - {{clip: calcutta, start: 1.5, duration: 2.5}}
+"""
+    rendered = _render(tmp_path, yaml_text, melt)
+
+    # A bank with a real distractor too (a solid-color image from the
+    # existing synthetic fixtures) - the real content shouldn't get
+    # confused with it in either direction.
+    bank_dir = tmp_path / "bank"
+    bank_dir.mkdir()
+    (bank_dir / "cat.jpg").write_bytes(cat.read_bytes())
+    (bank_dir / "calcutta.mp4").write_bytes(calcutta.read_bytes())
+    (bank_dir / "distractor.png").write_bytes((assets_dir / "photo2.png").read_bytes())
+
+    bank = reconstruct.build_visual_bank(bank_dir, tmp_path)
+    assert set(bank) == {"cat.jpg", "calcutta.mp4", "distractor.png"}
+
+    signatures = reconstruct.extract_frame_signatures(rendered, tmp_path, fps=1 / reconstruct.COARSE_SAMPLE_INTERVAL)
+    midpoint = len(signatures) // 2
+    cat_match = reconstruct.identify_visual_asset(signatures[:midpoint], bank)
+    calcutta_match = reconstruct.identify_visual_asset(signatures[midpoint:], bank)
+
+    assert cat_match is not None and cat_match.asset_name == "cat.jpg"
+    assert calcutta_match is not None and calcutta_match.asset_name == "calcutta.mp4"

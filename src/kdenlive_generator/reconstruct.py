@@ -346,24 +346,41 @@ def segment_by_scene_cuts(
     coarse_signatures: list[np.ndarray],
     *,
     interval: float = COARSE_SAMPLE_INTERVAL,
-    sensitivity: float = 3.5,
+    sensitivity: float = 6.0,
+    window: int = 3,
+    global_floor_fraction: float = 0.5,
 ) -> list[Segment]:
     """Splits into segments wherever consecutive-frame signature distance is
-    a statistical outlier, instead of a fixed absolute threshold: a "big
-    jump" looks very different in absolute terms between an already-busy
-    render and a mostly-static one, so the cutoff has to adapt to the
-    render's own content rather than being a constant. Reuses the same
-    coarse signatures matching already samples with, instead of a second
-    scene-detection method/dependency.
+    a *local* statistical outlier, instead of a fixed absolute threshold: a
+    "big jump" looks very different in absolute terms between an
+    already-busy render and a mostly-static one, so the cutoff has to
+    adapt to the render's own content rather than being a constant. Reuses
+    the same coarse signatures matching already samples with, instead of a
+    second scene-detection method/dependency.
 
-    Uses median + `sensitivity` * MAD (median absolute deviation), not
-    mean + k*stdev: a real cut is often 1-2 frames out of dozens, and mean/
-    stdev get dragged so far up by those few extreme values that the
-    threshold ends up close to the outliers themselves (verified against a
-    real 3-clip render: cuts measured ~2200, normal frame-to-frame diffs
-    ~0-130, but mean+3*stdev came out to ~2240 - just above *both* real
-    cuts). Median/MAD barely move for a couple of outliers in a larger
-    sample, so the threshold stays anchored to the "normal" diffs instead."""
+    Each diff is compared against median + `sensitivity` * MAD (median
+    absolute deviation) of its own `window`-sized neighborhood, not the
+    whole sequence's median/MAD. A purely *global* baseline breaks down as
+    soon as a render mixes footage with different natural noise levels
+    (e.g. a near-static synthetic test pattern next to real, grainy
+    footage): the low-noise portion drags the global median/MAD down so
+    far that the noisier portion's perfectly normal frame-to-frame
+    variance reads as an outlier too, alongside the real cut.
+
+    But a purely *local* baseline has the opposite failure: in a stretch
+    that happens to be unusually uniform, the local MAD can collapse
+    towards zero, making even a small, perfectly ordinary fluctuation look
+    like a huge relative jump. So the MAD actually used is
+    `max(local_mad, global_mad * global_floor_fraction)` - local enough to
+    judge each region against its own baseline noise, but never allowed to
+    collapse below a fraction of the render's overall noise floor. Both
+    failure modes were reproduced directly against real test data before
+    landing on this (see tests/fixtures/public_domain/ and
+    tests/test_reconstruct.py) - a pure global MAD flagged two ordinary
+    diffs (~300) as cuts because a quieter clip elsewhere in the same
+    render anchored the global baseline too low; a pure local MAD flagged
+    an ordinary diff (132) as a cut because its immediate neighbors
+    happened to be unusually tight (~112-115)."""
     n = len(coarse_signatures)
     if n <= 1:
         return [Segment(0.0, n * interval)]
@@ -372,10 +389,21 @@ def segment_by_scene_cuts(
         float(np.linalg.norm(coarse_signatures[i] - coarse_signatures[i - 1]))
         for i in range(1, n)
     ])
-    median = np.median(diffs)
-    mad = np.median(np.abs(diffs - median))
-    cutoff = median + sensitivity * _MAD_TO_STDEV * mad
-    cut_indices = [i + 1 for i, d in enumerate(diffs) if d > cutoff]
+    m = len(diffs)
+    global_median = np.median(diffs)
+    global_mad = np.median(np.abs(diffs - global_median))
+    cut_indices = []
+    for i in range(m):
+        lo, hi = max(0, i - window), min(m, i + window + 1)
+        neighborhood = np.concatenate([diffs[lo:i], diffs[i + 1:hi]])
+        if neighborhood.size == 0:
+            continue
+        local_median = np.median(neighborhood)
+        local_mad = np.median(np.abs(neighborhood - local_median))
+        effective_mad = max(local_mad, global_mad * global_floor_fraction)
+        cutoff = local_median + sensitivity * _MAD_TO_STDEV * effective_mad
+        if diffs[i] > cutoff:
+            cut_indices.append(i + 1)
 
     boundaries = [0, *cut_indices, n]
     return [

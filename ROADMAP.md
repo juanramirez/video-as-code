@@ -19,6 +19,11 @@ backlog.
 
 ## v0.2 — scoped (2026-08-14)
 
+- **Mute**: `mute: true` on a clip placement (video or audio) to silence its
+  audio track. Fade in/out (`fade_in`/`fade_out` on a placement) already
+  works for both video and audio clips, verified against real `melt`
+  renders (brightness/RMS measurement, not just plausible-looking XML) —
+  mute is the one still-missing knob in that family, not a new mechanism.
 - **`kdgen reconstruct`** — **implemented** (2026-08-14, branch
   `kdgen-reconstruct`, not yet merged): reconstructs a YAML from an
   already-rendered video + an assets folder, via content-based matching
@@ -33,7 +38,14 @@ backlog.
   segmentation of the render (frame-to-frame signature distance, flagged
   as a cut via a median+MAD statistical outlier, not mean+stdev — a real
   cut is such an extreme value among a handful of samples that mean/stdev
-  get dragged toward it, nearly masking it) -> per-segment asset
+  get dragged toward it, nearly masking it; the outlier threshold itself
+  blends a local window's MAD with a floor derived from the whole
+  sequence's MAD, since a pure local window can mistake ordinary variation
+  for a cut when its neighborhood happens to be unusually flat, and a pure
+  global threshold can mistake one noisy real clip's internal variation
+  for a cut when compared against a much quieter clip's baseline — tuned
+  against `tests/fixtures/public_domain/calcutta.mp4`, not synthetic
+  content alone) -> per-segment asset
   identification (nearest-neighbor signature distance for video,
   FFT-based cross-correlation for audio, no `scipy` dependency) ->
   trim-point recovery (sliding-window signature search) -> fade detection
@@ -55,9 +67,16 @@ backlog.
   source) can score too poorly to match confidently, and segmentation can
   split a fade into extra spurious segments. Fails safe (lands in
   `x_reconstruct_unmatched` rather than guessing wrong), but not yet
-  addressed at the root. Also not yet tried against real (non-synthetic)
-  handheld footage — only synthetic test patterns and a textured
-  mandelbrot-style stand-in so far.
+  addressed at the root.
+
+  **Verified against real (non-synthetic) media** (2026-08-15,
+  `tests/test_reconstruct.py::test_matches_real_photographic_and_film_content`,
+  fixtures in `tests/fixtures/public_domain/`): a real CC0 photograph and a
+  real public-domain archival film clip (actual people/architecture/camera
+  motion, not a generated pattern) both matched correctly, including
+  against a distractor. Not exhaustive — one photo and one short clip, not
+  a stress test across varied real-world footage — but no longer purely
+  synthetic-only.
 - **Titles/text clips**: generate kdenlive title clips from YAML (not just
   recognize them on import — extends the generator side, not only
   `reverse.py`). Currently unsupported in both directions.
