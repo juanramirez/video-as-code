@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from kdenlive_generator import reverse, xmlgen
 from kdenlive_generator.schema import load_and_resolve
 
@@ -409,6 +411,50 @@ scenes:
     assert len(transitions) == 1
     assert transitions[0]["type"] == "affine"
     assert transitions[0]["style"] == "zoom"
+
+
+@pytest.mark.parametrize("transition", ["iris", "flip"])
+def test_round_trip_preserves_reveal_style(tmp_path: Path, assets_dir: Path, transition: str):
+    """`iris`/`flip` (new this cycle) round-trip through a real generated
+    .kdenlive: unlike `wipe`/`affine`, these are single-clip filters
+    (`frei0r.alphaspot`/`frei0r.3dflippo`) on a playlist entry, not
+    `<transition>` elements - recognized by `convert_clip_filter` into a
+    new low-level `reveal:` field on the clip placement (paired with the
+    `fade_in`/`fade_out` it's actually keyframed over), not the
+    top-level `transitions:` key `wipe`/`affine` use."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: {transition}
+    transition_duration: 1.0
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    top_track = result.data["timeline"]["tracks"][1]
+    top_clip = top_track["clips"][0]
+    assert top_clip["reveal"] == transition
+    assert abs(top_clip["fade_in"] - 1.0) <= 1 / 25
+
+    # And the reconstructed YAML should itself be re-buildable.
+    import yaml as pyyaml
+
+    reimported_path = tmp_path / "reimported.yaml"
+    reimported_path.write_text(pyyaml.dump(result.data), encoding="utf-8")
+    load_and_resolve(reimported_path)
 
 
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):

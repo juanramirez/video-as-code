@@ -285,6 +285,11 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         errors.append(msg("validation.speed_zero", ctx=ctx))
         speed = None
 
+    reveal = item.get("reveal")
+    if reveal is not None and reveal not in ("iris", "flip"):
+        errors.append(msg("validation.reveal_invalid", ctx=ctx, reveal=reveal))
+        reveal = None
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -298,6 +303,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         preserve_pitch=bool(item.get("preserve_pitch", False)),
         position=_pair("position"),
         size=_pair("size"),
+        reveal_style=reveal,
     )
 
 

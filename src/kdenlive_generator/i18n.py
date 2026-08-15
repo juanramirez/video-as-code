@@ -74,6 +74,7 @@ _EN: dict[str, str] = {
         "duration on the timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
+    "validation.reveal_invalid": "{ctx}: 'reveal' must be 'iris' or 'flip', got {reveal!r}",
     "validation.speed_zero": "{ctx}: 'speed' cannot be 0 (use a positive value for forward, negative for reverse)",
     "validation.speed_on_image": "{ctx}: 'speed' has no effect on an image or title clip ('{clip}')",
     "validation.clip_overlap": (
@@ -234,6 +235,7 @@ _ES: dict[str, str] = {
         "duración del clip en el timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
+    "validation.reveal_invalid": "{ctx}: 'reveal' debe ser 'iris' o 'flip', se recibió {reveal!r}",
     "validation.speed_zero": "{ctx}: 'speed' no puede ser 0 (usa un valor positivo para avance, negativo para reversa)",
     "validation.speed_on_image": "{ctx}: 'speed' no tiene efecto en un clip de imagen o título ('{clip}')",
     "validation.clip_overlap": (

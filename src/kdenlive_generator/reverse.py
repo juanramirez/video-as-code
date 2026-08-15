@@ -308,6 +308,43 @@ class Importer:
 
         raise ValueError(msg("reverse.unrecognized_track_structure", ctx=ctx, tag=ref.tag))
 
+    def _match_reveal_filter(self, props: dict[str, str], f_in: int, f_out: int) -> Optional[dict]:
+        """Recognizes an `iris` (frei0r.alphaspot) / `flip`
+        (frei0r.3dflippo) reveal filter this generator itself could have
+        produced (xmlgen.py's `_add_reveal_style_filter`) - conservative,
+        matching the exact keyframe strings that function emits (same
+        "never guess" bar `wipe`/`affine` cross-track-transition
+        recognition already holds to), not just "looks like the right
+        service". `kind` is "in" (growing/entering, `fade_in`) or "out"
+        (shrinking/exiting, `fade_out`) - which one it is comes purely
+        from which keyframe direction matches, the same values regardless
+        of where in the clip this filter sits."""
+        service = props.get("mlt_service")
+        length = f_out - f_in + 1
+        if service == "frei0r.alphaspot":
+            if (
+                props.get("0") != "1" or props.get("1") != "0.5" or props.get("2") != "0.5"
+                or props.get("6") != "0.03" or props.get("7") != "0" or props.get("8") != "1"
+                or props.get("9") != "0"
+            ):
+                return None
+            kf = props.get("3", "")
+            if kf == f"0=0.02;{length - 1}=1":
+                return {"style": "iris", "kind": "in"}
+            if kf == f"0=1;{length - 1}=0.02":
+                return {"style": "iris", "kind": "out"}
+            return None
+        if service == "frei0r.3dflippo":
+            if props.get("10") != "1":
+                return None
+            kf = props.get("1", "")
+            if kf == f"0=0.92;{length - 1}=0.5":
+                return {"style": "flip", "kind": "in"}
+            if kf == f"0=0.5;{length - 1}=0.92":
+                return {"style": "flip", "kind": "out"}
+            return None
+        return None
+
     def convert_clip_filter(self, filter_el: ET.Element, entry_in: int, entry_out: int, ctx: str) -> dict:
         """Returns partial keys (fade_in/fade_out/position/size) to merge into
         the placement, or {} if it doesn't add anything recognized (and has
@@ -329,6 +366,15 @@ class Importer:
             return {"fade_out": round(length_s, 3)}
         if service == "volume" and kid == "mute":
             return {"mute": True}
+        if service in ("frei0r.alphaspot", "frei0r.3dflippo"):
+            matched = self._match_reveal_filter(props, f_in, f_out)
+            if matched is not None:
+                key = "fade_in" if matched["kind"] == "in" else "fade_out"
+                return {key: round(length_s, 3), "reveal": matched["style"]}
+            self.raw_items.append(
+                RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
+            )
+            return {}
         if service == "qtblend" and kid == "qtblend":
             rect = props.get("rect", "")
             keyframes = rect.split(";") if rect else []
