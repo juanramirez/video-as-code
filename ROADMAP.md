@@ -332,27 +332,46 @@ by real render during backlog research, moved here from BACKLOG.md
 rather than re-investigated from scratch), two quick fixes, a symmetry
 close for `reverse.py`, and a project/track metadata round-trip theme.
 
-- **New transitions: `iris` and `flip`**:
-  - **`style: iris`** (`transition: affine`'s sibling in `scenes.py`,
-    or its own `transition: iris` - implementation detail TBD): a tiny
-    center shape grows into a full-frame reveal with a soft edge, via
-    `frei0r.alphaspot` as a **filter** (param `0` = shape, `0.0`
-    rectangle / `>=0.15` circle-ellipse; param `6` = soft-edge width) on
-    the incoming clip, composited through the `qtblend` this project
-    already emits per video track. No new `<transition>` XML at all -
-    simpler than `wipe`/`affine`. Already verified by real render
-    (center-out reveal, soft edge) during the backlog research round;
-    needs the same rigor applied to the actual generated output
-    (`tests/test_melt_validation.py`-level check), not just the
-    standalone probe.
-  - **`style: flip`**: a genuine 3D cube/page-turn effect via
-    `frei0r.3dflippo` as a filter on the top clip (Y-axis-rotation
-    param, animated `0.5` -> `1.0` across the overlap window) - the
-    mechanism that actually delivers what v0.3's `affine`
-    `rotate_z`/`rotate_y` couldn't (see that entry above: real
-    perspective foreshortening, verified against a checkerboard test
-    source, not a solid color). Same "verify against the real generated
-    project, not just a standalone probe XML" bar as `iris`.
+- **New transitions: `iris` and `flip`** — **implemented**: unlike
+  `dissolve`/`wipe`/`affine`, each gets its own `transition:` value
+  (`iris`/`flip`) rather than being a `style:` of another transition -
+  both are **single-clip filters** composited via the `qtblend` this
+  project already emits per video track, not a genuine two-source MLT
+  `<transition>` like `wipe`/`affine` (same mechanism `dissolve` itself
+  uses: only the alternating "top" clip needs the filter, the "bottom"
+  one stays untouched and shows through wherever the top's alpha is
+  transparent). No new `WipeTransitionSpec`-like model needed - just a
+  new `ResolvedPlacement.reveal_style` field
+  (`_add_reveal_style_filter` in `xmlgen.py`, replacing the plain
+  brightness fade when set).
+  - **`iris`**: a shape grows from a tiny center point into a
+    full-frame reveal with a soft edge, via `frei0r.alphaspot` (shape
+    param `0` = `1` for a circle/ellipse - **correcting** an earlier
+    backlog note: values below ~0.3 render as a plain rectangle despite
+    silently accepting any 0..1 float, `>=0.15` was wrong; size params
+    `3`/`4` keyframed `0.02` -> `1.0`; transition-width param `6` for
+    the soft edge).
+  - **`flip`**: a genuine 3D rotation via `frei0r.3dflippo` (Y-axis
+    param `1`, keyframed `0.92` -> `0.5` entering / `0.5` -> `0.92`
+    exiting - narrower than the full `1.0`..`0.5` range because the
+    reveal is barely visible near full edge-on due to perspective
+    foreshortening, confirmed empirically: most of the width change
+    happens near the *end* of the animation, not linearly across it).
+    Needs `"Fill with image or black"` (param `10`) set to `1` for the
+    rotated-away area to be **real transparency** revealing the track
+    below - `0` doesn't give transparency at all, it shows that same
+    clip's own unrotated pixels underneath instead, and against a plain
+    black background the two look identical without a real render (with
+    a colored layer underneath) to tell them apart. This was checked
+    directly, not assumed from the earlier backlog research.
+
+  Both verified with real melt renders through the actual generator
+  output, not a standalone probe: `iris` against a center-vs-edge pixel
+  sample (same spatial signature as `affine`'s `zoom`) -
+  `tests/test_melt_validation.py::test_scenes_iris_produces_a_real_iris_reveal`;
+  `flip` against the same left-to-right column-sampling technique
+  `wipe`'s own test uses -
+  `tests/test_melt_validation.py::test_scenes_flip_produces_a_real_spatial_sweep`.
 - **Quick fixes**:
   - **Guides/markers**: `xmlgen.py` hardcodes
     `kdenlive:sequenceproperties.guides` to `"[]"`; wire a YAML

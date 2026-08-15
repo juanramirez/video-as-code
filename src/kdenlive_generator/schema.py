@@ -438,6 +438,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     speed=speed,
                     preserve_pitch=placement.preserve_pitch,
                     rect=rect,
+                    reveal_style=placement.reveal_style,
                 )
             )
 

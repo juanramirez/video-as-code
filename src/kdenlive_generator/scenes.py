@@ -255,12 +255,12 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             continue
 
         transition = scene.get("transition", "none")
-        if transition not in ("none", "dissolve", "wipe", "affine"):
+        if transition not in ("none", "dissolve", "wipe", "affine", "iris", "flip"):
             errors.append(msg("validation.scene_transition_invalid", ctx=ctx, transition=transition))
             continue
         overlap = (
             float(scene.get("transition_duration", DEFAULT_TRANSITION_DURATION))
-            if transition in ("dissolve", "wipe", "affine")
+            if transition in ("dissolve", "wipe", "affine", "iris", "flip")
             else 0.0
         )
 
@@ -288,7 +288,7 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         clip_kinds = [bin_by_id[cid].type or probe.guess_type(bin_by_id[cid].path) for cid in clip_ids]
 
         is_audio_scene = all(k == "audio" for k in clip_kinds)
-        if transition in ("wipe", "affine") and is_audio_scene:
+        if transition in ("wipe", "affine", "iris", "flip") and is_audio_scene:
             errors.append(msg("validation.scene_transition_needs_video", ctx=ctx, transition=transition))
             continue
         active_track_clips = track_clips_audio if is_audio_scene else track_clips
@@ -338,10 +338,15 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                 fade_in = overlap if i > 0 else None
                 fade_out = overlap if i < n - 1 else None
             else:
-                # With a video dissolve, only the "top" clip in each
-                # transition carries the fade: it alternates, so it's
-                # exactly the odd indices.
-                is_top = transition == "dissolve" and i % 2 == 1
+                # With dissolve/iris/flip, only the "top" clip in each
+                # transition carries the fade (or, for iris/flip, the
+                # filter that stands in for one): it alternates, so it's
+                # exactly the odd indices. Same mechanism as dissolve -
+                # iris (frei0r.alphaspot) and flip (frei0r.3dflippo) are
+                # single-clip filters composited via the qtblend this
+                # project already emits per video track, not a genuine
+                # two-source MLT transition like wipe/affine.
+                is_top = transition in ("dissolve", "iris", "flip") and i % 2 == 1
                 fade_in = overlap if (is_top and i > 0) else None
                 fade_out = overlap if (is_top and i < n - 1) else None
             extras = clip_extras[i]
@@ -357,6 +362,7 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                 preserve_pitch=extras.get("preserve_pitch", False),
                 position=extras.get("position"),
                 size=extras.get("size"),
+                reveal_style=transition if transition in ("iris", "flip") and is_top else None,
             )
             active_track_clips[i % 2].append(placement)
             # Neither wipe nor affine touches either clip's alpha (both

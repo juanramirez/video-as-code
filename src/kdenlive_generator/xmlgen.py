@@ -201,6 +201,62 @@ def _add_video_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
         _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_reveal_style_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """`iris` (frei0r.alphaspot) / `flip` (frei0r.3dflippo): single-clip
+    filters that write real alpha transparency, composited via the
+    `qtblend` this project already emits per video track - the same
+    mechanism `_add_video_fade_filters`'s brightness alpha uses, just a
+    different filter (and a genuinely different reveal shape) instead of
+    a plain fade. Both verified with real melt renders, not modeled from
+    documentation alone: `alphaspot`'s "Shape" parameter needs to be
+    close to 1 for an actual circle - values below ~0.3 render as a
+    plain rectangle despite silently accepting any 0..1 float; `3dflippo`'s
+    "Fill with image or black" (param 10) has to be 1 for the
+    rotated-away area to be real transparency (revealing the track
+    below) - 0 doesn't give transparency at all, it shows that same
+    clip's own unrotated pixels underneath instead, and against a plain
+    black background the two look identical without a real render to
+    tell them apart (see ROADMAP.md's v0.4 entry for how this was
+    checked)."""
+    p_in, p_out = placement.in_frame, placement.out_frame
+    style = placement.reveal_style
+    service = "frei0r.alphaspot" if style == "iris" else "frei0r.3dflippo"
+
+    def iris_props(f: ET.Element, size_from: float, size_to: float, length: int) -> None:
+        _prop(f, "mlt_service", service)
+        _prop(f, "0", 1)  # Shape: circle/ellipse
+        _prop(f, "1", 0.5)  # Position X: center
+        _prop(f, "2", 0.5)  # Position Y: center
+        _prop(f, "3", f"0={size_from:g};{length - 1}={size_to:g}")  # Size X
+        _prop(f, "4", f"0={size_from:g};{length - 1}={size_to:g}")  # Size Y
+        _prop(f, "6", 0.03)  # Transition width: soft edge
+        _prop(f, "7", 0)  # Min
+        _prop(f, "8", 1)  # Max
+        _prop(f, "9", 0)  # Operation
+
+    def flip_props(f: ET.Element, rotate_from: float, rotate_to: float, length: int) -> None:
+        _prop(f, "mlt_service", service)
+        _prop(f, "1", f"0={rotate_from:g};{length - 1}={rotate_to:g}")  # Y axis rotation
+        _prop(f, "10", 1)  # Fill with image or black: 1 = real transparency here
+
+    if placement.fade_in_frames > 0:
+        L = placement.fade_in_frames
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
+        if style == "iris":
+            iris_props(f, 0.02, 1.0, L)
+        else:
+            flip_props(f, 0.92, 0.5, L)
+        _prop(f, "kdenlive:collapsed", 0)
+    if placement.fade_out_frames > 0:
+        L = placement.fade_out_frames
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "in": str(p_out - L + 1), "out": str(p_out)})
+        if style == "iris":
+            iris_props(f, 1.0, 0.02, L)
+        else:
+            flip_props(f, 0.5, 0.92, L)
+        _prop(f, "kdenlive:collapsed", 0)
+
+
 def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
     """Matches kdenlive's own "Fade in"/"Fade out" audio effects: mlt_service
     "volume", kdenlive_id "fadein"/"fadeout", plain linear `gain`/`end`
@@ -302,7 +358,10 @@ def _build_track(
         if is_audio:
             _add_audio_fade_filters(ids, entry, placement)
         else:
-            _add_video_fade_filters(ids, entry, placement)
+            if placement.reveal_style:
+                _add_reveal_style_filter(ids, entry, placement)
+            else:
+                _add_video_fade_filters(ids, entry, placement)
             _add_video_default_filter(ids, entry, project.width, project.height, placement.rect)
         if placement.mute:
             _add_mute_filter(ids, entry)

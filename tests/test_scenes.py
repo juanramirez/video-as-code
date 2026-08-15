@@ -76,7 +76,7 @@ scenes:
     assert all(t.kind == "audio" for t in scene_tracks)
 
 
-@pytest.mark.parametrize("transition", ["wipe", "affine"])
+@pytest.mark.parametrize("transition", ["wipe", "affine", "iris", "flip"])
 def test_audio_only_scene_rejects_video_only_transitions(tmp_path: Path, assets_dir: Path, transition: str):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
@@ -117,3 +117,32 @@ scenes:
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(path)
     assert "style" in str(exc.value)
+
+
+@pytest.mark.parametrize("transition", ["iris", "flip"])
+def test_iris_and_flip_only_mark_the_top_clip(tmp_path: Path, assets_dir: Path, transition: str):
+    """`iris`/`flip` are single-clip filters (frei0r.alphaspot/3dflippo)
+    composited via the qtblend this project already emits per video
+    track, not a genuine two-source transition like wipe/affine - only
+    the alternating "top" clip (odd index) should carry `reveal_style`;
+    the "bottom" one stays untouched, same shape as dissolve."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: {transition}
+    transition_duration: 0.5
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 3.0
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    scene_tracks = [t for t in resolved.tracks if t.placements]
+    assert len(scene_tracks) == 2
+    bottom_placement = scene_tracks[0].placements[0]
+    top_placement = scene_tracks[1].placements[0]
+    assert bottom_placement.reveal_style is None
+    assert top_placement.reveal_style == transition
+    assert top_placement.fade_in_frames > 0
