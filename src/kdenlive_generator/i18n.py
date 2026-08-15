@@ -153,6 +153,8 @@ _EN: dict[str, str] = {
     "cli.render_done": "Rendered {output} ({frames} frames, {fps:g} fps)",
     "cli.help.render": "Builds a .kdenlive from a YAML and renders it to a video with melt",
     "cli.help.render_output": "Output video path (default: same name as the YAML, .mp4 extension)",
+    "cli.help.keep_kdenlive": "Keep the intermediate .kdenlive instead of discarding it (default: same name as the YAML, .kdenlive extension)",
+    "cli.render_kept_kdenlive": "Kept {path}",
     "cli.help.lang": "Output language (overrides KDGEN_LANG for this run)",
     "cli.write_failed": "Error writing '{path}': {exc}",
 }
@@ -300,6 +302,8 @@ _ES: dict[str, str] = {
     "cli.render_done": "Renderizado {output} ({frames} fotogramas, {fps:g} fps)",
     "cli.help.render": "Genera un .kdenlive a partir de un YAML y lo renderiza a vídeo con melt",
     "cli.help.render_output": "Ruta de salida del vídeo (por defecto: mismo nombre que el YAML, extensión .mp4)",
+    "cli.help.keep_kdenlive": "Conserva el .kdenlive intermedio en vez de descartarlo (por defecto: mismo nombre que el YAML, extensión .kdenlive)",
+    "cli.render_kept_kdenlive": "Conservado {path}",
     "cli.help.lang": "Idioma de salida (sobrescribe KDGEN_LANG para esta ejecución)",
     "cli.write_failed": "Error al escribir '{path}': {exc}",
 }

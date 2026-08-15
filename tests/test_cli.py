@@ -78,3 +78,23 @@ def test_render_end_to_end(tmp_path: Path, assets_dir: Path, melt, monkeypatch):
 
     assert rc == 0
     assert output.exists() and output.stat().st_size > 0
+
+
+def test_render_keep_kdenlive(tmp_path: Path, assets_dir: Path, melt, monkeypatch):
+    """`-k`/`--keep-kdenlive` (new this cycle) should leave the
+    intermediate .kdenlive next to the YAML instead of discarding it in a
+    temp dir - it's the same file `build` would produce, not a stub."""
+    exe, extra_env = melt
+    monkeypatch.setattr(probe, "find_melt", lambda: exe)
+    for k, v in extra_env.items():
+        monkeypatch.setenv(k, v)
+
+    yaml_path = _write_simple_project(tmp_path, assets_dir)
+    output = tmp_path / "out.mp4"
+    expected_kdenlive = yaml_path.with_suffix(".kdenlive")
+
+    rc = cli.main(["render", str(yaml_path), "-o", str(output), "-k"])
+
+    assert rc == 0
+    assert output.exists() and output.stat().st_size > 0
+    assert expected_kdenlive.exists() and expected_kdenlive.stat().st_size > 0

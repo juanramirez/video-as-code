@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import subprocess
 import sys
 import tempfile
@@ -90,9 +91,18 @@ def cmd_render(args: argparse.Namespace) -> int:
         print(msg("cli.render_missing_melt"), file=sys.stderr)
         return 1
 
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        kdenlive_path = Path(tmp_dir) / (yaml_path.stem + ".kdenlive")
-        xmlgen.write(resolved, kdenlive_path)
+    with contextlib.ExitStack() as stack:
+        if args.keep_kdenlive:
+            kdenlive_path = yaml_path.with_suffix(".kdenlive")
+        else:
+            tmp_dir = stack.enter_context(tempfile.TemporaryDirectory())
+            kdenlive_path = Path(tmp_dir) / (yaml_path.stem + ".kdenlive")
+
+        try:
+            xmlgen.write(resolved, kdenlive_path)
+        except OSError as exc:
+            print(msg("cli.write_failed", path=kdenlive_path, exc=exc), file=sys.stderr)
+            return 1
         result = subprocess.run(
             [melt, str(kdenlive_path), "-consumer", f"avformat:{output}"],
             capture_output=True,
@@ -103,6 +113,8 @@ def cmd_render(args: argparse.Namespace) -> int:
             return 1
 
     print(msg("cli.render_done", output=output, frames=resolved.total_frames, fps=resolved.fps.fps))
+    if args.keep_kdenlive:
+        print(msg("cli.render_kept_kdenlive", path=kdenlive_path))
     return 0
 
 
@@ -163,6 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_render = sub.add_parser("render", help=msg("cli.help.render"))
     p_render.add_argument("project", help=msg("cli.help.project_path"))
     p_render.add_argument("-o", "--output", help=msg("cli.help.render_output"))
+    p_render.add_argument("-k", "--keep-kdenlive", action="store_true", help=msg("cli.help.keep_kdenlive"))
     p_render.set_defaults(func=cmd_render)
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
