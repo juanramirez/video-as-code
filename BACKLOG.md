@@ -23,6 +23,15 @@ code itself already marks the boundary.
   flagged inline in `reconstruct.py` as real and out of scope —
   background audio commonly doesn't segment cleanly to match video cuts;
   a harder, separate problem this doesn't attempt to solve.
+- **`pan:` isn't recognized on import**: found while wiring up
+  `guides:` in v0.4 - `reverse.py` only ever reads *per-entry* filters
+  (`convert_clip_filter`, walking each `<entry>`'s own `<filter>`
+  children); it never inspects a track *tractor*'s own filters, which is
+  where the `panner` filter `pan:` controls actually lives (`xmlgen.py`'s
+  `_build_track`). A project with a real balance/pan setting round-trips
+  back as `pan`-less today - same shape as the mute/speed recognition
+  work already done, just at the track level instead of the entry
+  level.
 
 ## Capabilities not yet touched at all
 

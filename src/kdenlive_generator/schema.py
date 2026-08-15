@@ -22,10 +22,12 @@ from .i18n import msg
 from .models import (
     BinClipSpec,
     ClipPlacementSpec,
+    GuideSpec,
     ProjectDoc,
     ProjectSpec,
     ResolvedAffineTransition,
     ResolvedBinClip,
+    ResolvedGuide,
     ResolvedPlacement,
     ResolvedProject,
     ResolvedTrack,
@@ -36,7 +38,9 @@ from .models import (
 )
 from .timecode import FrameRate, resolve_fps
 
-RESERVED_TOP_LEVEL_KEYS = {"project", "bin", "timeline", "scenes", "x_kdenlive_raw", "x_reconstruct_unmatched"}
+RESERVED_TOP_LEVEL_KEYS = {
+    "project", "bin", "timeline", "scenes", "guides", "x_kdenlive_raw", "x_reconstruct_unmatched",
+}
 
 
 def load_yaml(path: str | Path) -> ProjectDoc:
@@ -81,6 +85,12 @@ def load_yaml(path: str | Path) -> ProjectDoc:
         errors.append(msg("validation.scenes_not_list"))
         scenes_data = []
 
+    guides_data = data.get("guides", [])
+    if not isinstance(guides_data, list):
+        errors.append(msg("validation.guides_not_list"))
+        guides_data = []
+    guides = [g for g in (_parse_guide(item, idx, errors) for idx, item in enumerate(guides_data)) if g]
+
     if errors:
         raise ValidationErrors(errors)
 
@@ -91,6 +101,7 @@ def load_yaml(path: str | Path) -> ProjectDoc:
         source_path=path,
         raw_extras=data.get("x_kdenlive_raw"),
         scenes_raw=scenes_data,
+        guides=guides,
     )
 
 
@@ -244,6 +255,22 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         preserve_pitch=bool(item.get("preserve_pitch", False)),
         position=_pair("position"),
         size=_pair("size"),
+    )
+
+
+def _parse_guide(item: Any, idx: int, errors: list[str]) -> GuideSpec | None:
+    ctx = f"guides[{idx}]"
+    if not isinstance(item, dict) or "at" not in item:
+        errors.append(msg("validation.guide_missing_at", ctx=ctx, item=item))
+        return None
+    at = float(item["at"])
+    if at < 0:
+        errors.append(msg("validation.guide_at_negative", ctx=ctx, at=at))
+        return None
+    return GuideSpec(
+        at=at,
+        text=str(item.get("text", "Marker")),
+        category=int(item.get("category", 0)),
     )
 
 
@@ -455,6 +482,10 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         )
         for a in doc.affine_transitions
     ]
+    resolved_guides = [
+        ResolvedGuide(frame=fps.seconds_to_frames(g.at), text=g.text, category=g.category)
+        for g in doc.guides
+    ]
 
     return ResolvedProject(
         project_id=doc.project.id,
@@ -468,4 +499,5 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         source_dir=doc.source_path.parent,
         wipe_transitions=resolved_wipes,
         affine_transitions=resolved_affines,
+        guides=resolved_guides,
     )

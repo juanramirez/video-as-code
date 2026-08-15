@@ -89,6 +89,40 @@ def test_melt_can_load_generated_project(tmp_path: Path, assets_dir: Path, melt)
     assert xml_out.exists() and xml_out.stat().st_size > 0
 
 
+def test_melt_loads_a_project_with_guides(tmp_path: Path, assets_dir: Path, melt):
+    """`guides:` (new this cycle) has no visual/audible effect - melt just
+    needs to accept the real JSON `kdenlive:sequenceproperties.guides`
+    property (`{"pos", "comment", "type"}` entries) without choking on it,
+    unlike the hardcoded `"[]"` placeholder this replaces."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+guides:
+  - {{at: 0.5, text: "First"}}
+  - {{at: 1.5, text: "Second", category: 3}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    xml_out = tmp_path / "roundtrip.xml"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"xml:{xml_out}", "all_frames=0"])
+
+    _assert_no_fatal_load_error(result)
+    assert xml_out.exists() and xml_out.stat().st_size > 0
+
+
 def test_melt_can_render_generated_project(tmp_path: Path, assets_dir: Path, melt):
     """Stronger than the structural check above: actually decodes and
     re-encodes every frame instead of just dumping the parsed structure, and

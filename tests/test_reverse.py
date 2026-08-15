@@ -92,6 +92,50 @@ timeline:
     assert video_clip["preserve_pitch"] is True
 
 
+def test_round_trip_preserves_guides(tmp_path: Path, assets_dir: Path):
+    """`guides:` (new this cycle) round-trips through a real generated
+    .kdenlive: the JSON array format (`{"pos", "comment", "type"}`) was
+    confirmed against kdenlive's own source (MarkerListModel::toJson),
+    not modeled by analogy."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+guides:
+  - {{at: 0.5, text: "First"}}
+  - {{at: 1.5, text: "Second", category: 3}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    guides = result.data["guides"]
+    assert len(guides) == 2
+    # 1-frame tolerance (1/25s = 0.04s), same rounding note as
+    # test_round_trip_preserves_structure: 0.5s isn't a whole number of
+    # frames at 25fps.
+    frame = 1 / 25
+    assert abs(guides[0]["at"] - 0.5) <= frame
+    assert guides[0]["text"] == "First"
+    assert "category" not in guides[0]
+    assert abs(guides[1]["at"] - 1.5) <= frame
+    assert guides[1]["text"] == "Second"
+    assert guides[1]["category"] == 3
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -

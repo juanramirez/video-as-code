@@ -2,19 +2,22 @@
 
 Goal: recognize exactly what this generator knows how to produce (video/
 audio tracks, trimmed clips, fade to/from black, volume fades, per-clip
-mute, speed changes (timewarp, forward or reverse), title clips, simple
-qtblend picture-in-picture compositing) and translate it to YAML.
+mute, speed changes (timewarp, forward or reverse), title clips,
+guides/markers, simple qtblend picture-in-picture compositing) and
+translate it to YAML. Track-level properties (`pan:`) aren't among them
+yet - this only reads per-entry filters, never a track tractor's own
+filters - see BACKLOG.md.
 
 Anything that's NOT recognized — other effects, non-standard transitions,
-subtitles, extra nested sequences, groupings, guides... — is **not
-discarded**: it's attached as-is (original XML) under the
-`x_kdenlive_raw:` key at the end of the YAML, along with a summary
-printed to the terminal, so the user can decide what to do with it (port
-it by hand, ignore it, or keep using the original .kdenlive for that
-part).
+subtitles, extra nested sequences, groupings... — is **not discarded**:
+it's attached as-is (original XML) under the `x_kdenlive_raw:` key at the
+end of the YAML, along with a summary printed to the terminal, so the
+user can decide what to do with it (port it by hand, ignore it, or keep
+using the original .kdenlive for that part).
 """
 from __future__ import annotations
 
+import json
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -369,6 +372,35 @@ class Importer:
                     )
                 )
 
+    def parse_guides(self, sequence: ET.Element) -> list[dict]:
+        """`kdenlive:sequenceproperties.guides` is a JSON array of
+        `{"pos": frame, "comment": str, "type": category}` (confirmed
+        against kdenlive's own source, MarkerListModel::toJson - same
+        format xmlgen.py now writes). Malformed JSON (a hand-edited or
+        pre-this-format project) is reported as a raw item rather than
+        crashing the whole import."""
+        raw = _props(sequence).get("kdenlive:sequenceproperties.guides", "")
+        if not raw.strip():
+            return []
+        try:
+            entries = json.loads(raw)
+        except json.JSONDecodeError:
+            entries = None
+        if not isinstance(entries, list):
+            self.raw_items.append(RawItem(msg("reverse.guides_unreadable"), raw))
+            return []
+        guides = []
+        for entry in entries:
+            if not isinstance(entry, dict) or "pos" not in entry:
+                self.raw_items.append(RawItem(msg("reverse.guides_unreadable"), json.dumps(entry)))
+                continue
+            guide = {"at": round(self.fps.frames_to_seconds(int(entry["pos"])), 3), "text": entry.get("comment", "Marker")}
+            category = int(entry.get("type", 0))
+            if category:
+                guide["category"] = category
+            guides.append(guide)
+        return guides
+
     def run(self) -> ImportResult:
         self.preregister_bin_order()
 
@@ -376,6 +408,7 @@ class Importer:
         for extra in self.other_sequences(sequence):
             self.raw_items.append(RawItem(msg("reverse.extra_sequence_not_imported"), _pretty(extra)))
         self.check_unrecognized_transitions(sequence)
+        guides = self.parse_guides(sequence)
 
         title = _props(sequence).get("kdenlive:clipname", self.path.stem)
         track_els = [t for t in sequence.findall("track") if t.get("producer") not in self.black_ids]
@@ -404,6 +437,8 @@ class Importer:
             "bin": self.bin_entries,
             "timeline": {"tracks": tracks_yaml},
         }
+        if guides:
+            data["guides"] = guides
         if self.raw_items:
             data["x_kdenlive_raw"] = [{"where": r.where, "xml": r.xml} for r in self.raw_items]
 

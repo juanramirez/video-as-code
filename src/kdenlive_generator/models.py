@@ -98,6 +98,20 @@ class AffineTransitionSpec:
 
 
 @dataclass
+class GuideSpec:
+    """A timeline marker/guide - `kdenlive:sequenceproperties.guides` on the
+    sequence tractor, a JSON array of `{"pos": <frame>, "comment": <str>,
+    "type": <int>}` (confirmed against kdenlive's own source,
+    `MarkerListModel::toJson`/`importFromJson` in
+    src/bin/model/markerlistmodel.cpp - not modeled by analogy). `category`
+    is kdenlive's marker-category index (color-coded in the UI); 0 is
+    always a valid fallback category."""
+    at: float
+    text: str
+    category: int = 0
+
+
+@dataclass
 class ProjectDoc:
     project: ProjectSpec
     bin: list[BinClipSpec]
@@ -107,6 +121,7 @@ class ProjectDoc:
     scenes_raw: list = field(default_factory=list)  # uncompiled; see scenes.py
     wipe_transitions: list[WipeTransitionSpec] = field(default_factory=list)
     affine_transitions: list[AffineTransitionSpec] = field(default_factory=list)
+    guides: list[GuideSpec] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +189,13 @@ class ResolvedAffineTransition:
 
 
 @dataclass
+class ResolvedGuide:
+    frame: int
+    text: str
+    category: int
+
+
+@dataclass
 class ResolvedProject:
     project_id: str
     title: str
@@ -186,6 +208,7 @@ class ResolvedProject:
     source_dir: Path
     wipe_transitions: list[ResolvedWipeTransition] = field(default_factory=list)
     affine_transitions: list[ResolvedAffineTransition] = field(default_factory=list)
+    guides: list[ResolvedGuide] = field(default_factory=list)
 
     @property
     def total_frames(self) -> int:

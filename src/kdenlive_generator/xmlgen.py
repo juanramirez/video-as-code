@@ -14,6 +14,7 @@ the generator simple and the output deterministic.
 """
 from __future__ import annotations
 
+import json
 import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -442,7 +443,13 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     _prop(sequence, "kdenlive:sequenceproperties.zoneout", total_frames)
     _prop(sequence, "kdenlive:sequenceproperties.zoom", 6)
     _prop(sequence, "kdenlive:sequenceproperties.groups", "[]")
-    _prop(sequence, "kdenlive:sequenceproperties.guides", "[]")
+    # JSON array of {"pos": frame, "comment": str, "type": category} -
+    # confirmed against kdenlive's own source (MarkerListModel::toJson,
+    # src/bin/model/markerlistmodel.cpp), not modeled by analogy.
+    guides_json = [
+        {"pos": g.frame, "comment": g.text, "type": g.category} for g in project.guides
+    ]
+    _prop(sequence, "kdenlive:sequenceproperties.guides", json.dumps(guides_json))
 
     ET.SubElement(sequence, "track", {"producer": "producer_black"})
     for _, tid in track_tractor_ids:

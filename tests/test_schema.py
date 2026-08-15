@@ -181,6 +181,48 @@ timeline:
     assert "pan" in str(exc.value)
 
 
+def test_guide_negative_at_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1}}
+guides:
+  - {{at: -1.0, text: "Bad"}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "at" in str(exc.value)
+
+
+def test_guide_resolves_to_a_frame(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+guides:
+  - {{at: 1.0, text: "Halfway", category: 2}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    assert len(resolved.guides) == 1
+    assert resolved.guides[0].frame == 25
+    assert resolved.guides[0].text == "Halfway"
+    assert resolved.guides[0].category == 2
+
+
 def test_valid_project_resolves(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

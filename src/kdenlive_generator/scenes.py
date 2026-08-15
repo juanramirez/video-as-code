@@ -407,4 +407,5 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         scenes_raw=[],
         wipe_transitions=doc.wipe_transitions + wipe_transitions,
         affine_transitions=doc.affine_transitions + affine_transitions,
+        guides=doc.guides,
     )
