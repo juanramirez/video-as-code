@@ -92,6 +92,71 @@ timeline:
     assert video_clip["preserve_pitch"] is True
 
 
+def test_round_trip_preserves_custom_track_name(tmp_path: Path, assets_dir: Path):
+    """A custom `name:` on a track (new this cycle) round-trips through a
+    real generated .kdenlive: `kdenlive:track_name` on the track's own
+    tractor (confirmed against kdenlive's own source, TrackModel), not
+    the auto-generated `V1`/`A1` fallback."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      name: "Interview"
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    assert result.data["timeline"]["tracks"][0]["name"] == "Interview"
+
+
+def test_round_trip_preserves_hidden_and_locked_track_state(tmp_path: Path, assets_dir: Path):
+    """`hidden:`/`locked:` on a track (new this cycle) round-trip through
+    a real generated .kdenlive: `hide` (bitmask: bit 1 = hidden) and
+    `kdenlive:locked_track` on the track's own tractor (confirmed against
+    kdenlive's own source, TrackModel::isHidden/isMute/isLocked)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      hidden: true
+      locked: true
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    track = result.data["timeline"]["tracks"][0]
+    assert track["hidden"] is True
+    assert track["locked"] is True
+
+
 def test_round_trip_preserves_guides(tmp_path: Path, assets_dir: Path):
     """`guides:` (new this cycle) round-trips through a real generated
     .kdenlive: the JSON array format (`{"pos", "comment", "type"}`) was

@@ -37,6 +37,18 @@ class RawItem:
 
 
 @dataclass
+class TrackMeta:
+    """What `resolve_track_playlist` can read off a track's own tractor
+    (as opposed to the playlist with the actual clip entries) - real
+    values when this generator itself produced the project (or a real
+    kdenlive project happens to match the same shape), `None`/`False`
+    defaults otherwise, never guessed."""
+    name: Optional[str] = None
+    hidden: bool = False
+    locked: bool = False
+
+
+@dataclass
 class ImportResult:
     data: dict
     raw_items: list[RawItem] = field(default_factory=list)
@@ -200,18 +212,34 @@ class Importer:
 
     # -- tracks -----------------------------------------------------------------
 
-    def resolve_track_playlist(self, track_el: ET.Element, ctx: str) -> tuple[ET.Element, str]:
+    def resolve_track_playlist(self, track_el: ET.Element, ctx: str) -> tuple[ET.Element, str, TrackMeta]:
         """From the sequence's <track producer="..."/>, walks back to the
-        playlist with the real entries and determines if it's video or audio."""
+        playlist with the real entries, determines if it's video or audio,
+        and reads `kdenlive:track_name`/`hide`/`kdenlive:locked_track` off
+        the track's own tractor if it has one (confirmed against
+        kdenlive's own source, TrackModel::TrackModel/isHidden/isMute -
+        see xmlgen.py's `_build_track`) - default `TrackMeta()` otherwise
+        (e.g. a bare playlist with no wrapping tractor - not a shape this
+        generator itself produces, but a real project could have one)."""
         ref = self.by_id.get(track_el.get("producer"))
         if ref is None:
             raise ValueError(msg("reverse.broken_reference", ctx=ctx, ref=track_el.get("producer")))
 
         if ref.tag == "playlist":
             kind = "audio" if "kdenlive:audio_track" in _props(ref) else "video"
-            return ref, kind
+            return ref, kind, TrackMeta()
 
         if ref.tag == "tractor":
+            track_props = _props(ref)
+            try:
+                hide_bits = int(track_props.get("hide", "0"))
+            except ValueError:
+                hide_bits = 0
+            meta = TrackMeta(
+                name=track_props.get("kdenlive:track_name") or None,
+                hidden=bool(hide_bits & 1),
+                locked=track_props.get("kdenlive:locked_track", "0") not in ("0", "", None),
+            )
             sub_tracks = ref.findall("track")
             candidates = []
             for st in sub_tracks:
@@ -228,9 +256,9 @@ class Importer:
                     self.raw_items.append(RawItem(msg("reverse.secondary_playlist_with_content", ctx=ctx), _pretty(pl)))
                 self.warnings.append(msg("reverse.mix_track_warning", ctx=ctx))
             if non_empty:
-                return non_empty[0][0], non_empty[0][1]
+                return non_empty[0][0], non_empty[0][1], meta
             if candidates:
-                return candidates[0][0], candidates[0][1]
+                return candidates[0][0], candidates[0][1], meta
 
         raise ValueError(msg("reverse.unrecognized_track_structure", ctx=ctx, tag=ref.tag))
 
@@ -467,14 +495,20 @@ class Importer:
         for i, track_el in enumerate(track_els):
             ctx = f"timeline.tracks[{i}]"
             try:
-                playlist, kind = self.resolve_track_playlist(track_el, ctx)
+                playlist, kind, meta = self.resolve_track_playlist(track_el, ctx)
             except ValueError as exc:
                 self.warnings.append(str(exc))
                 self.raw_items.append(RawItem(msg("reverse.track_not_imported", ctx=ctx), _pretty(track_el)))
                 continue
             clips = self.convert_playlist(playlist, kind, ctx)
-            name = f"{'V' if kind == 'video' else 'A'}{i + 1}"
-            tracks_yaml.append({"type": kind, "name": name, "clips": clips})
+            name = meta.name or f"{'V' if kind == 'video' else 'A'}{i + 1}"
+            track_yaml = {"type": kind, "name": name}
+            if meta.hidden:
+                track_yaml["hidden"] = True
+            if meta.locked:
+                track_yaml["locked"] = True
+            track_yaml["clips"] = clips
+            tracks_yaml.append(track_yaml)
             track_names_by_position[i + 1] = name
 
         transitions_yaml = self.convert_cross_track_transitions(sequence, track_names_by_position)

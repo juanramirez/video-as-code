@@ -63,6 +63,8 @@ class TrackSpec:
     name: Optional[str]
     clips: list[ClipPlacementSpec] = field(default_factory=list)
     pan: Optional[float] = None  # audio only: -1.0 (full left) .. 1.0 (full right)
+    hidden: bool = False
+    locked: bool = False
 
 
 @dataclass
@@ -174,6 +176,8 @@ class ResolvedTrack:
     name: str
     placements: list[ResolvedPlacement]
     pan: Optional[float] = None
+    hidden: bool = False
+    locked: bool = False
 
     @property
     def end_frame(self) -> int:

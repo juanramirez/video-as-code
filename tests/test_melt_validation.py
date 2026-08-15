@@ -89,6 +89,43 @@ def test_melt_can_load_generated_project(tmp_path: Path, assets_dir: Path, melt)
     assert xml_out.exists() and xml_out.stat().st_size > 0
 
 
+def test_melt_hides_a_hidden_track(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `hidden:` on a track (new this cycle): renders
+    black instead of the track's actual content - a real surprise found
+    while implementing it (not assumed from kdenlive's source alone):
+    `hide` on the track's own tractor turns out to genuinely affect
+    melt's rendered output, not just kdenlive's own editor UI (a locked/
+    hidden toggle could plausibly have been editor-only metadata with no
+    render-time effect - it isn't, at least for `hidden`)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      hidden: true
+      clips:
+        - {{clip: photo, start: 0, duration: 1}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    r, g, b = _mean_rgb(rendered, timestamp=0.5)
+    assert r < 10 and g < 10 and b < 10, f"expected a hidden track to render black, got {(r, g, b)}"
+
+
 def test_melt_loads_a_project_with_guides(tmp_path: Path, assets_dir: Path, melt):
     """`guides:` (new this cycle) has no visual/audible effect - melt just
     needs to accept the real JSON `kdenlive:sequenceproperties.guides`

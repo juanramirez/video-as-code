@@ -235,7 +235,17 @@ def _parse_track(item: Any, idx: int, errors: list[str]) -> TrackSpec | None:
             errors.append(msg("validation.pan_out_of_range", idx=idx, pan=pan))
             pan = None
 
-    return TrackSpec(type=track_type, name=name, clips=clips, pan=pan)
+    hidden = item.get("hidden", False)
+    if not isinstance(hidden, bool):
+        errors.append(msg("validation.hidden_invalid", idx=idx, hidden=hidden))
+        hidden = False
+
+    locked = item.get("locked", False)
+    if not isinstance(locked, bool):
+        errors.append(msg("validation.locked_invalid", idx=idx, locked=locked))
+        locked = False
+
+    return TrackSpec(type=track_type, name=name, clips=clips, pan=pan, hidden=hidden, locked=locked)
 
 
 def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list[str]) -> ClipPlacementSpec | None:
@@ -525,7 +535,16 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     )
                 )
 
-        resolved_tracks.append(ResolvedTrack(kind=track.type, name=track.name, placements=placements, pan=track.pan))
+        resolved_tracks.append(
+            ResolvedTrack(
+                kind=track.type,
+                name=track.name,
+                placements=placements,
+                pan=track.pan,
+                hidden=track.hidden,
+                locked=track.locked,
+            )
+        )
 
     if errors:
         raise ValidationErrors(errors)
