@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from . import probe, reverse, xmlgen
+from . import i18n, probe, reverse, xmlgen
 from .errors import KdgenError
 from .i18n import msg
 from .schema import load_and_resolve
@@ -33,7 +33,11 @@ def cmd_build(args: argparse.Namespace) -> int:
     except KdgenError as exc:
         print(str(exc), file=sys.stderr)
         return 1
-    xmlgen.write(resolved, output)
+    try:
+        xmlgen.write(resolved, output)
+    except OSError as exc:
+        print(msg("cli.write_failed", path=output, exc=exc), file=sys.stderr)
+        return 1
     print(msg("cli.build_done", output=output, frames=resolved.total_frames, fps=resolved.fps.fps))
     return 0
 
@@ -58,7 +62,11 @@ def cmd_import(args: argparse.Namespace) -> int:
         print(msg("cli.import_error", path=kdenlive_path, exc=exc), file=sys.stderr)
         return 1
 
-    output.write_text(_dump_yaml(result.data), encoding="utf-8")
+    try:
+        output.write_text(_dump_yaml(result.data), encoding="utf-8")
+    except OSError as exc:
+        print(msg("cli.write_failed", path=output, exc=exc), file=sys.stderr)
+        return 1
     print(msg("cli.import_done", output=output))
     for w in result.warnings:
         print(msg("cli.warning_prefix", w=w), file=sys.stderr)
@@ -115,7 +123,11 @@ def cmd_reconstruct(args: argparse.Namespace) -> int:
         print(msg("cli.reconstruct_error", path=video_path, exc=exc), file=sys.stderr)
         return 1
 
-    output.write_text(_dump_yaml(result.data), encoding="utf-8")
+    try:
+        output.write_text(_dump_yaml(result.data), encoding="utf-8")
+    except OSError as exc:
+        print(msg("cli.write_failed", path=output, exc=exc), file=sys.stderr)
+        return 1
     print(msg("cli.reconstruct_done", output=output))
     for w in result.warnings:
         print(msg("cli.warning_prefix", w=w), file=sys.stderr)
@@ -127,6 +139,11 @@ def cmd_reconstruct(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="kdgen", description=msg("cli.help.description"))
+    parser.add_argument(
+        "--lang",
+        choices=sorted(i18n.CATALOGS),
+        help=msg("cli.help.lang"),
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_build = sub.add_parser("build", help=msg("cli.help.build"))
@@ -158,8 +175,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+
+    # `--lang` has to be applied before `build_parser()`, since its help
+    # text is already localized (msg() calls) at construction time - an
+    # ordinary argparse argument couldn't take effect early enough. A
+    # lightweight pre-parser peels it off; the real parser also declares
+    # `--lang` (see build_parser) purely so it shows up in `--help`.
+    pre = argparse.ArgumentParser(add_help=False)
+    pre.add_argument("--lang", choices=sorted(i18n.CATALOGS))
+    pre_args, remaining_argv = pre.parse_known_args(argv)
+    if pre_args.lang:
+        i18n.set_locale(pre_args.lang)
+
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(remaining_argv)
     return args.func(args)
 
 

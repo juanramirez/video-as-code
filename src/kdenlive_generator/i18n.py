@@ -143,6 +143,8 @@ _EN: dict[str, str] = {
     "cli.render_done": "Rendered {output} ({frames} frames, {fps:g} fps)",
     "cli.help.render": "Builds a .kdenlive from a YAML and renders it to a video with melt",
     "cli.help.render_output": "Output video path (default: same name as the YAML, .mp4 extension)",
+    "cli.help.lang": "Output language (overrides KDGEN_LANG for this run)",
+    "cli.write_failed": "Error writing '{path}': {exc}",
 }
 
 _ES: dict[str, str] = {
@@ -278,6 +280,8 @@ _ES: dict[str, str] = {
     "cli.render_done": "Renderizado {output} ({frames} fotogramas, {fps:g} fps)",
     "cli.help.render": "Genera un .kdenlive a partir de un YAML y lo renderiza a vídeo con melt",
     "cli.help.render_output": "Ruta de salida del vídeo (por defecto: mismo nombre que el YAML, extensión .mp4)",
+    "cli.help.lang": "Idioma de salida (sobrescribe KDGEN_LANG para esta ejecución)",
+    "cli.write_failed": "Error al escribir '{path}': {exc}",
 }
 
 CATALOGS: dict[str, dict[str, str]] = {"en": _EN, "es": _ES}
@@ -289,6 +293,17 @@ def _detect_locale() -> str:
 
 
 LOCALE = _detect_locale()
+
+
+def set_locale(lang: str) -> None:
+    """Overrides `KDGEN_LANG` for the current process - used by the CLI's
+    `--lang` flag, which needs to win over the environment variable and
+    take effect before `build_parser()` builds its (already-localized)
+    help text."""
+    global LOCALE
+    lang = (lang or "").strip().lower()
+    if lang in CATALOGS:
+        LOCALE = lang
 
 
 def msg(key: str, **kwargs) -> str:

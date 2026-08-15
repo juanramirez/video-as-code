@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kdenlive_generator import cli, probe
+from kdenlive_generator import cli, i18n, probe
 
 
 def _write_simple_project(tmp_path: Path, assets_dir: Path) -> Path:
@@ -35,6 +35,34 @@ def test_render_missing_melt(tmp_path: Path, assets_dir: Path, monkeypatch, caps
 
     assert rc == 1
     assert "melt" in capsys.readouterr().err.lower()
+
+
+def test_lang_flag_overrides_locale(tmp_path: Path, assets_dir: Path, capsys):
+    yaml_path = _write_simple_project(tmp_path, assets_dir)
+    original_locale = i18n.LOCALE
+    try:
+        rc = cli.main(["--lang", "es", "validate", str(yaml_path)])
+        assert rc == 0
+        assert "pista" in capsys.readouterr().out
+    finally:
+        i18n.set_locale(original_locale)
+
+
+def test_build_write_error_reported_cleanly_not_as_a_traceback(tmp_path: Path, assets_dir: Path, capsys):
+    """A PermissionError/OSError writing the output (here: the output path
+    is a directory, not a file) should go through the same clean,
+    i18n-routed error path every other CLI failure mode uses - not an
+    unhandled Python traceback."""
+    yaml_path = _write_simple_project(tmp_path, assets_dir)
+    output_dir = tmp_path / "out_is_a_dir"
+    output_dir.mkdir()
+
+    rc = cli.main(["build", str(yaml_path), "-o", str(output_dir)])
+
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "Traceback" not in err
+    assert str(output_dir) in err
 
 
 def test_render_end_to_end(tmp_path: Path, assets_dir: Path, melt, monkeypatch):
