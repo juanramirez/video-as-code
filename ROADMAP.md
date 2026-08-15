@@ -449,3 +449,60 @@ close for `reverse.py`, and a project/track metadata round-trip theme.
     concept anywhere in its own source (checked directly, not assumed),
     so that half of the original item was dropped as not real rather
     than invented.
+
+## v0.5 — scoped (2026-08-15)
+
+Four groups: symmetry closes (reverse.py recognizing what v0.3/v0.4
+already generate), a new filter capability as the headline, two more
+transitions extending the dissolve/wipe/affine/iris/flip family, and one
+more small filter capability.
+
+- **Symmetry closes**:
+  - **`pan:` recognized on import**: `reverse.py` only ever reads
+    per-entry filters; it never inspects a track tractor's own filters,
+    which is where the `panner` filter `pan:` controls actually live.
+    A project with a real balance/pan setting round-trips back
+    `pan`-less today.
+  - **`iris`/`flip` recognized on import**: both are single-clip filters
+    (`frei0r.alphaspot`/`frei0r.3dflippo`), not `<transition>` elements,
+    so v0.4's cross-track-transition recognition can't see them at all.
+    `convert_clip_filter` needs to recognize both services and translate
+    their keyframed size/rotation back into `style: iris`/`style: flip`
+    scene-clip markers (or fall to `x_kdenlive_raw` if the keyframes
+    don't match what `xmlgen.py` itself would produce, same
+    conservative bar `wipe`/`affine` recognition already holds to).
+  - **Track-level audio mute**: `hide`'s bit 2 (`TrackModel::isMute`)
+    is a whole-track audio mute, distinct from the per-*clip* `mute:`
+    already supported - confirmed to exist in kdenlive's own source
+    during v0.4, deliberately left unexposed then to keep that item's
+    scope narrow. Same shape as `hidden:`, just the other bit - needs a
+    distinct name (not `mute:`, already taken at the clip level).
+- **Chroma-key / green-screen compositing** — the headline feature
+  (already in BACKLOG.md under "effects other NLEs have", moved here
+  rather than re-investigated from scratch): `avfilter.chromakey`
+  (confirmed present via `melt -query filter=avfilter.chromakey`) keys
+  out a color range on one clip, composited via the `qtblend` this
+  project already emits per video track - green/blue-screen
+  compositing, one of the most commonly requested real editing
+  capabilities. To be verified with a real render the same way
+  `iris`/`flip` were: a solid-color background clip should key out
+  entirely, revealing the track below, not just "the filter got
+  attached without erroring."
+- **New transitions: `glitch` and `broken-tv`**: `frei0r.glitch0r`
+  (block shifting + color-channel glitching) and `avfilter.rgbashift`
+  (chromatic aberration) for `glitch`; `frei0r.nosync0r` (h-sync offset)
+  for `broken-tv` - both confirmed present on this machine's melt
+  build but **not yet render-verified** (unlike `iris`/`flip`, which
+  were checked empirically before being scoped in). Applied as a brief
+  animated filter burst over the overlap window rather than a
+  crossfade, same alternating-track shape `dissolve`/`iris`/`flip`
+  already use. Verification happens first, same discipline that
+  dropped `affine`'s `spin`/`cube` from v0.3 after they turned out not
+  to work - if either doesn't hold up under a real render, it's cut
+  from this scope rather than shipped unverified.
+- **`dynamictext` filter (burned-in timecode/date overlay)**: MLT's
+  core `dynamictext` filter overlays text as a filter *on any existing
+  clip*, with keyword substitution (`#timecode#`, `#frame#`,
+  `#localtime#`) - kdenlive itself exposes it as "Dynamic Text".
+  Distinct from `titles.py`, which only produces standalone title
+  clips, not a text-overlay filter on existing footage.

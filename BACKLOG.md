@@ -23,32 +23,6 @@ code itself already marks the boundary.
   flagged inline in `reconstruct.py` as real and out of scope —
   background audio commonly doesn't segment cleanly to match video cuts;
   a harder, separate problem this doesn't attempt to solve.
-- **`pan:` isn't recognized on import**: found while wiring up
-  `guides:` in v0.4 - `reverse.py` only ever reads *per-entry* filters
-  (`convert_clip_filter`, walking each `<entry>`'s own `<filter>`
-  children); it never inspects a track *tractor*'s own filters, which is
-  where the `panner` filter `pan:` controls actually lives (`xmlgen.py`'s
-  `_build_track`). A project with a real balance/pan setting round-trips
-  back as `pan`-less today - same shape as the mute/speed recognition
-  work already done, just at the track level instead of the entry
-  level.
-- **`iris`/`flip` aren't recognized on import**: v0.4's cross-track-
-  transition recognition (`reverse.py`'s `convert_cross_track_transitions`)
-  only looks at `<transition>` elements - it can't see `iris`/`flip`
-  at all, since both are single-clip filters (`frei0r.alphaspot`/
-  `frei0r.3dflippo`) on a playlist entry, the same shape `dissolve`'s
-  fade is. `convert_clip_filter` (the function that *does* recognize
-  per-entry filters - fades, mute, qtblend) doesn't know about either
-  service yet, so an `iris`/`flip` clip still imports (position/timing
-  preserved) but the reveal itself falls to `x_kdenlive_raw` per-filter,
-  the same way an unrecognized qtblend keyframe animation already does.
-- **Track-level audio mute (`hide`'s bit 2)**: v0.4's `hidden:`/`locked:`
-  only exposes bit 1 of the track tractor's `hide` bitmask
-  (`TrackModel::isHidden`) - bit 2 (`TrackModel::isMute`, a whole-track
-  audio mute, distinct from the per-*clip* `mute:` this project already
-  has) was confirmed to exist in kdenlive's own source but deliberately
-  left unexposed to keep that item's scope narrow. Same shape as
-  `hidden:`, just the other bit.
 
 ## Capabilities not yet touched at all
 
@@ -95,18 +69,6 @@ own GPL luma maps: [[roadmap]] wipe entry). These would be genuinely new
 services already present — no competitor code involved, just MLT
 mechanisms competitors' editors don't expose either.
 
-- **Glitch / RGB-split ("digital glitch") transition**: `frei0r.glitch0r`
-  (block shifting + color-channel glitching, params: frequency/block
-  height/shift intensity) and `avfilter.rgbashift` (independent R/G/B
-  channel offset, i.e. chromatic aberration) are both real filters on
-  this machine's MLT build. Applied as a brief animated burst over the
-  overlap window instead of a crossfade, this reproduces the "glitch
-  cut" transition style common in CapCut/TikTok-style editors — built as
-  a filter burst rather than a true two-source transition, closer in
-  shape to a dressed-up cut than to `dissolve`/`wipe`.
-- **"Broken TV" / analog-roll transition**: `frei0r.nosync0r` (h-sync
-  offset, "broken tv" look) — same filter-burst-over-overlap construction
-  as the glitch transition above, different visual family.
 - **New procedural luma shapes for `wipe`**: cross-referenced against
   gl-transitions.com's open (MIT) 125-transition catalog for concepts
   reproducible via `lumas.py`'s existing gradient/angle/distance-math
@@ -155,9 +117,6 @@ melt 7.32.0, not assumed.
 - **Motion tracking**: `opencv.tracker` present, credited to kdenlive's
   own lead developer (`jb@kdenlive.org`) — this *is* kdenlive's tracker
   effect. Absent from this project.
-- **Chroma-key / green-screen**: `avfilter.chromakey` confirmed present;
-  kdenlive's own UI already has `frei0r.bluescreen0r`. Absent from this
-  project.
 - **LUT-based color grading**: `avfilter.lut3d`/`avfilter.lut1d`
   confirmed present — DaVinci-style `.cube` LUT application, distinct
   from (and a smaller lift than) the generic `lift_gamma_gain` grading
@@ -168,15 +127,6 @@ melt 7.32.0, not assumed.
   (`sox.compand`, `sox.noisered` for noise reduction) — sidechain-style
   ducking (a Premiere/Resolve staple) is buildable from `acompressor`,
   not currently in the schema.
-- **`dynamictext` filter (burned-in timecode/frame counter/date
-  overlays)**: MLT's core `dynamictext` filter (documented at
-  mltframework.org/plugins/FilterDynamictext, part of MLT's own "plus"
-  module) overlays text as a filter *on any existing clip*, with keyword
-  substitution (`#timecode#`, `#frame#`, `#localtime#`) — kdenlive
-  already exposes it as "Dynamic Text." `titles.py` only produces
-  standalone title clips today, not a text-overlay filter on existing
-  footage, so this is a distinct capability, not a variant of the
-  richer-title-clips item above.
 - **Frame-blend speed interpolation confirmed absent**: `avfilter.
   minterpolate` (true optical-flow retiming, what DaVinci/Premiere use
   for smooth slow-motion) is **not present** in this machine's compiled
