@@ -31,6 +31,10 @@ def ffprobe_available() -> bool:
     return shutil.which("ffprobe") is not None
 
 
+def ffmpeg_available() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+
 @functools.lru_cache(maxsize=None)
 def probe_duration_seconds(path_str: str) -> float:
     """Duration in seconds of a real audio/video asset (not still images)."""

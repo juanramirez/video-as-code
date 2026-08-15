@@ -93,6 +93,15 @@ _EN: dict[str, str] = {
         "'reconstruct' needs the optional numpy/Pillow dependencies. "
         "Install them with: pip install kdenlive-generator[reconstruct]"
     ),
+    "reconstruct.ffmpeg_or_ffprobe_missing": (
+        "ffmpeg/ffprobe not found on PATH; 'reconstruct' needs them to decode "
+        "frames and audio. Install ffmpeg (which bundles ffprobe) and make "
+        "sure it's on PATH."
+    ),
+    "reconstruct.ffmpeg_failed": "ffmpeg failed: {stderr}",
+    "reconstruct.no_video_stream": "'{path}' has no video stream",
+    "reconstruct.unexpected_wav_sample_width": "unexpected WAV sample width from ffmpeg: {width}",
+    "reconstruct.no_confident_match": "{where}: no confident asset match",
     "cli.reconstruct_error": "Error reconstructing from '{path}': {exc}",
     "cli.reconstruct_done": "Generated {output}",
     "cli.reconstruct_unmatched_notice": (
@@ -196,6 +205,15 @@ _ES: dict[str, str] = {
         "'reconstruct' necesita las dependencias opcionales numpy/Pillow. "
         "Instálalas con: pip install kdenlive-generator[reconstruct]"
     ),
+    "reconstruct.ffmpeg_or_ffprobe_missing": (
+        "No se ha encontrado ffmpeg/ffprobe en el PATH; 'reconstruct' los "
+        "necesita para decodificar frames y audio. Instala ffmpeg (trae "
+        "ffprobe incluido) y asegúrate de que esté en el PATH."
+    ),
+    "reconstruct.ffmpeg_failed": "ffmpeg falló: {stderr}",
+    "reconstruct.no_video_stream": "'{path}' no tiene ninguna pista de vídeo",
+    "reconstruct.unexpected_wav_sample_width": "ancho de muestra WAV inesperado de ffmpeg: {width}",
+    "reconstruct.no_confident_match": "{where}: sin coincidencia fiable",
     "cli.reconstruct_error": "Error reconstruyendo a partir de '{path}': {exc}",
     "cli.reconstruct_done": "Generado {output}",
     "cli.reconstruct_unmatched_notice": (

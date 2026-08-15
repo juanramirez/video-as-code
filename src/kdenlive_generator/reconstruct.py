@@ -40,6 +40,7 @@ import numpy as np
 from PIL import Image
 
 from . import probe
+from .i18n import msg
 from .timecode import resolve_fps
 
 SIGNATURE_SIZE = 8  # frame signatures are SIGNATURE_SIZE x SIGNATURE_SIZE x 3 floats
@@ -76,7 +77,7 @@ def _run_ffmpeg(args: list[str], timeout: int = 60) -> None:
         timeout=timeout,
     )
     if result.returncode != 0:
-        raise ReconstructError(f"ffmpeg failed: {result.stderr.strip()}")
+        raise ReconstructError(msg("reconstruct.ffmpeg_failed", stderr=result.stderr.strip()))
 
 
 def _signature_from_image(img: Image.Image) -> np.ndarray:
@@ -130,7 +131,7 @@ def probe_video_info(path: Path) -> dict:
     )
     streams = json.loads(result.stdout).get("streams", [])
     if not streams:
-        raise ReconstructError(f"'{path}' has no video stream")
+        raise ReconstructError(msg("reconstruct.no_video_stream", path=path))
     stream = streams[0]
     num, den = (int(x) for x in stream["r_frame_rate"].split("/"))
     return {"width": int(stream["width"]), "height": int(stream["height"]), "fps": num / den}
@@ -153,7 +154,7 @@ def extract_audio_waveform(path: Path, tmp_dir: Path, *, sample_rate: int = AUDI
         raw = wf.readframes(wf.getnframes())
         sample_width = wf.getsampwidth()
     if sample_width != 2:
-        raise ReconstructError(f"unexpected WAV sample width from ffmpeg: {sample_width}")
+        raise ReconstructError(msg("reconstruct.unexpected_wav_sample_width", width=sample_width))
     return np.frombuffer(raw, dtype=np.int16).astype(np.float64)
 
 
@@ -526,6 +527,9 @@ def reconstruct(video_path: Path, assets_dir: Path) -> ReconstructResult:
     align with visual cuts at all, and segmenting audio by *its own*
     content changes is a real, much harder, separate problem this doesn't
     attempt."""
+    if not (probe.ffmpeg_available() and probe.ffprobe_available()):
+        raise ReconstructError(msg("reconstruct.ffmpeg_or_ffprobe_missing"))
+
     video_path = video_path.resolve()
     assets_dir = assets_dir.resolve()
     warnings: list[str] = []
@@ -559,7 +563,7 @@ def reconstruct(video_path: Path, assets_dir: Path) -> ReconstructResult:
                     "best_guess": match.asset_name if match else None,
                     "confidence": None if match is None else round(match.mean_distance, 1),
                 })
-                warnings.append(f"{where}: no confident asset match")
+                warnings.append(msg("reconstruct.no_confident_match", where=where))
                 continue
 
             asset = visual_bank[match.asset_name]
@@ -598,12 +602,13 @@ def reconstruct(video_path: Path, assets_dir: Path) -> ReconstructResult:
         if full_waveform.size > 0 and audio_bank:
             audio_match = identify_audio_asset(full_waveform, audio_bank)
             if audio_match is None or audio_match.score < AUDIO_MATCH_SCORE_THRESHOLD:
+                where = "audio [full track]"
                 unmatched.append({
-                    "where": "audio [full track]",
+                    "where": where,
                     "best_guess": audio_match.asset_name if audio_match else None,
                     "confidence": None if audio_match is None else round(audio_match.score, 3),
                 })
-                warnings.append("audio [full track]: no confident asset match")
+                warnings.append(msg("reconstruct.no_confident_match", where=where))
             else:
                 clip = {"clip": asset_ids[audio_match.asset_name], "start": 0.0}
                 if audio_match.asset_is_longer:
