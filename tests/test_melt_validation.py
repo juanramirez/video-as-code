@@ -190,6 +190,88 @@ timeline:
     )
 
 
+def test_melt_mutes_an_audio_track_clip(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `mute: true` on an audio-track clip: the same
+    tone that renders clearly audible without `mute` should render silent
+    (or near-digital-silence) with it."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 3, mute: true}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.wav"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    muted = _mean_volume_db(rendered, start=1.0, duration=1.0)
+    assert muted < -90, f"expected near-silence with mute: true, got {muted}dB"
+
+
+def test_melt_mutes_a_video_clips_own_audio(tmp_path: Path, assets_dir: Path, melt):
+    """`mute: true` on a video-track clip should silence that clip's own
+    embedded audio while leaving the picture untouched - this is what
+    lets a video's image and its (separately-placed) audio have
+    independent fades: mute the video-track copy, fade the audio-track
+    copy (see ROADMAP.md)."""
+    # A solid color, not `testsrc` - testsrc's rainbow of hues would average
+    # out to a near-neutral grey across the whole frame either way, so it
+    # can't tell a rendered picture apart from a blank one via _mean_rgb.
+    clip_with_sound = tmp_path / "clip_with_sound.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=red:size=320x240:rate=25:duration=2",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+            "-pix_fmt", "yuv420p", "-shortest", str(clip_with_sound),
+        ],
+        check=True,
+    )
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {clip_with_sound}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, mute: true}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    muted = _mean_volume_db(rendered, start=0.5, duration=1.0)
+    assert muted < -90, f"expected the video clip's own audio to be silenced, got {muted}dB"
+
+    r, g, b = _mean_rgb(rendered, timestamp=0.5)
+    assert r > g + 20 and r > b + 20, f"expected the red picture to still render, got {(r, g, b)}"
+
+
 def _mean_rgb(path: Path, timestamp: float = 0.0) -> tuple[float, float, float]:
     result = subprocess.run(
         [

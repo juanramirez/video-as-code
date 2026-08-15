@@ -19,11 +19,25 @@ backlog.
 
 ## v0.2 — scoped (2026-08-14)
 
-- **Mute**: `mute: true` on a clip placement (video or audio) to silence its
-  audio track. Fade in/out (`fade_in`/`fade_out` on a placement) already
-  works for both video and audio clips, verified against real `melt`
-  renders (brightness/RMS measurement, not just plausible-looking XML) —
-  mute is the one still-missing knob in that family, not a new mechanism.
+- **Mute** — **implemented** (2026-08-15): `mute: true` on a clip placement
+  (video or audio) silences its audio track. Same `mlt_service="volume"`
+  filter as kdenlive's own "Mute" effect
+  (`share/kdenlive/effects/mute.xml`), fixed `gain=0`, applied on top of
+  any fade filters. For a video-track clip this only touches audio
+  samples, leaving the picture untouched — verified against real `melt`
+  renders, not just plausible-looking XML
+  (`tests/test_melt_validation.py::test_melt_mutes_a_video_clips_own_audio`
+  measures both silence and that the picture still renders). `reverse.py`
+  recognizes it on import too (`volume`/`mute` -> `mute: true`), so it
+  round-trips instead of landing in `x_kdenlive_raw`.
+
+  This is also what unblocks independent video/audio fades for one video
+  file: add the same video path as two `bin:` entries, place one on a
+  video track (`mute: true`, no audio) and the other on an audio track
+  (its own `fade_in`/`fade_out`) — before mute existed, the video-track
+  placement's own embedded audio would have played at the same time as
+  the audio-track copy's faded audio, overlapping instead of the
+  audio-track copy standing in cleanly for the video's sound.
 - **`kdgen reconstruct`** — **implemented** (2026-08-14, branch
   `kdgen-reconstruct`, not yet merged): reconstructs a YAML from an
   already-rendered video + an assets folder, via content-based matching

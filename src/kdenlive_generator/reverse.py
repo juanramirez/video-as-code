@@ -206,6 +206,8 @@ class Importer:
             return {"fade_in": round(length_s, 3)}
         if service == "volume" and kid == "fadeout":
             return {"fade_out": round(length_s, 3)}
+        if service == "volume" and kid == "mute":
+            return {"mute": True}
         if service == "qtblend" and kid == "qtblend":
             rect = props.get("rect", "")
             keyframes = rect.split(";") if rect else []

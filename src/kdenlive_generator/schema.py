@@ -179,6 +179,11 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
             return None
         return (float(val[0]), float(val[1]))
 
+    mute = item.get("mute", False)
+    if not isinstance(mute, bool):
+        errors.append(msg("validation.mute_invalid", ctx=ctx, mute=mute))
+        mute = False
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -187,6 +192,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         duration=float(item["duration"]) if "duration" in item and item["duration"] is not None else None,
         fade_in=float(item["fade_in"]) if item.get("fade_in") is not None else None,
         fade_out=float(item["fade_out"]) if item.get("fade_out") is not None else None,
+        mute=mute,
         position=_pair("position"),
         size=_pair("size"),
     )
@@ -305,6 +311,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     out_frame=max(out_frame, in_frame),
                     fade_in_frames=fps.seconds_to_frames(fade_in_s),
                     fade_out_frames=fps.seconds_to_frames(fade_out_s),
+                    mute=placement.mute,
                     rect=rect,
                 )
             )
