@@ -9,7 +9,7 @@ from typing import Optional
 from .timecode import FrameRate
 
 VALID_TRACK_TYPES = ("video", "audio")
-VALID_CLIP_TYPES = ("video", "audio", "image")
+VALID_CLIP_TYPES = ("video", "audio", "image", "title")
 
 
 # ---------------------------------------------------------------------------
@@ -30,8 +30,14 @@ class ProjectSpec:
 @dataclass
 class BinClipSpec:
     id: str
-    path: Path
+    path: Optional[Path]  # None for type: title - schema.py generates and fills it in
     type: Optional[str] = None  # overrides the extension-based autodetection
+    # title-only fields (type: title), ignored otherwise:
+    text: Optional[str] = None
+    font: str = "Sans"
+    font_size: int = 48
+    font_color: tuple[int, int, int, int] = (255, 255, 255, 255)
+    background: tuple[int, int, int, int] = (0, 0, 0, 0)
 
 
 @dataclass

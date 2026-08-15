@@ -92,9 +92,48 @@ backlog.
   against a distractor. Not exhaustive — one photo and one short clip, not
   a stress test across varied real-world footage — but no longer purely
   synthetic-only.
-- **Titles/text clips**: generate kdenlive title clips from YAML (not just
-  recognize them on import — extends the generator side, not only
-  `reverse.py`). Currently unsupported in both directions.
+- **Titles/text clips** — **implemented** (2026-08-15): a new bin clip
+  kind, `type: title`, with `text:` (required) and optional `font:`
+  (default `Sans`), `font_size:` (default 48), `color:`/`background:`
+  (RGBA lists). Generates a standalone `.kdenlivetitle` file (`titles.py`,
+  written to `.kdgen_titles/<clip_id>.kdenlivetitle` next to the project
+  YAML) and a `<producer mlt_service="kdenlivetitle">` referencing it -
+  modeled directly on a real title clip found in a local kdenlive backup,
+  not built by analogy (the producer tag is `<producer>`, not `<chain>`;
+  the file format is a separate small XML kdenlive's title editor itself
+  produces). Deliberately narrow scope: one line of text, one style, no
+  animation, no multiple items - a title card/caption, not a replacement
+  for kdenlive's title editor. Text centering/sizing is a rough
+  average-glyph-width estimate (no font-metrics library as a dependency),
+  with the font auto-shrinking first if that estimate would overflow the
+  canvas - checked empirically against real renders, not just structurally
+  (`tests/test_melt_validation.py::test_melt_renders_a_real_title_clip`
+  confirms visible text, not just that a producer got written without
+  errors).
+
+  `reverse.py` recognizes titles on import too (`titles.parse_title_xml`,
+  the inverse of the generator): reads the referenced `.kdenlivetitle`
+  file back and reconstructs `text`/`font`/`font_size`/`color`/
+  `background`, falling back to `x_kdenlive_raw` for anything richer than
+  this generator's narrow scope (multiple items, animation, image/rect
+  items) rather than guessing. Verified round-trip
+  (`tests/test_reverse.py::test_round_trip_preserves_title`) - which also
+  caught a real bug: `Importer.preregister_bin_order` registered every
+  `main_bin` entry through the generic (non-title-aware) path before the
+  timeline entry was ever processed, so by the time the title-aware code
+  ran, the clip was already registered with no title data attached at
+  all.
+
+  Along the way, checking whether `reverse.py` also recognizes
+  `transition: wipe` on import (it doesn't - and neither did the
+  qtblend/mix compositing transitions every project already has, since
+  sequence-level `<transition>` elements were never inspected at all)
+  surfaced a real gap for wipe specifically: unlike those two, silently
+  not reconstructing a wipe means silently *losing* it on the next build,
+  not just failing to label it. Fixed by flagging any transition with a
+  non-zero `a_track` (this generator's own compositing-against-black
+  transitions are always `a_track="0"`) into `x_kdenlive_raw` instead of
+  dropping it unnoticed.
 - **Speed change (timewarp)** — **implemented** (2026-08-15): `speed:` on
   a clip placement (video or audio - not video-specific, per the
   `timewarp` MLT producer itself). `in:`/`out:`/`duration:` are relative

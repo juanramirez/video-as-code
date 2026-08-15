@@ -650,3 +650,43 @@ timeline:
         f"({resolved.total_frames} frames @ {resolved.fps.fps}fps)"
     )
     assert expected_duration > 9.0, f"sanity check: 0.5x of a 5s tone should be ~10s, got {expected_duration}s"
+
+
+def test_melt_renders_a_real_title_clip(tmp_path: Path, melt):
+    """Empirical check for `type: title` bin clips (titles.py, new this
+    cycle): a real melt render of a title actually shows the text, not
+    just that a `kdenlivetitle` producer got written without errors. A
+    pure-black frame (mean brightness ~0) would mean the text never
+    rendered - white text against titles.py's default transparent-black
+    background should measurably raise the average."""
+    if not probe.ffprobe_available():
+        pytest.skip("ffprobe not available: can't inspect the rendered output")
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        """
+project: {id: p1, title: T, fps: 25, width: 320, height: 240}
+bin:
+  - id: title1
+    type: title
+    text: "Hello World"
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {clip: title1, start: 0, duration: 2}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    r, g, b = _mean_rgb(rendered, timestamp=1.0)
+    brightness = (r + g + b) / 3
+    assert brightness > 5, f"expected visible white text on a black background, got near-black frame (brightness={brightness:.2f})"

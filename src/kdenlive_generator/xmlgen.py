@@ -53,6 +53,8 @@ class _IdCounters:
 def _service_for(kind: str, *, fast: bool) -> str:
     if kind == "image":
         return "qimage"
+    if kind == "title":
+        return "kdenlivetitle"
     return "avformat-novalidate" if fast else "avformat"
 
 
@@ -91,6 +93,26 @@ def _build_media_element(
         _prop(el, "warp_pitch", int(preserve_pitch))
         _prop(el, "mlt_service", "timewarp")
         _prop(el, "kdenlive:originalurl", str(path))
+        _prop(el, "kdenlive:folderid", -1)
+        _prop(el, "kdenlive:id", numeric_id)
+        _prop(el, "kdenlive:control_uuid", control_uuid)
+        return el, xml_id
+
+    if kind == "title":
+        # Real kdenlive titles are a plain <producer> too, not <chain>
+        # (confirmed against a real project with an actual title clip -
+        # `resource` points at the separate .kdenlivetitle file titles.py
+        # generates, not the media file conventions below).
+        tag = "producer"
+        xml_id = ids.next("producer")
+        el = ET.Element(tag, {"id": xml_id, "in": str(in_frame), "out": str(out_frame)})
+        _prop(el, "length", out_frame + 1)
+        _prop(el, "eof", "pause")
+        _prop(el, "resource", _resource_for(kind, path))
+        _prop(el, "aspect_ratio", 1)
+        _prop(el, "seekable", 1)
+        _prop(el, "progressive", 1)
+        _prop(el, "mlt_service", "kdenlivetitle")
         _prop(el, "kdenlive:folderid", -1)
         _prop(el, "kdenlive:id", numeric_id)
         _prop(el, "kdenlive:control_uuid", control_uuid)

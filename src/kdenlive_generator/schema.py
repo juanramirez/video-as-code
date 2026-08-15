@@ -16,7 +16,7 @@ from typing import Any
 
 import yaml
 
-from . import probe
+from . import probe, titles
 from .errors import ValidationErrors
 from .i18n import msg
 from .models import (
@@ -133,7 +133,7 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
 
 
 def _parse_bin_clip(item: Any, source_dir: Path, errors: list[str]) -> BinClipSpec | None:
-    if not isinstance(item, dict) or "id" not in item or "path" not in item:
+    if not isinstance(item, dict) or "id" not in item:
         errors.append(msg("validation.bin_entry_invalid", item=item))
         return None
     clip_type = item.get("type")
@@ -141,6 +141,29 @@ def _parse_bin_clip(item: Any, source_dir: Path, errors: list[str]) -> BinClipSp
         errors.append(
             msg("validation.bin_type_invalid", id=item.get("id"), type=clip_type, valid=VALID_CLIP_TYPES)
         )
+
+    if clip_type == "title":
+        # No `path`: schema.py generates the .kdenlivetitle file itself
+        # (see the bin-probing loop in validate_and_resolve) and fills
+        # this in once it knows where.
+        text = item.get("text")
+        if not text:
+            errors.append(msg("validation.title_missing_text", id=item.get("id")))
+            return None
+        return BinClipSpec(
+            id=str(item["id"]),
+            path=None,
+            type=clip_type,
+            text=str(text),
+            font=str(item.get("font", "Sans")),
+            font_size=int(item.get("font_size", 48)),
+            font_color=tuple(item.get("color", (255, 255, 255, 255))),
+            background=tuple(item.get("background", (0, 0, 0, 0))),
+        )
+
+    if "path" not in item:
+        errors.append(msg("validation.bin_entry_invalid", item=item))
+        return None
     raw_path = Path(item["path"])
     resolved = raw_path if raw_path.is_absolute() else (source_dir / raw_path)
     return BinClipSpec(id=str(item["id"]), path=resolved, type=clip_type)
@@ -217,7 +240,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             errors.append(msg("validation.bin_duplicate_id", id=clip.id))
             continue
         bin_by_id[clip.id] = clip
-        if not clip.path.exists():
+        if clip.type != "title" and not clip.path.exists():
             errors.append(msg("validation.bin_missing_file", id=clip.id, path=clip.path))
 
     if errors:
@@ -225,10 +248,30 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         raise ValidationErrors(errors)
 
     # --- probing: source type and duration ----------------------------------
+    titles_dir = doc.source_path.parent / ".kdgen_titles"
     resolved_bin: dict[str, ResolvedBinClip] = {}
     for numeric_id, (clip_id, clip) in enumerate(bin_by_id.items(), start=1):
         kind = clip.type or probe.guess_type(clip.path)
-        if kind == "image":
+        if kind == "title":
+            # Generated content, not a pre-existing asset: no duration to
+            # probe (same "however long you like" flexibility as an
+            # image - eof=pause holds the last frame either way).
+            duration_seconds = doc.project.default_image_duration
+            clip.path = titles_dir / f"{clip_id}.kdenlivetitle"
+            titles.write_title_file(
+                clip.path,
+                titles.render_title_xml(
+                    clip.text,
+                    width=doc.project.width,
+                    height=doc.project.height,
+                    duration_frames=fps.seconds_to_frames(duration_seconds),
+                    font=clip.font,
+                    font_size=clip.font_size,
+                    font_color=clip.font_color,
+                    background=clip.background,
+                ),
+            )
+        elif kind == "image":
             duration_seconds = doc.project.default_image_duration
         else:
             try:
@@ -259,7 +302,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 continue
 
             speed = placement.speed
-            if speed is not None and bin_clip.kind == "image":
+            if speed is not None and bin_clip.kind in ("image", "title"):
                 errors.append(msg("validation.speed_on_image", ctx=ctx, clip=placement.clip))
                 speed = None
 
@@ -284,7 +327,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 errors.append(msg("validation.in_negative", ctx=ctx, in_s=in_s))
             if out_s <= in_s:
                 errors.append(msg("validation.out_not_greater_than_in", ctx=ctx, out_s=out_s, in_s=in_s))
-            if bin_clip.kind != "image" and out_s > source_duration_s + 1e-6:
+            if bin_clip.kind not in ("image", "title") and out_s > source_duration_s + 1e-6:
                 errors.append(
                     msg(
                         "validation.out_exceeds_duration",

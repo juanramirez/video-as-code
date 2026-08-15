@@ -93,6 +93,48 @@ timeline:
     assert video_clip["preserve_pitch"] is True
 
 
+def test_round_trip_preserves_title(tmp_path: Path):
+    """`type: title` bin clips round-trip through a real generated
+    .kdenlive: reverse.py reads the referenced .kdenlivetitle file back
+    (titles.parse_title_xml) and reconstructs the same text/font/size,
+    not just recognizing that a title clip exists. Also a regression test
+    for a real bug: `Importer.preregister_bin_order` used to always call
+    the generic `register_bin_clip` for every main_bin entry regardless
+    of kind, which silently registered the title with no `type`/`text` at
+    all - by the time `convert_playlist` reached the actual timeline
+    entry and tried to register it as a title, the resource was already
+    registered (as a bare path), so its title data was never attached."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        """
+project: {id: p1, title: T, fps: 25, width: 320, height: 240}
+bin:
+  - id: title1
+    type: title
+    text: "Hello World"
+    font_size: 36
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {clip: title1, start: 0, duration: 2}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+
+    title_bin_entry = result.data["bin"][0]
+    assert title_bin_entry["type"] == "title"
+    assert title_bin_entry["text"] == "Hello World"
+    assert title_bin_entry["font_size"] == 36
+
+
 def test_reimported_yaml_is_re_buildable(tmp_path: Path, assets_dir: Path):
     """The result of `kdgen import` must be re-buildable: this validates that
     the produced YAML respects our own schema, not just that it 'looks

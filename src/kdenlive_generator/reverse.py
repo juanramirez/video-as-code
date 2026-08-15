@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from . import probe
+from . import probe, titles
 from .i18n import msg
 from .timecode import FrameRate, resolve_fps
 
@@ -112,6 +112,29 @@ class Importer:
 
     # -- asset registration ---------------------------------------------------
 
+    def classify_producer(self, producer_el: ET.Element) -> Optional[tuple[str, bool, bool, Optional[dict]]]:
+        """(resource, is_timewarp, is_title, title_data) for a producer/
+        chain, or None if it has no usable resource (blank/black).
+        `title_data` is the parsed title fields when `is_title` and this
+        generator can represent the file's content, None otherwise
+        (including "is_title but couldn't parse it" - the caller decides
+        how to report that, since preregistering bin order and converting
+        an actual timeline entry need different fallbacks)."""
+        props = _props(producer_el)
+        is_timewarp = props.get("mlt_service") == "timewarp"
+        is_title = props.get("mlt_service") == "kdenlivetitle"
+        resource = props.get("warp_resource") if is_timewarp else props.get("resource")
+        if not resource or resource == "black":
+            return None
+        title_data = None
+        if is_title:
+            try:
+                title_xml = Path(resource).read_text(encoding="utf-8")
+            except OSError:
+                title_xml = None
+            title_data = titles.parse_title_xml(title_xml) if title_xml is not None else None
+        return resource, is_timewarp, is_title, title_data
+
     def preregister_bin_order(self) -> None:
         """Seeds bin order from `main_bin`'s own entries before anything else
         registers a clip. `main_bin` lists bin clips in their original
@@ -128,10 +151,17 @@ class Importer:
             producer_el = self.by_id.get(entry.get("producer"))
             if producer_el is None:
                 continue
-            resource = _props(producer_el).get("resource")
-            if not resource or resource == "black":
+            classified = self.classify_producer(producer_el)
+            if classified is None:
                 continue
-            self.register_bin_clip(resource)
+            resource, _is_timewarp, is_title, title_data = classified
+            if is_title:
+                if title_data is not None:
+                    self.register_title_bin_clip(resource, title_data)
+                # Unsupported title content: skip preregistering: the
+                # actual timeline entry (convert_playlist) reports it.
+            else:
+                self.register_bin_clip(resource)
 
     def register_bin_clip(self, resource: str) -> str:
         if resource in self.bin_by_path:
@@ -149,6 +179,19 @@ class Importer:
             clip_id = f"{base_id}_{n}"
             n += 1
         self.bin_entries.append({"id": clip_id, "path": display_path})
+        self.bin_by_path[resource] = clip_id
+        return clip_id
+
+    def register_title_bin_clip(self, resource: str, title_data: dict) -> str:
+        if resource in self.bin_by_path:
+            return self.bin_by_path[resource]
+        base_id = Path(resource).stem or "title"
+        clip_id, n = base_id, 2
+        existing_ids = {c["id"] for c in self.bin_entries}
+        while clip_id in existing_ids:
+            clip_id = f"{base_id}_{n}"
+            n += 1
+        self.bin_entries.append({"id": clip_id, "type": "title", **title_data})
         self.bin_by_path[resource] = clip_id
         return clip_id
 
@@ -248,15 +291,15 @@ class Importer:
             if producer_el is None:
                 self.warnings.append(msg("reverse.entry_missing_producer", ctx=ctx, producer_id=producer_id))
                 continue
-            props = _props(producer_el)
-            is_timewarp = props.get("mlt_service") == "timewarp"
-            resource = props.get("warp_resource") if is_timewarp else props.get("resource")
-            if not resource or resource == "black":
+            classified = self.classify_producer(producer_el)
+            if classified is None:
                 self.raw_items.append(RawItem(msg("reverse.clip_no_resource", ctx=ctx, tag=producer_el.tag, producer_id=producer_id), _pretty(child)))
                 continue
+            resource, is_timewarp, is_title, title_data = classified
 
             speed = None
             if is_timewarp:
+                props = _props(producer_el)
                 try:
                     speed = float(props.get("warp_speed", 1.0))
                 except ValueError:
@@ -269,7 +312,15 @@ class Importer:
                     cursor += _parse_frame_value(child.get("out"), self.fps) - _parse_frame_value(child.get("in"), self.fps) + 1
                     continue
 
-            clip_id = self.register_bin_clip(resource)
+            if is_title and title_data is None:
+                # Richer than this generator can represent (multiple
+                # items, animation, image/rect items...) or the file
+                # couldn't be read - don't guess, keep the original.
+                self.raw_items.append(RawItem(msg("reverse.title_unsupported", ctx=ctx), _pretty(child) + "\n" + _pretty(producer_el)))
+                cursor += _parse_frame_value(child.get("out"), self.fps) - _parse_frame_value(child.get("in"), self.fps) + 1
+                continue
+
+            clip_id = self.register_title_bin_clip(resource, title_data) if is_title else self.register_bin_clip(resource)
             in_frame = _parse_frame_value(child.get("in"), self.fps)
             out_frame = _parse_frame_value(child.get("out"), self.fps)
             entry_ctx = f"{ctx}[{clip_id}@{cursor}]"
@@ -293,12 +344,37 @@ class Importer:
             cursor += out_frame - in_frame + 1
         return clips
 
+    def check_unrecognized_transitions(self, sequence: ET.Element) -> None:
+        """The compositing transitions this generator itself always adds
+        (qtblend/mix against the black background, `a_track="0"`) are
+        harmless to not reconstruct here - rebuilding from the tracks/
+        clips this importer *does* recognize regenerates them identically.
+        But any other sequence-level transition (non-zero `a_track`, e.g.
+        a `wipe`'s `luma` transition between two content tracks) carries
+        real visual information with no way to represent it in the
+        low-level YAML model (there's no cross-track-transition concept
+        below `scenes:`, and `scenes:` itself is never reconstructed on
+        import - see `test_scenes_dissolve_produces_a_real_crossfade`'s
+        sibling round-trip check). Flag it instead of silently dropping
+        it: rebuilding without this would silently lose the transition
+        entirely, not just the fact that it *was* a transition."""
+        for t in sequence.findall("transition"):
+            props = _props(t)
+            if props.get("a_track", "0") != "0":
+                self.raw_items.append(
+                    RawItem(
+                        msg("reverse.cross_track_transition_unsupported", service=props.get("mlt_service", "?")),
+                        _pretty(t),
+                    )
+                )
+
     def run(self) -> ImportResult:
         self.preregister_bin_order()
 
         sequence = self.find_main_sequence()
         for extra in self.other_sequences(sequence):
             self.raw_items.append(RawItem(msg("reverse.extra_sequence_not_imported"), _pretty(extra)))
+        self.check_unrecognized_transitions(sequence)
 
         title = _props(sequence).get("kdenlive:clipname", self.path.stem)
         track_els = [t for t in sequence.findall("track") if t.get("producer") not in self.black_ids]

@@ -29,6 +29,7 @@ _EN: dict[str, str] = {
     "validation.project_field_required": "project.{key} is required",
     "validation.bin_entry_invalid": "Invalid 'bin:' entry (missing 'id' or 'path'): {item!r}",
     "validation.bin_type_invalid": "bin[{id}].type={type!r} is invalid, must be one of {valid}",
+    "validation.title_missing_text": "bin[{id}]: type: title requires 'text'",
     "validation.track_missing_type": "timeline.tracks[{idx}] is invalid (missing 'type'): {item!r}",
     "validation.track_type_invalid": "timeline.tracks[{idx}].type={type!r} must be one of {valid}",
     "validation.tracks_clips_not_list": "timeline.tracks[{idx}].clips must be a list",
@@ -51,7 +52,7 @@ _EN: dict[str, str] = {
     ),
     "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
     "validation.speed_not_positive": "{ctx}: 'speed' must be greater than 0, got {speed}",
-    "validation.speed_on_image": "{ctx}: 'speed' has no effect on an image clip ('{clip}')",
+    "validation.speed_on_image": "{ctx}: 'speed' has no effect on an image or title clip ('{clip}')",
     "validation.clip_overlap": (
         "timeline.tracks[{idx}]({name}): overlap between clips '{prev}' "
         "(ends at frame {prev_end}) and '{next}' (starts at frame {next_start})"
@@ -82,6 +83,8 @@ _EN: dict[str, str] = {
     "reverse.entry_missing_producer": "{ctx}: entry references a nonexistent producer '{producer_id}', skipping",
     "reverse.clip_no_resource": "{ctx}: clip with a producer that has no recognizable 'resource' ({tag} {producer_id})",
     "reverse.timewarp_unsupported": "{ctx}: clip with a speed change (timewarp), not supported",
+    "reverse.title_unsupported": "{ctx}: title clip richer than this generator can represent (multiple items, animation, image/rect items, or an unreadable file), not supported",
+    "reverse.cross_track_transition_unsupported": "cross-track transition ({service}) between two content tracks (e.g. a wipe) - not reconstructable in the low-level YAML model, kept as-is",
     "reverse.track_not_imported": "{ctx}: track not imported",
     "reverse.extra_sequence_not_imported": "additional sequence not imported (only the active one is converted)",
     "cli.build_done": "Generated {output} ({frames} frames, {fps:g} fps)",
@@ -154,6 +157,7 @@ _ES: dict[str, str] = {
     "validation.project_field_required": "project.{key} es obligatorio",
     "validation.bin_entry_invalid": "Entrada de 'bin:' inválida (falta 'id' o 'path'): {item!r}",
     "validation.bin_type_invalid": "bin[{id}].type={type!r} inválido, debe ser uno de {valid}",
+    "validation.title_missing_text": "bin[{id}]: type: title requiere 'text'",
     "validation.track_missing_type": "timeline.tracks[{idx}] inválida (falta 'type'): {item!r}",
     "validation.track_type_invalid": "timeline.tracks[{idx}].type={type!r} debe ser uno de {valid}",
     "validation.tracks_clips_not_list": "timeline.tracks[{idx}].clips debe ser una lista",
@@ -176,7 +180,7 @@ _ES: dict[str, str] = {
     ),
     "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
     "validation.speed_not_positive": "{ctx}: 'speed' debe ser mayor que 0, se recibió {speed}",
-    "validation.speed_on_image": "{ctx}: 'speed' no tiene efecto en un clip de imagen ('{clip}')",
+    "validation.speed_on_image": "{ctx}: 'speed' no tiene efecto en un clip de imagen o título ('{clip}')",
     "validation.clip_overlap": (
         "timeline.tracks[{idx}]({name}): solape entre clips '{prev}' "
         "(termina en fotograma {prev_end}) y '{next}' (empieza en fotograma {next_start})"
@@ -207,6 +211,8 @@ _ES: dict[str, str] = {
     "reverse.entry_missing_producer": "{ctx}: entry referencia un producer inexistente '{producer_id}', se omite",
     "reverse.clip_no_resource": "{ctx}: clip con producer sin 'resource' reconocible ({tag} {producer_id})",
     "reverse.timewarp_unsupported": "{ctx}: clip con cambio de velocidad (timewarp), no soportado",
+    "reverse.title_unsupported": "{ctx}: clip de título más complejo de lo que este generador puede representar (varios elementos, animación, elementos de imagen/rectángulo, o archivo ilegible), no soportado",
+    "reverse.cross_track_transition_unsupported": "transición entre pistas ({service}) entre dos pistas de contenido (p. ej. un wipe) - no reconstruible en el modelo YAML de bajo nivel, se conserva tal cual",
     "reverse.track_not_imported": "{ctx}: pista no importada",
     "reverse.extra_sequence_not_imported": "secuencia adicional no importada (sólo se convierte la activa)",
     "cli.build_done": "Generado {output} ({frames} fotogramas, {fps:g} fps)",
