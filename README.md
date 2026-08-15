@@ -12,6 +12,17 @@ in the repo.
 pip install -e ".[dev]"
 ```
 
+`kdgen reconstruct` (see below) needs the optional `reconstruct` extra
+(`numpy`, `Pillow`) on top of that:
+
+```bash
+pip install -e ".[dev,reconstruct]"
+```
+
+The rest of `kdgen` (`build`/`validate`/`import`) only ever needs PyYAML —
+`reconstruct.py` is imported lazily, so skipping this extra doesn't affect
+anything else.
+
 ## Usage
 
 ```bash
@@ -26,14 +37,29 @@ simple `qtblend` picture-in-picture compositing). Anything it doesn't
 recognize isn't discarded: it's kept as-is under `x_kdenlive_raw:` in the
 output YAML so you can decide by hand what to do with it.
 
-This only reconstructs a YAML from an existing `.kdenlive` *project* file.
-Reconstructing one from an already-rendered video plus an assets folder is a
-different, much harder problem (content-based matching, not XML parsing) —
-see `BACKLOG.md`.
-
 See `examples/simple/` for a minimal working project (tiny generated
 assets, one audio + one video track, fades and trims):
 `kdgen build examples/simple/project.yaml`.
+
+### `kdgen reconstruct`: recovering a YAML from a rendered video
+
+```bash
+kdgen reconstruct rendered.mp4 assets/ [-o output.yaml]
+```
+
+Unlike `kdgen import`, this doesn't start from a `.kdenlive` project — it
+starts from an already-**rendered** video (a flat `.mp4`, no edit
+metadata) plus a folder of the source assets that presumably went into
+it, and tries to recover which asset appears where, trimmed how, and with
+what fades, by comparing pixel/audio content rather than parsing
+structured XML. There is no guaranteed correct answer here (see
+`ROADMAP.md` for how the matching works and its known limitations) —
+segments it isn't confident about are never silently guessed; they're
+kept under `x_reconstruct_unmatched:` in the output YAML for you to
+review by hand, the same way `kdgen import` handles `x_kdenlive_raw:`.
+
+Treat its output as a rough first draft to check against the real
+project, not a finished YAML.
 
 ### Language
 
@@ -55,7 +81,7 @@ affects what a `kdgen` *user* sees at runtime.
 
 ## Current status
 
-Verified by the test suite (`pytest`, 12 tests, all passing):
+Verified by the test suite (`pytest`, 25 tests, all passing):
 
 - **YAML schema and validation** (`schema.py`): checks shape, types, that
   referenced assets exist on disk, that each clip's `in`/`out`/`duration`
@@ -70,7 +96,11 @@ Verified by the test suite (`pytest`, 12 tests, all passing):
   recomputes on open anyway).
 - **Reverse importer** (`reverse.py`): `.kdenlive` -> YAML, with a clean
   split between what's recognized and what isn't (`x_kdenlive_raw`).
-- **CLI** (`cli.py`): `build` / `validate` / `import`.
+- **`kdgen reconstruct`** (`reconstruct.py`, optional `reconstruct` extra):
+  rendered video + assets folder -> YAML, by content-based matching
+  instead of XML parsing. See the *Usage* section above and `ROADMAP.md`
+  for how it works and its known limitations.
+- **CLI** (`cli.py`): `build` / `validate` / `import` / `reconstruct`.
 - **Seconds<->frames conversion** (`timecode.py`): common NTSC framerates
   (23.976, 29.97...) as an exact fraction; deterministic round-half-up on
   exact ties (see note below).
