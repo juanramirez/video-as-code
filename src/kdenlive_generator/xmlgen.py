@@ -325,8 +325,20 @@ def _build_track(
         _prop(f2, "channel", -1)
         _prop(f2, "mlt_service", "panner")
         _prop(f2, "internal_added", 237)
-        _prop(f2, "start", 0.5)
-        _prop(f2, "disable", 1)
+        if track.pan is not None:
+            # channel=-1 is stereo balance (confirmed via `melt -query
+            # filter=panner`): start 0 is full left, 0.5 center, 1 full
+            # right - `pan` is -1..1, same shape as MLT's `start` just
+            # re-centered. `disable=1` is what makes this filter inert
+            # (kdenlive still writes the internal_added=237 mixer-strip
+            # placeholder even once a real value has been set, the same
+            # way it stays present but active once a user actually moves
+            # the balance knob) - only cleared once a real pan is given.
+            _prop(f2, "start", (track.pan + 1) / 2)
+            _prop(f2, "disable", 0)
+        else:
+            _prop(f2, "start", 0.5)
+            _prop(f2, "disable", 1)
         f3 = ET.SubElement(track_tractor, "filter", {"id": ids.next("filter")})
         _prop(f3, "iec_scale", 0)
         _prop(f3, "mlt_service", "audiolevel")

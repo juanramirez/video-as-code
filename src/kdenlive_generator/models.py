@@ -61,6 +61,7 @@ class TrackSpec:
     type: str
     name: Optional[str]
     clips: list[ClipPlacementSpec] = field(default_factory=list)
+    pan: Optional[float] = None  # audio only: -1.0 (full left) .. 1.0 (full right)
 
 
 @dataclass
@@ -126,6 +127,7 @@ class ResolvedTrack:
     kind: str
     name: str
     placements: list[ResolvedPlacement]
+    pan: Optional[float] = None
 
     @property
     def end_frame(self) -> int:

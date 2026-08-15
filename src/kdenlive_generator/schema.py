@@ -192,7 +192,17 @@ def _parse_track(item: Any, idx: int, errors: list[str]) -> TrackSpec | None:
     clips = [
         c for c in (_parse_clip_placement(c, idx, i, errors) for i, c in enumerate(clips_data)) if c
     ]
-    return TrackSpec(type=track_type, name=name, clips=clips)
+
+    pan = float(item["pan"]) if item.get("pan") is not None else None
+    if pan is not None:
+        if track_type != "audio":
+            errors.append(msg("validation.pan_on_video_track", idx=idx))
+            pan = None
+        elif not (-1.0 <= pan <= 1.0):
+            errors.append(msg("validation.pan_out_of_range", idx=idx, pan=pan))
+            pan = None
+
+    return TrackSpec(type=track_type, name=name, clips=clips, pan=pan)
 
 
 def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list[str]) -> ClipPlacementSpec | None:
@@ -419,7 +429,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     )
                 )
 
-        resolved_tracks.append(ResolvedTrack(kind=track.type, name=track.name, placements=placements))
+        resolved_tracks.append(ResolvedTrack(kind=track.type, name=track.name, placements=placements, pan=track.pan))
 
     if errors:
         raise ValidationErrors(errors)

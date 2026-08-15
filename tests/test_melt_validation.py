@@ -190,6 +190,66 @@ timeline:
     )
 
 
+def _mean_volume_db_channel(path: Path, channel: int, start: float, duration: float) -> float:
+    result = subprocess.run(
+        [
+            "ffmpeg", "-hide_banner",
+            "-i", str(path),
+            "-ss", str(start), "-t", str(duration),
+            "-af", f"pan=mono|c0=c{channel},volumedetect",
+            "-f", "null", "-",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    for line in result.stderr.splitlines():
+        if "mean_volume:" in line:
+            return float(line.split("mean_volume:")[1].strip().split(" ")[0])
+    raise RuntimeError(f"could not parse mean_volume from ffmpeg output:\n{result.stderr}")
+
+
+def test_melt_applies_a_real_audio_pan(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `pan:` on an audio track (new this cycle,
+    makes the already-emitted `panner` filter a real control instead of
+    the hardcoded disable=1 placeholder): full left (-1.0) should render
+    loud on the left channel and near-silent on the right - not just that
+    the filter's `start`/`disable` properties got written plausibly."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      pan: -1.0
+      clips:
+        - {{clip: tone, start: 0, out: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.wav"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    left = _mean_volume_db_channel(rendered, channel=0, start=0.5, duration=1.0)
+    right = _mean_volume_db_channel(rendered, channel=1, start=0.5, duration=1.0)
+
+    assert left > right + 20, (
+        f"expected full-left pan to be much louder on the left channel than "
+        f"the right, got left={left}dB right={right}dB"
+    )
+    assert right < -40, f"expected near-silence on the right channel at full-left pan, got {right}dB"
+
+
 def test_melt_mutes_an_audio_track_clip(tmp_path: Path, assets_dir: Path, melt):
     """Empirical check for `mute: true` on an audio-track clip: the same
     tone that renders clearly audible without `mute` should render silent
