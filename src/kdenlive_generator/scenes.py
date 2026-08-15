@@ -25,9 +25,14 @@ works as a cross-fade. Only the clip that ends up on the "top" track in each
 transition needs to carry the fade (the other stays opaque throughout: it's
 revealed or covered solely by the alpha of the one on top).
 
-This hasn't been verified against a project actually saved by kdenlive
-(unlike the rest of the generator, which is modeled on real projects) —
-visually check the result if you use `dissolve`.
+Verified against a real `melt` render (not just structurally): a red clip
+dissolving into a blue one produces a genuine, monotonic cross-fade
+through the transition window, not a hard cut or a fade through black
+(`tests/test_melt_validation.py::test_scenes_dissolve_produces_a_real_crossfade`).
+That test needs a `melt` build with a working `qtblend` - dissolve is
+inherently cross-track alpha compositing, so there's no way around that
+dependency the way other tests avoid it (see conftest.py's
+`melt_with_qtblend`).
 """
 from __future__ import annotations
 

@@ -37,11 +37,33 @@ def assets_dir(tmp_path_factory) -> Path:
     return d
 
 
+_LOCAL_MLT_BUILD = Path.home() / "dev" / "mlt" / "install"
+
+
 def _find_melt() -> tuple[str, dict] | None:
-    """Looks for a usable `melt`. In this dev environment, kdenlive ships as
-    a snap and doesn't expose `melt` on PATH, so if needed we invoke the
-    snap's internal binary with the environment variables it requires (see
-    README)."""
+    """Looks for a usable `melt`. Prefers a from-source build at
+    ~/dev/mlt/install if present: on this machine, the system package
+    (apt's `melt`) and kdenlive's own snap are both missing a working
+    `qtblend` (the snap's is linked against a newer Qt6 than the system
+    has; apt's build doesn't compile the Qt module in at all), and
+    `qtblend` is exactly what multi-track compositing (`transition:
+    dissolve` in scenes.py, the default per-clip position/size filter)
+    needs - so most of the suite can get by without it, but anything that
+    actually exercises track blending can't be verified without it. Falls
+    back to PATH, then the snap's raw binary (see README), for
+    environments without that local build."""
+    local_bin = _LOCAL_MLT_BUILD / "bin" / "melt-7"
+    local_libdir = _LOCAL_MLT_BUILD / "lib"
+    if local_bin.exists() and local_libdir.exists():
+        env = {
+            "LD_LIBRARY_PATH": str(local_libdir),
+            "MLT_REPOSITORY": str(local_libdir / "mlt-7"),
+        }
+        data_dir = _LOCAL_MLT_BUILD / "share" / "mlt-7"
+        if data_dir.exists():
+            env["MLT_DATA"] = str(data_dir)
+        return str(local_bin), env
+
     exe = shutil.which("melt") or shutil.which("melt-7")
     if exe:
         return exe, {}
@@ -65,4 +87,26 @@ def melt():
     if found is None:
         pytest.skip("no usable 'melt' (MLT engine) binary found on this system")
     exe, extra_env = found
+    return exe, extra_env
+
+
+@pytest.fixture(scope="session")
+def melt_with_qtblend(melt):
+    """Like `melt`, but skips the test if this `melt` can't actually load
+    `qtblend` - needed by anything that checks real cross-track/cross-clip
+    compositing (not just that the XML looks plausible), which most of the
+    suite avoids needing (see `_find_melt`'s docstring) but a few tests
+    (multi-track dissolve) fundamentally can't route around."""
+    exe, extra_env = melt
+    import os
+
+    result = subprocess.run(
+        [exe, "-query", "transitions"],
+        capture_output=True,
+        text=True,
+        env={**os.environ, **extra_env},
+        timeout=30,
+    )
+    if "qtblend" not in result.stdout:
+        pytest.skip("this 'melt' can't load 'qtblend': can't verify real cross-track compositing")
     return exe, extra_env

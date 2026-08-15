@@ -99,11 +99,19 @@ backlog.
   (one producer property), currently explicitly unsupported — `reverse.py`
   dumps timewarp clips straight to `x_kdenlive_raw` today.
 - **Transitions**, two parts:
-  - Verify (and likely fix) the existing `transition: dissolve` in
-    `scenes.py` — it's marked in its own docstring as never verified
-    against a real kdenlive project, the same "best-effort" category that
-    turned out to be wrong for both audio fades and nonzero `in:` trims
-    this cycle. Same treatment: real melt render + pixel check, not just
-    plausible-looking XML.
+  - **Verified** (2026-08-15): `transition: dissolve` in `scenes.py`,
+    previously marked in its own docstring as never checked against a real
+    kdenlive project (the same "best-effort" category that turned out to
+    be wrong for both audio fades and nonzero `in:` trims earlier this
+    cycle) — this one turned out correct. Confirmed with a real `melt`
+    render: a red clip dissolving into a blue one produces a genuine,
+    monotonic cross-fade through the transition window, not a hard cut or
+    a fade through black
+    (`tests/test_melt_validation.py::test_scenes_dissolve_produces_a_real_crossfade`).
+    Needed a `melt` build with a working `qtblend` to verify at all — on
+    this machine neither the system package nor kdenlive's own snap has
+    one (see `conftest.py`'s `_find_melt`/`melt_with_qtblend`); a
+    from-source MLT build with the Qt module compiled in was needed
+    instead. No fix was needed, only verification.
   - Add wipe transitions using the luma maps kdenlive already ships
     (`share/kdenlive/lumas/`) — genuinely new, not just fixing dissolve.

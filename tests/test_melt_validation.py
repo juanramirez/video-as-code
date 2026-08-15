@@ -401,3 +401,55 @@ timeline:
         f"expected brightness to ramp up across the fade_in, got "
         f"dark={dark:.1f} mid={mid:.1f} bright={bright:.1f}"
     )
+
+
+def test_scenes_dissolve_produces_a_real_crossfade(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """Empirical check for `transition: dissolve` (scenes.py): renders a
+    two-clip scene (a red still, then a blue one) and confirms the
+    transition window is a genuine cross-fade - a smooth, monotonic blend
+    from red to blue - not a hard cut or a fade through black. This is the
+    "never verified against a real kdenlive project" case scenes.py's own
+    docstring flags; needs `qtblend` (see conftest.py's `melt_with_qtblend`)
+    since dissolve fundamentally depends on cross-track alpha compositing."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: dissolve
+    transition_duration: 1.0
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def red_fraction(t: float) -> float:
+        r, _g, b = _mean_rgb(rendered, timestamp=t)
+        return r / (r + b + 1e-6)
+
+    # photo.png is red, photo2.png is blue (assets_dir, conftest.py); the
+    # transition spans [1.5, 2.5)s.
+    before = red_fraction(1.3)
+    early = red_fraction(1.7)
+    mid = red_fraction(2.0)
+    late = red_fraction(2.3)
+    after = red_fraction(2.7)
+
+    assert before > 0.95, f"expected pure red before the transition, got red_fraction={before:.2f}"
+    assert after < 0.05, f"expected pure blue after the transition, got red_fraction={after:.2f}"
+    assert before > early > mid > late > after, (
+        f"expected a monotonic red->blue blend across the transition, got "
+        f"{before=:.2f} {early=:.2f} {mid=:.2f} {late=:.2f} {after=:.2f}"
+    )
