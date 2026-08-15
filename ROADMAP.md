@@ -450,7 +450,7 @@ close for `reverse.py`, and a project/track metadata round-trip theme.
     so that half of the original item was dropped as not real rather
     than invented.
 
-## v0.5 — scoped (2026-08-15)
+## v0.5 — shipped (2026-08-15)
 
 Four groups: symmetry closes (reverse.py recognizing what v0.3/v0.4
 already generate), a new filter capability as the headline, two more
@@ -533,9 +533,22 @@ more small filter capability.
   on import too (`reverse.py`'s `_match_reveal_filter`, same
   conservative exact-parameter-match bar `iris`/`flip` recognition
   already holds to), round-tripping back to `reveal: glitch`.
-- **`dynamictext` filter (burned-in timecode/date overlay)**: MLT's
-  core `dynamictext` filter overlays text as a filter *on any existing
-  clip*, with keyword substitution (`#timecode#`, `#frame#`,
-  `#localtime#`) - kdenlive itself exposes it as "Dynamic Text".
-  Distinct from `titles.py`, which only produces standalone title
-  clips, not a text-overlay filter on existing footage.
+- **`dynamictext` filter (burned-in timecode/date overlay)** —
+  **implemented**: MLT's own `dynamictext` filter (native, not
+  avfilter-bridged - no colorspace issues like `chroma_key`/`glitch`
+  ran into) overlays text as a filter *on any existing clip*, with
+  keyword substitution (`#timecode#`, `#frame#`, `#localtime#`...
+  passed through as-is) - kdenlive itself exposes it as "Dynamic Text".
+  Distinct from `titles.py`, which only produces standalone `type:
+  title` bin clips, not a text-overlay filter on existing footage.
+
+  New `overlay_text:`/`overlay_font:`/`overlay_font_size:`/
+  `overlay_color:`/`overlay_background:` fields directly on a clip
+  placement, reusing `titles.py`'s own field-naming convention and
+  defaults (`Sans`, `48`, white, transparent). Verified by real render:
+  white `#timecode#` text is clearly visible against a black test clip
+  (`test_melt_renders_a_real_text_overlay`, same rigor
+  `test_melt_renders_a_real_title_clip` got). Recognized on import too,
+  same "plain values round-trip freely" bar `chroma_key:` uses - except
+  the fixed centered/full-frame layout this generator always writes has
+  to match exactly, since `geometry:` itself isn't a settable field.

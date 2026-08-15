@@ -59,6 +59,15 @@ class ClipPlacementSpec:
     reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" - see ResolvedPlacement
     chroma_key: Optional[str] = None  # color to key out (e.g. "#00ff00"), None = no chroma-key
     chroma_key_distance: float = 0.35  # frei0r.bluescreen0r "Distance" - only used when chroma_key is set
+    # Burned-in text overlay (mlt_service "dynamictext") on an *existing*
+    # clip - distinct from titles.py's standalone type: title bin clips.
+    # `overlay_text` may include dynamictext's own keywords (#timecode#,
+    # #frame#, #localtime#...), same as MLT itself.
+    overlay_text: Optional[str] = None
+    overlay_font: str = "Sans"
+    overlay_font_size: int = 48
+    overlay_color: tuple[int, int, int, int] = (255, 255, 255, 255)
+    overlay_background: tuple[int, int, int, int] = (0, 0, 0, 0)
 
 
 @dataclass
@@ -178,6 +187,13 @@ class ResolvedPlacement:
     # below it (no new mechanism needed - verified by real render).
     chroma_key: Optional[str] = None
     chroma_key_distance: float = 0.35
+    # Burned-in text overlay (mlt_service "dynamictext") - see
+    # ClipPlacementSpec.
+    overlay_text: Optional[str] = None
+    overlay_font: str = "Sans"
+    overlay_font_size: int = 48
+    overlay_color: tuple[int, int, int, int] = (255, 255, 255, 255)
+    overlay_background: tuple[int, int, int, int] = (0, 0, 0, 0)
 
     @property
     def length_frames(self) -> int:

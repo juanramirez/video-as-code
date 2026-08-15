@@ -1198,6 +1198,47 @@ timeline:
     )
 
 
+def test_melt_renders_a_real_text_overlay(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `overlay_text:` (new this cycle, MLT's own
+    `dynamictext` filter): a real melt render of a clip with an overlay
+    actually shows the text, not just that the filter got attached
+    without erroring - same rigor `type: title` bin clips got in
+    `test_melt_renders_a_real_title_clip`. A pure-black frame (mean
+    brightness ~0) would mean the text never rendered."""
+    black = tmp_path / "black.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:size=320x240", "-frames:v", "1", str(black)],
+        check=True,
+    )
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: black
+    path: {black}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: black, start: 0, duration: 2, overlay_text: "#timecode#"}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    r, g, b = _mean_rgb(rendered, timestamp=1.0)
+    brightness = (r + g + b) / 3
+    assert brightness > 5, f"expected visible white text on a black background, got near-black frame (brightness={brightness:.2f})"
+
+
 def test_melt_respects_video_speed_change(tmp_path: Path, assets_dir: Path, melt):
     """Empirical check for `speed:` (timewarp) on a video clip: at 2x, the
     3s testsrc clip (assets_dir) should occupy 1.5s on the timeline - not

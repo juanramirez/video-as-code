@@ -388,6 +388,43 @@ timeline:
     assert placement.chroma_key_distance == 0.4
 
 
+def test_overlay_font_size_must_be_positive(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1, overlay_text: "#timecode#", overlay_font_size: 0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "overlay_font_size" in str(exc.value)
+
+
+def test_overlay_text_resolves(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1, overlay_text: "#timecode#", overlay_font_size: 32}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    placement = resolved.tracks[0].placements[0]
+    assert placement.overlay_text == "#timecode#"
+    assert placement.overlay_font_size == 32
+
+
 def test_valid_project_resolves(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

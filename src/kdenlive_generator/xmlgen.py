@@ -343,6 +343,34 @@ def _add_chroma_key_filter(ids: _IdCounters, entry: ET.Element, placement: Resol
     _prop(f, "kdenlive:collapsed", 0)
 
 
+def _hex_color(c: tuple[int, int, int, int]) -> str:
+    r, g, b, a = c
+    return f"0x{r:02x}{g:02x}{b:02x}{a:02x}"
+
+
+def _add_overlay_text_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """Burned-in text overlay via MLT's own `dynamictext` filter (native,
+    not avfilter-bridged - no colorspace issues like `chroma_key`/
+    `glitch` ran into) on an *existing* clip - distinct from `titles.py`,
+    which only produces standalone `type: title` bin clips. Supports
+    `dynamictext`'s own keyword substitution (`#timecode#`, `#frame#`,
+    `#localtime#`...) since `overlay_text` is passed through as-is.
+    Verified by real render: white text on transparent background is
+    clearly visible against a black test clip, and updates frame-by-frame
+    for a keyword like `#timecode#`."""
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "dynamictext")
+    _prop(f, "argument", placement.overlay_text)
+    _prop(f, "geometry", "0%/0%:100%x100%:100")
+    _prop(f, "family", placement.overlay_font)
+    _prop(f, "size", placement.overlay_font_size)
+    _prop(f, "fgcolour", _hex_color(placement.overlay_color))
+    _prop(f, "bgcolour", _hex_color(placement.overlay_background))
+    _prop(f, "halign", "centre")
+    _prop(f, "valign", "middle")
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _add_mute_filter(ids: _IdCounters, entry: ET.Element) -> None:
     """Matches kdenlive's own "Mute" effect (share/kdenlive/effects/mute.xml):
     mlt_service "volume", kdenlive_id "mute", a fixed gain of 0 with no
@@ -418,6 +446,8 @@ def _build_track(
             _add_video_default_filter(ids, entry, project.width, project.height, placement.rect)
             if placement.chroma_key:
                 _add_chroma_key_filter(ids, entry, placement)
+            if placement.overlay_text:
+                _add_overlay_text_filter(ids, entry, placement)
         if placement.mute:
             _add_mute_filter(ids, entry)
         cursor = placement.start_frame + placement.length_frames

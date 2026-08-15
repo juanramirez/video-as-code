@@ -77,6 +77,18 @@ def _parse_frame_value(value: Optional[str], fps: FrameRate) -> int:
     return int(round(float(value)))
 
 
+def _parse_hex_color(value: Optional[str]) -> Optional[tuple[int, int, int, int]]:
+    """`0xRRGGBBAA` (dynamictext's fgcolour/bgcolour format) -> (r, g, b,
+    a). Returns None for anything else rather than guessing."""
+    if not value or not value.lower().startswith("0x") or len(value) != 10:
+        return None
+    try:
+        n = int(value, 16)
+    except ValueError:
+        return None
+    return ((n >> 24) & 0xFF, (n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF)
+
+
 class Importer:
     def __init__(self, root: ET.Element, kdenlive_path: Path):
         self.root = root
@@ -400,6 +412,40 @@ class Importer:
                 distance = None
             if distance is not None and abs(distance - 0.35) > 1e-6:
                 result["chroma_key_distance"] = round(distance, 3)
+            return result
+        if service == "dynamictext":
+            # Same "plain user-facing values round-trip freely" bar as
+            # chroma_key - except `geometry`/`halign`/`valign` aren't
+            # settable fields in this schema at all (only the centered,
+            # full-frame layout `_add_overlay_text_filter` itself always
+            # writes is representable), so those specifically still need
+            # an exact match.
+            if (
+                props.get("geometry") != "0%/0%:100%x100%:100"
+                or props.get("halign") != "centre"
+                or props.get("valign") != "middle"
+                or props.get("argument") is None
+            ):
+                self.raw_items.append(
+                    RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
+                )
+                return {}
+            result = {"overlay_text": props["argument"]}
+            family = props.get("family")
+            if family and family != "Sans":
+                result["overlay_font"] = family
+            try:
+                size = int(props.get("size", "48"))
+            except ValueError:
+                size = 48
+            if size != 48:
+                result["overlay_font_size"] = size
+            fg = _parse_hex_color(props.get("fgcolour"))
+            if fg is not None and fg != (255, 255, 255, 255):
+                result["overlay_color"] = list(fg)
+            bg = _parse_hex_color(props.get("bgcolour"))
+            if bg is not None and bg != (0, 0, 0, 0):
+                result["overlay_background"] = list(bg)
             return result
         if service in ("frei0r.alphaspot", "frei0r.3dflippo", "frei0r.glitch0r"):
             matched = self._match_reveal_filter(filter_el, props, f_in, f_out)

@@ -76,6 +76,7 @@ _EN: dict[str, str] = {
     "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
     "validation.reveal_invalid": "{ctx}: 'reveal' must be 'iris', 'flip', or 'glitch', got {reveal!r}",
     "validation.chroma_key_distance_invalid": "{ctx}: 'chroma_key_distance' must be between 0.0 and 1.0, got {chroma_key_distance}",
+    "validation.overlay_font_size_invalid": "{ctx}: 'overlay_font_size' must be greater than 0, got {overlay_font_size}",
     "validation.speed_zero": "{ctx}: 'speed' cannot be 0 (use a positive value for forward, negative for reverse)",
     "validation.speed_on_image": "{ctx}: 'speed' has no effect on an image or title clip ('{clip}')",
     "validation.clip_overlap": (
@@ -239,6 +240,7 @@ _ES: dict[str, str] = {
     "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
     "validation.reveal_invalid": "{ctx}: 'reveal' debe ser 'iris', 'flip' o 'glitch', se recibió {reveal!r}",
     "validation.chroma_key_distance_invalid": "{ctx}: 'chroma_key_distance' debe estar entre 0.0 y 1.0, se recibió {chroma_key_distance}",
+    "validation.overlay_font_size_invalid": "{ctx}: 'overlay_font_size' debe ser mayor que 0, se recibió {overlay_font_size}",
     "validation.speed_zero": "{ctx}: 'speed' no puede ser 0 (usa un valor positivo para avance, negativo para reversa)",
     "validation.speed_on_image": "{ctx}: 'speed' no tiene efecto en un clip de imagen o título ('{clip}')",
     "validation.clip_overlap": (

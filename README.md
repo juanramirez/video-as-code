@@ -95,7 +95,7 @@ affects what a `kdgen` *user* sees at runtime.
 
 ## Current status
 
-Verified by the test suite (`pytest`, 82 tests, all passing):
+Verified by the test suite (`pytest`, 102 tests, all passing):
 
 - **YAML schema and validation** (`schema.py`): checks shape, types, that
   referenced assets exist on disk, that each clip's `in`/`out`/`duration`
@@ -107,8 +107,9 @@ Verified by the test suite (`pytest`, 82 tests, all passing):
   kdenlive's "mix" feature, project bin, fade to/from black on video,
   volume fades on audio, per-clip mute, audio pan/balance, speed changes
   (timewarp, forward or reverse), dissolve/luma-wipe/affine (zoom, slide)/
-  iris/flip transitions, title clips (`titles.py`), guides/markers, bin
-  folders, track name/hidden/locked state, project notes, default
+  iris/flip/glitch transitions, chroma-key compositing, burned-in text
+  overlays, title clips (`titles.py`), guides/markers, bin folders,
+  track name/hidden/locked/audio-muted state, project notes, default
   `qtblend` filter). Deterministic output
   (IDs derived via `ids.py`, no hashes/thumbnails, which kdenlive
   recomputes on open anyway).

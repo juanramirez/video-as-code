@@ -301,6 +301,12 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         )
         chroma_key_distance = 0.35
 
+    overlay_text = item.get("overlay_text")
+    overlay_font_size = int(item.get("overlay_font_size", 48))
+    if overlay_text is not None and overlay_font_size <= 0:
+        errors.append(msg("validation.overlay_font_size_invalid", ctx=ctx, overlay_font_size=overlay_font_size))
+        overlay_font_size = 48
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -317,6 +323,11 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         reveal_style=reveal,
         chroma_key=chroma_key,
         chroma_key_distance=chroma_key_distance,
+        overlay_text=str(overlay_text) if overlay_text is not None else None,
+        overlay_font=str(item.get("overlay_font", "Sans")),
+        overlay_font_size=overlay_font_size,
+        overlay_color=tuple(item.get("overlay_color", (255, 255, 255, 255))),
+        overlay_background=tuple(item.get("overlay_background", (0, 0, 0, 0))),
     )
 
 
@@ -550,6 +561,11 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     reveal_style=placement.reveal_style,
                     chroma_key=placement.chroma_key,
                     chroma_key_distance=placement.chroma_key_distance,
+                    overlay_text=placement.overlay_text,
+                    overlay_font=placement.overlay_font,
+                    overlay_font_size=placement.overlay_font_size,
+                    overlay_color=placement.overlay_color,
+                    overlay_background=placement.overlay_background,
                 )
             )
 

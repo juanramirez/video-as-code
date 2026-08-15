@@ -537,6 +537,41 @@ timeline:
     assert clip["chroma_key_distance"] == 0.5
 
 
+def test_round_trip_preserves_overlay_text(tmp_path: Path, assets_dir: Path):
+    """`overlay_text:` (new this cycle, MLT's own `dynamictext` filter)
+    round-trips through a real generated .kdenlive - like `chroma_key:`,
+    plain user-facing values round-trip freely; only the fixed centered/
+    full-frame layout `_add_overlay_text_filter` always writes has to
+    match exactly, since `geometry`/`halign`/`valign` aren't settable
+    fields in this schema."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1, overlay_text: "#timecode#", overlay_font_size: 32}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["overlay_text"] == "#timecode#"
+    assert clip["overlay_font_size"] == 32
+    assert "overlay_font" not in clip  # default "Sans" stays sparse
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -
