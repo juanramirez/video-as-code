@@ -95,9 +95,25 @@ backlog.
 - **Titles/text clips**: generate kdenlive title clips from YAML (not just
   recognize them on import — extends the generator side, not only
   `reverse.py`). Currently unsupported in both directions.
-- **Speed change (timewarp)**: `speed:` on a clip placement. Well-bounded
-  (one producer property), currently explicitly unsupported — `reverse.py`
-  dumps timewarp clips straight to `x_kdenlive_raw` today.
+- **Speed change (timewarp)** — **implemented** (2026-08-15): `speed:` on
+  a clip placement (video or audio - not video-specific, per the
+  `timewarp` MLT producer itself). `in:`/`out:`/`duration:` are relative
+  to the *warped* length (source duration / speed), matching kdenlive's
+  own convention. Optional `preserve_pitch: true` maps to `warp_pitch`
+  (audio pitch-correction when the speed changes; off by default, same as
+  dragging the speed slider in kdenlive without the "preserve pitch"
+  checkbox). Modeled directly on a real user project with actual timewarp
+  clips (found in a local kdenlive backup), not built by analogy - the
+  `resource` property is `"{speed}:{path}"`, not just the path, and the
+  producer tag is `<producer>`, not `<chain>` like every other clip this
+  generator writes. Verified with a real render (not just that a
+  `timewarp` producer got written, but that melt actually renders the
+  warped duration):
+  `tests/test_melt_validation.py::test_melt_respects_video_speed_change`
+  (2x) and `::test_melt_respects_audio_speed_change` (0.5x). `reverse.py`
+  recognizes it on import too (forward speed only - reverse/negative
+  speed still falls to `x_kdenlive_raw`), verified round-trip
+  (`tests/test_reverse.py::test_round_trip_preserves_speed`).
 - **Transitions**, two parts:
   - **Verified** (2026-08-15): `transition: dissolve` in `scenes.py`,
     previously marked in its own docstring as never checked against a real

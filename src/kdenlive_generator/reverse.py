@@ -1,11 +1,12 @@
 """Reverse converter: .kdenlive (XML/MLT) -> declarative YAML.
 
 Goal: recognize exactly what this generator knows how to produce (video/
-audio tracks, trimmed clips, fade to/from black, volume fades, simple
-qtblend picture-in-picture compositing) and translate it to YAML.
+audio tracks, trimmed clips, fade to/from black, volume fades, per-clip
+mute, forward speed changes (timewarp), simple qtblend picture-in-picture
+compositing) and translate it to YAML.
 
 Anything that's NOT recognized — other effects, non-standard transitions,
-clips with speed changes, titles, subtitles, extra nested sequences,
+reverse-playback speed changes, titles, subtitles, extra nested sequences,
 groupings, guides... — is **not discarded**: it's attached as-is (original
 XML) under the `x_kdenlive_raw:` key at the end of the YAML, along with a
 summary printed to the terminal, so the user can decide what to do with it
@@ -248,14 +249,25 @@ class Importer:
                 self.warnings.append(msg("reverse.entry_missing_producer", ctx=ctx, producer_id=producer_id))
                 continue
             props = _props(producer_el)
-            resource = props.get("resource") or props.get("warp_resource")
+            is_timewarp = props.get("mlt_service") == "timewarp"
+            resource = props.get("warp_resource") if is_timewarp else props.get("resource")
             if not resource or resource == "black":
                 self.raw_items.append(RawItem(msg("reverse.clip_no_resource", ctx=ctx, tag=producer_el.tag, producer_id=producer_id), _pretty(child)))
                 continue
-            if props.get("mlt_service") == "timewarp" or ":" in resource.split("/")[0]:
-                self.raw_items.append(RawItem(msg("reverse.timewarp_unsupported", ctx=ctx), _pretty(child) + "\n" + _pretty(producer_el)))
-                cursor += _parse_frame_value(child.get("out"), self.fps) - _parse_frame_value(child.get("in"), self.fps) + 1
-                continue
+
+            speed = None
+            if is_timewarp:
+                try:
+                    speed = float(props.get("warp_speed", 1.0))
+                except ValueError:
+                    speed = None
+                if not speed or speed <= 0:
+                    # Reverse playback (negative speed) isn't supported -
+                    # only the positive, forward-speed-change case this
+                    # generator itself can produce.
+                    self.raw_items.append(RawItem(msg("reverse.timewarp_unsupported", ctx=ctx), _pretty(child) + "\n" + _pretty(producer_el)))
+                    cursor += _parse_frame_value(child.get("out"), self.fps) - _parse_frame_value(child.get("in"), self.fps) + 1
+                    continue
 
             clip_id = self.register_bin_clip(resource)
             in_frame = _parse_frame_value(child.get("in"), self.fps)
@@ -269,6 +281,10 @@ class Importer:
             if in_frame != 0:
                 placement["in"] = round(self.fps.frames_to_seconds(in_frame), 3)
             placement["out"] = round(self.fps.frames_to_seconds(out_frame + 1), 3)
+            if speed is not None:
+                placement["speed"] = speed
+                if props.get("warp_pitch") not in (None, "0"):
+                    placement["preserve_pitch"] = True
 
             for filt in child.findall("filter"):
                 placement.update(self.convert_clip_filter(filt, in_frame, out_frame, entry_ctx))

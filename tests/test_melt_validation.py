@@ -535,3 +535,118 @@ scenes:
     )
 
     assert red_fraction_at(2.7, 0.9) < 0.05, "expected pure blue after the transition"
+
+
+def test_melt_respects_video_speed_change(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `speed:` (timewarp) on a video clip: at 2x, the
+    3s testsrc clip (assets_dir) should occupy 1.5s on the timeline - not
+    just a structural check that a `timewarp` producer got written, but
+    that melt actually renders that duration. `duration:`/`out:` are left
+    unset, so this also verifies schema.py resolves in/out/duration
+    against the *warped* length correctly (`resolved.total_frames`)."""
+    if not probe.ffprobe_available():
+        pytest.skip("ffprobe not available: can't inspect the rendered output")
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, speed: 2.0}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    probed = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(rendered),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    rendered_duration = float(probed.stdout.strip())
+    expected_duration = resolved.fps.frames_to_seconds(resolved.total_frames)
+    frame = 1 / resolved.fps.fps
+    assert abs(rendered_duration - expected_duration) <= frame, (
+        f"rendered duration {rendered_duration}s doesn't match the "
+        f"{expected_duration}s kdgen computed at 2x speed "
+        f"({resolved.total_frames} frames @ {resolved.fps.fps}fps)"
+    )
+    assert expected_duration < 2.0, f"sanity check: 2x of a 3s clip should be ~1.5s, got {expected_duration}s"
+
+
+def test_melt_respects_audio_speed_change(tmp_path: Path, assets_dir: Path, melt):
+    """Same empirical check as test_melt_respects_video_speed_change, but
+    for an audio-only clip at 0.5x (slower, not faster) - `speed:` isn't
+    video-specific, per the timewarp MLT producer itself and the real
+    kdenlive project this was modeled on (see xmlgen.py's
+    _build_media_element)."""
+    if not probe.ffprobe_available():
+        pytest.skip("ffprobe not available: can't inspect the rendered output")
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, speed: 0.5}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.wav"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    probed = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-select_streams", "a:0",
+            "-show_entries", "stream=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(rendered),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    )
+    rendered_duration = float(probed.stdout.strip())
+    expected_duration = resolved.fps.frames_to_seconds(resolved.total_frames)
+    frame = 1 / resolved.fps.fps
+    assert abs(rendered_duration - expected_duration) <= frame, (
+        f"rendered duration {rendered_duration}s doesn't match the "
+        f"{expected_duration}s kdgen computed at 0.5x speed "
+        f"({resolved.total_frames} frames @ {resolved.fps.fps}fps)"
+    )
+    assert expected_duration > 9.0, f"sanity check: 0.5x of a 5s tone should be ~10s, got {expected_duration}s"

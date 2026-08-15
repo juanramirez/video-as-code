@@ -50,6 +50,8 @@ _EN: dict[str, str] = {
         "duration on the timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
+    "validation.speed_not_positive": "{ctx}: 'speed' must be greater than 0, got {speed}",
+    "validation.speed_on_image": "{ctx}: 'speed' has no effect on an image clip ('{clip}')",
     "validation.clip_overlap": (
         "timeline.tracks[{idx}]({name}): overlap between clips '{prev}' "
         "(ends at frame {prev_end}) and '{next}' (starts at frame {next_start})"
@@ -173,6 +175,8 @@ _ES: dict[str, str] = {
         "duración del clip en el timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
+    "validation.speed_not_positive": "{ctx}: 'speed' debe ser mayor que 0, se recibió {speed}",
+    "validation.speed_on_image": "{ctx}: 'speed' no tiene efecto en un clip de imagen ('{clip}')",
     "validation.clip_overlap": (
         "timeline.tracks[{idx}]({name}): solape entre clips '{prev}' "
         "(termina en fotograma {prev_end}) y '{next}' (empieza en fotograma {next_start})"

@@ -44,6 +44,8 @@ class ClipPlacementSpec:
     fade_in: Optional[float] = None
     fade_out: Optional[float] = None
     mute: bool = False
+    speed: Optional[float] = None
+    preserve_pitch: bool = False
     position: Optional[tuple[float, float]] = None
     size: Optional[tuple[float, float]] = None
 
@@ -104,6 +106,8 @@ class ResolvedPlacement:
     fade_in_frames: int = 0
     fade_out_frames: int = 0
     mute: bool = False
+    speed: Optional[float] = None
+    preserve_pitch: bool = False
     rect: Optional[tuple[float, float, float, float]] = None  # x y w h in pixels
 
     @property

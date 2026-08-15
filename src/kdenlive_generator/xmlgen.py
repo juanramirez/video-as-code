@@ -17,6 +17,7 @@ from __future__ import annotations
 import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import Optional
 
 from . import lumas
 from .ids import deterministic_document_id, deterministic_uuid
@@ -69,7 +70,32 @@ def _build_media_element(
     fast: bool,
     numeric_id: int,
     control_uuid: str,
+    speed: Optional[float] = None,
+    preserve_pitch: bool = False,
 ) -> ET.Element:
+    if speed is not None:
+        # A real `timewarp` producer (not a `chain`) - matches what
+        # kdenlive itself generates for a sped-up/slowed-down clip
+        # (confirmed against a real user project, not modeled by
+        # analogy): `resource` is "{speed}:{path}", not just the path.
+        # `in`/`out` here are on the *warped* timeline (already computed
+        # by schema.py), not the original file's.
+        tag = "producer"
+        xml_id = ids.next("producer")
+        el = ET.Element(tag, {"id": xml_id, "in": str(in_frame), "out": str(out_frame)})
+        _prop(el, "length", out_frame + 1)
+        _prop(el, "eof", "pause")
+        _prop(el, "resource", f"{speed:.6f}:{path}")
+        _prop(el, "warp_speed", speed)
+        _prop(el, "warp_resource", str(path))
+        _prop(el, "warp_pitch", int(preserve_pitch))
+        _prop(el, "mlt_service", "timewarp")
+        _prop(el, "kdenlive:originalurl", str(path))
+        _prop(el, "kdenlive:folderid", -1)
+        _prop(el, "kdenlive:id", numeric_id)
+        _prop(el, "kdenlive:control_uuid", control_uuid)
+        return el, xml_id
+
     tag = "chain"
     xml_id = ids.next("chain")
     el = ET.Element(tag, {"id": xml_id, "in": str(in_frame), "out": str(out_frame)})
@@ -212,16 +238,25 @@ def _build_track(
         # https://github.com/mltframework/mlt/issues/1282). If the chain
         # itself were also trimmed to in_frame..out_frame, the entry's
         # in_frame would be added on top of it, reading from 2x in_frame
-        # instead of in_frame.
+        # instead of in_frame. With `speed`, "full range" means the
+        # *warped* duration (schema.py already computed this the same
+        # way when validating in/out/duration).
+        full_duration_frames = (
+            round(placement.bin_clip.duration_frames / placement.speed)
+            if placement.speed
+            else placement.bin_clip.duration_frames
+        )
         el, xml_id = _build_media_element(
             ids,
             path=placement.bin_clip.path,
             kind=placement.bin_clip.kind,
             in_frame=0,
-            out_frame=placement.bin_clip.duration_frames - 1,
+            out_frame=full_duration_frames - 1,
             fast=True,
             numeric_id=placement.bin_clip.numeric_id,
             control_uuid=control_uuid_for[placement.bin_clip.id],
+            speed=placement.speed,
+            preserve_pitch=placement.preserve_pitch,
         )
         root.append(el)
         entry = ET.SubElement(

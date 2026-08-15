@@ -185,6 +185,11 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         errors.append(msg("validation.mute_invalid", ctx=ctx, mute=mute))
         mute = False
 
+    speed = float(item["speed"]) if item.get("speed") is not None else None
+    if speed is not None and speed <= 0:
+        errors.append(msg("validation.speed_not_positive", ctx=ctx, speed=speed))
+        speed = None
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -194,6 +199,8 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         fade_in=float(item["fade_in"]) if item.get("fade_in") is not None else None,
         fade_out=float(item["fade_out"]) if item.get("fade_out") is not None else None,
         mute=mute,
+        speed=speed,
+        preserve_pitch=bool(item.get("preserve_pitch", False)),
         position=_pair("position"),
         size=_pair("size"),
     )
@@ -251,7 +258,20 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 errors.append(msg("validation.clip_unknown_reference", ctx=ctx, clip=placement.clip))
                 continue
 
-            source_duration_s = fps.frames_to_seconds(bin_clip.duration_frames)
+            speed = placement.speed
+            if speed is not None and bin_clip.kind == "image":
+                errors.append(msg("validation.speed_on_image", ctx=ctx, clip=placement.clip))
+                speed = None
+
+            # `speed` shortens (or stretches) the clip's *usable* duration
+            # on the timeline - in/out/duration below are relative to that
+            # warped length, matching how kdenlive itself works (and what
+            # xmlgen.py's timewarp producer actually exposes as its own
+            # [0, warped_duration) range).
+            effective_duration_frames = (
+                round(bin_clip.duration_frames / speed) if speed else bin_clip.duration_frames
+            )
+            source_duration_s = fps.frames_to_seconds(effective_duration_frames)
             in_s = placement.in_
             if placement.out is not None:
                 out_s = placement.out
@@ -313,6 +333,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     fade_in_frames=fps.seconds_to_frames(fade_in_s),
                     fade_out_frames=fps.seconds_to_frames(fade_out_s),
                     mute=placement.mute,
+                    speed=speed,
+                    preserve_pitch=placement.preserve_pitch,
                     rect=rect,
                 )
             )

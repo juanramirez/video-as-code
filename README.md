@@ -40,9 +40,10 @@ directory and discarded).
 
 `kdgen import` recognizes everything this generator knows how to produce
 (video/audio tracks, trimmed clips, fade to/from black, volume fades,
-simple `qtblend` picture-in-picture compositing). Anything it doesn't
-recognize isn't discarded: it's kept as-is under `x_kdenlive_raw:` in the
-output YAML so you can decide by hand what to do with it.
+per-clip mute, forward speed changes, simple `qtblend` picture-in-picture
+compositing). Anything it doesn't recognize isn't discarded: it's kept
+as-is under `x_kdenlive_raw:` in the output YAML so you can decide by
+hand what to do with it.
 
 See `examples/simple/` for a minimal working project (tiny generated
 assets, one audio + one video track, fades and trims):
@@ -88,7 +89,7 @@ affects what a `kdgen` *user* sees at runtime.
 
 ## Current status
 
-Verified by the test suite (`pytest`, 34 tests, all passing):
+Verified by the test suite (`pytest`, 37 tests, all passing):
 
 - **YAML schema and validation** (`schema.py`): checks shape, types, that
   referenced assets exist on disk, that each clip's `in`/`out`/`duration`
@@ -98,7 +99,8 @@ Verified by the test suite (`pytest`, 34 tests, all passing):
 - **`.kdenlive` generation** (`xmlgen.py`): replicates the structure that
   kdenlive 24-26.x produces on save (per-track tractors, dual playlist for
   kdenlive's "mix" feature, project bin, fade to/from black on video,
-  volume fades on audio, per-clip mute, default `qtblend` filter). Deterministic output
+  volume fades on audio, per-clip mute, speed changes (timewarp), dissolve
+  and luma-wipe transitions, default `qtblend` filter). Deterministic output
   (IDs derived via `ids.py`, no hashes/thumbnails, which kdenlive
   recomputes on open anyway).
 - **Reverse importer** (`reverse.py`): `.kdenlive` -> YAML, with a clean
