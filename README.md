@@ -40,7 +40,7 @@ directory and discarded).
 
 `kdgen import` recognizes everything this generator knows how to produce
 (video/audio tracks, trimmed clips, fade to/from black, volume fades,
-per-clip mute, forward speed changes, title clips, simple `qtblend`
+per-clip mute, speed changes (forward or reverse), title clips, simple `qtblend`
 picture-in-picture compositing). Anything it doesn't recognize isn't
 discarded: it's kept as-is under `x_kdenlive_raw:` in the output YAML so
 you can decide by hand what to do with it.

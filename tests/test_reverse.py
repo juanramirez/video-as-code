@@ -62,7 +62,6 @@ timeline:
 
 def test_round_trip_preserves_speed(tmp_path: Path, assets_dir: Path):
     """`speed:` (timewarp) round-trips through a real generated .kdenlive:
-    unlike reverse playback (still unsupported, falls to x_kdenlive_raw),
     a forward speed change is recognized on import (reverse.py), not just
     generated (xmlgen.py)."""
     yaml_path = tmp_path / "project.yaml"
@@ -91,6 +90,38 @@ timeline:
     video_clip = result.data["timeline"]["tracks"][0]["clips"][0]
     assert video_clip["speed"] == 2.0
     assert video_clip["preserve_pitch"] is True
+
+
+def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
+    """Reverse playback (`speed:` negative, new this cycle) round-trips
+    through a real generated .kdenlive the same way forward speed does -
+    it used to fall to `x_kdenlive_raw` (see the ROADMAP's "gaps the code
+    already flags" history), not anymore."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, speed: -1.0}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+
+    video_clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert video_clip["speed"] == -1.0
 
 
 def test_round_trip_preserves_title(tmp_path: Path):

@@ -264,7 +264,7 @@ def _build_track(
         # *warped* duration (schema.py already computed this the same
         # way when validating in/out/duration).
         full_duration_frames = (
-            round(placement.bin_clip.duration_frames / placement.speed)
+            round(placement.bin_clip.duration_frames / abs(placement.speed))
             if placement.speed
             else placement.bin_clip.duration_frames
         )

@@ -216,8 +216,8 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         mute = False
 
     speed = float(item["speed"]) if item.get("speed") is not None else None
-    if speed is not None and speed <= 0:
-        errors.append(msg("validation.speed_not_positive", ctx=ctx, speed=speed))
+    if speed == 0:
+        errors.append(msg("validation.speed_zero", ctx=ctx))
         speed = None
 
     return ClipPlacementSpec(
@@ -317,9 +317,11 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             # on the timeline - in/out/duration below are relative to that
             # warped length, matching how kdenlive itself works (and what
             # xmlgen.py's timewarp producer actually exposes as its own
-            # [0, warped_duration) range).
+            # [0, warped_duration) range). A negative speed (reverse
+            # playback) still warps the duration by its magnitude - only
+            # the direction flips, not the length.
             effective_duration_frames = (
-                round(bin_clip.duration_frames / speed) if speed else bin_clip.duration_frames
+                round(bin_clip.duration_frames / abs(speed)) if speed else bin_clip.duration_frames
             )
             source_duration_s = fps.frames_to_seconds(effective_duration_frames)
             in_s = placement.in_

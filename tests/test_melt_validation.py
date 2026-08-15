@@ -652,6 +652,55 @@ timeline:
     assert expected_duration > 9.0, f"sanity check: 0.5x of a 5s tone should be ~10s, got {expected_duration}s"
 
 
+def test_melt_respects_reverse_speed_change(tmp_path: Path, melt):
+    """Empirical check for negative `speed:` (reverse timewarp, new this
+    cycle): a clip that's red for its first second and blue for its
+    second should render blue-then-red at `speed: -1.0` (reverse, same
+    rate) - not just that a `timewarp` producer with a negative
+    `warp_speed` got written, but that melt actually plays it backwards."""
+    bicolor = tmp_path / "bicolor.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=red:size=320x240:rate=25:duration=1",
+            "-f", "lavfi", "-i", "color=c=blue:size=320x240:rate=25:duration=1",
+            "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0[v]",
+            "-map", "[v]", "-pix_fmt", "yuv420p", str(bicolor),
+        ],
+        check=True,
+    )
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {bicolor}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, speed: -1.0}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    early_r, _early_g, early_b = _mean_rgb(rendered, timestamp=0.1)
+    late_r, _late_g, late_b = _mean_rgb(rendered, timestamp=1.7)
+
+    assert early_b > early_r + 20, f"expected the reversed clip to start blue, got r={early_r} b={early_b}"
+    assert late_r > late_b + 20, f"expected the reversed clip to end red, got r={late_r} b={late_b}"
+
+
 def test_melt_renders_a_real_title_clip(tmp_path: Path, melt):
     """Empirical check for `type: title` bin clips (titles.py, new this
     cycle): a real melt render of a title actually shows the text, not

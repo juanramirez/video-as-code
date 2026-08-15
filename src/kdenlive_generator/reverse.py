@@ -2,15 +2,15 @@
 
 Goal: recognize exactly what this generator knows how to produce (video/
 audio tracks, trimmed clips, fade to/from black, volume fades, per-clip
-mute, forward speed changes (timewarp), simple qtblend picture-in-picture
-compositing) and translate it to YAML.
+mute, speed changes (timewarp, forward or reverse), title clips, simple
+qtblend picture-in-picture compositing) and translate it to YAML.
 
 Anything that's NOT recognized — other effects, non-standard transitions,
-reverse-playback speed changes, titles, subtitles, extra nested sequences,
-groupings, guides... — is **not discarded**: it's attached as-is (original
-XML) under the `x_kdenlive_raw:` key at the end of the YAML, along with a
-summary printed to the terminal, so the user can decide what to do with it
-(port it by hand, ignore it, or keep using the original .kdenlive for that
+subtitles, extra nested sequences, groupings, guides... — is **not
+discarded**: it's attached as-is (original XML) under the
+`x_kdenlive_raw:` key at the end of the YAML, along with a summary
+printed to the terminal, so the user can decide what to do with it (port
+it by hand, ignore it, or keep using the original .kdenlive for that
 part).
 """
 from __future__ import annotations
@@ -304,10 +304,11 @@ class Importer:
                     speed = float(props.get("warp_speed", 1.0))
                 except ValueError:
                     speed = None
-                if not speed or speed <= 0:
-                    # Reverse playback (negative speed) isn't supported -
-                    # only the positive, forward-speed-change case this
-                    # generator itself can produce.
+                if not speed:
+                    # speed == 0 (or unparsable) isn't a valid timewarp -
+                    # not something this generator (or kdenlive itself)
+                    # can produce. Negative (reverse playback) is fine:
+                    # `resource` is just "{speed}:{path}" either way.
                     self.raw_items.append(RawItem(msg("reverse.timewarp_unsupported", ctx=ctx), _pretty(child) + "\n" + _pretty(producer_el)))
                     cursor += _parse_frame_value(child.get("out"), self.fps) - _parse_frame_value(child.get("in"), self.fps) + 1
                     continue
