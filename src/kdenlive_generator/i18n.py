@@ -98,6 +98,15 @@ _EN: dict[str, str] = {
     "cli.help.import": "Converts an existing .kdenlive to YAML",
     "cli.help.kdenlive_path": "Path to the source .kdenlive file",
     "cli.help.import_output": "Output path (default: same name with .yaml extension)",
+    "cli.render_missing_melt": (
+        "'melt' (the MLT engine kdenlive itself renders with) was not found "
+        "on PATH. Install kdenlive or MLT, or generate the .kdenlive with "
+        "'kdgen build' and render it yourself."
+    ),
+    "cli.render_failed": "melt failed rendering '{path}': {stderr}",
+    "cli.render_done": "Rendered {output} ({frames} frames, {fps:g} fps)",
+    "cli.help.render": "Builds a .kdenlive from a YAML and renders it to a video with melt",
+    "cli.help.render_output": "Output video path (default: same name as the YAML, .mp4 extension)",
 }
 
 _ES: dict[str, str] = {
@@ -188,6 +197,15 @@ _ES: dict[str, str] = {
     "cli.help.import": "Convierte un .kdenlive existente a YAML",
     "cli.help.kdenlive_path": "Ruta al archivo .kdenlive de origen",
     "cli.help.import_output": "Ruta de salida (por defecto: mismo nombre con extensión .yaml)",
+    "cli.render_missing_melt": (
+        "No se encontró 'melt' (el motor MLT con el que renderiza el propio "
+        "kdenlive) en PATH. Instala kdenlive o MLT, o genera el .kdenlive con "
+        "'kdgen build' y renderízalo tú mismo."
+    ),
+    "cli.render_failed": "melt falló renderizando '{path}': {stderr}",
+    "cli.render_done": "Renderizado {output} ({frames} fotogramas, {fps:g} fps)",
+    "cli.help.render": "Genera un .kdenlive a partir de un YAML y lo renderiza a vídeo con melt",
+    "cli.help.render_output": "Ruta de salida del vídeo (por defecto: mismo nombre que el YAML, extensión .mp4)",
 }
 
 CATALOGS: dict[str, dict[str, str]] = {"en": _EN, "es": _ES}

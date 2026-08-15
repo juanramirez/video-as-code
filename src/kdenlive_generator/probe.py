@@ -31,6 +31,17 @@ def ffprobe_available() -> bool:
     return shutil.which("ffprobe") is not None
 
 
+def ffmpeg_available() -> bool:
+    return shutil.which("ffmpeg") is not None
+
+
+def find_melt() -> str | None:
+    """Path to a usable `melt` (the MLT engine kdenlive itself renders
+    with), or None if it isn't on PATH. Kdenlive ships it as `melt-7` on
+    some distributions (e.g. its own snap package)."""
+    return shutil.which("melt") or shutil.which("melt-7")
+
+
 @functools.lru_cache(maxsize=None)
 def probe_duration_seconds(path_str: str) -> float:
     """Duration in seconds of a real audio/video asset (not still images)."""

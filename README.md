@@ -17,7 +17,14 @@ pip install -e ".[dev]"
 kdgen build project.yaml [-o output.kdenlive]   # generate the .kdenlive
 kdgen validate project.yaml                     # validate without building
 kdgen import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
+kdgen render project.yaml [-o output.mp4]       # build + render straight to video via melt
 ```
+
+`kdgen render` needs `melt` (the MLT engine kdenlive itself renders with) on
+PATH — it's not bundled with `kdgen`. It's equivalent to running
+`kdgen build` and then `melt output.kdenlive -consumer avformat:output.mp4`
+yourself, minus the intermediate `.kdenlive` file (built to a temp
+directory and discarded).
 
 `kdgen import` recognizes everything this generator knows how to produce
 (video/audio tracks, trimmed clips, fade to/from black, volume fades,
@@ -54,7 +61,7 @@ affects what a `kdgen` *user* sees at runtime.
 
 ## Current status
 
-Verified by the test suite (`pytest`, 20 tests, all passing):
+Verified by the test suite (`pytest`, 22 tests, all passing):
 
 - **YAML schema and validation** (`schema.py`): checks shape, types, that
   referenced assets exist on disk, that each clip's `in`/`out`/`duration`
@@ -69,7 +76,7 @@ Verified by the test suite (`pytest`, 20 tests, all passing):
   recomputes on open anyway).
 - **Reverse importer** (`reverse.py`): `.kdenlive` -> YAML, with a clean
   split between what's recognized and what isn't (`x_kdenlive_raw`).
-- **CLI** (`cli.py`): `build` / `validate` / `import`.
+- **CLI** (`cli.py`): `build` / `validate` / `import` / `render`.
 - **Seconds<->frames conversion** (`timecode.py`): common NTSC framerates
   (23.976, 29.97...) as an exact fraction; deterministic round-half-up on
   exact ties (see note below).

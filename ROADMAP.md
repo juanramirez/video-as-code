@@ -13,7 +13,8 @@ backlog.
 - Deterministic `.kdenlive` (MLT XML) generation.
 - Reverse importer, `.kdenlive` -> YAML, preserving unrecognized elements
   under `x_kdenlive_raw` instead of discarding them.
-- CLI: `kdgen build` / `validate` / `import`.
+- CLI: `kdgen build` / `validate` / `import` / `render` (build + render to
+  video via a real `melt`, added 2026-08-15).
 - i18n message catalog for user-facing output (`en`/`es`, via `KDGEN_LANG`).
 - Example project with tiny committed assets (`examples/simple/`).
 
