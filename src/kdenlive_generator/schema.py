@@ -28,6 +28,7 @@ from .models import (
     ResolvedPlacement,
     ResolvedProject,
     ResolvedTrack,
+    ResolvedWipeTransition,
     TrackSpec,
     VALID_CLIP_TYPES,
     VALID_TRACK_TYPES,
@@ -337,6 +338,17 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
     if errors:
         raise ValidationErrors(errors)
 
+    resolved_wipes = [
+        ResolvedWipeTransition(
+            track_a=w.track_a,
+            track_b=w.track_b,
+            start_frame=fps.seconds_to_frames(w.start),
+            end_frame=fps.seconds_to_frames(w.end) - 1,
+            luma=w.luma,
+        )
+        for w in doc.wipe_transitions
+    ]
+
     return ResolvedProject(
         project_id=doc.project.id,
         title=doc.project.title,
@@ -347,4 +359,5 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         bin_clips=list(resolved_bin.values()),
         tracks=resolved_tracks,
         source_dir=doc.source_path.parent,
+        wipe_transitions=resolved_wipes,
     )

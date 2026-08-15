@@ -88,7 +88,7 @@ affects what a `kdgen` *user* sees at runtime.
 
 ## Current status
 
-Verified by the test suite (`pytest`, 33 tests, all passing):
+Verified by the test suite (`pytest`, 34 tests, all passing):
 
 - **YAML schema and validation** (`schema.py`): checks shape, types, that
   referenced assets exist on disk, that each clip's `in`/`out`/`duration`

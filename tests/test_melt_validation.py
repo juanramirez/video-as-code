@@ -290,6 +290,30 @@ def _mean_rgb(path: Path, timestamp: float = 0.0) -> tuple[float, float, float]:
     return (sum(data[0::3]) / n, sum(data[1::3]) / n, sum(data[2::3]) / n)
 
 
+def _mean_rgb_at_x(path: Path, timestamp: float, frac_x: float, width: int = 320) -> tuple[float, float, float]:
+    """Like `_mean_rgb`, but only a thin vertical strip at `frac_x` (0..1)
+    of the frame width - lets a test tell a spatially-varying wipe apart
+    from a uniform cross-fade, which `_mean_rgb`'s whole-frame average
+    can't."""
+    x = max(0, min(width - 4, int(width * frac_x)))
+    result = subprocess.run(
+        [
+            "ffmpeg", "-v", "error",
+            "-ss", str(timestamp), "-i", str(path),
+            "-frames:v", "1",
+            "-vf", f"crop=4:in_h:{x}:0",
+            "-f", "rawvideo", "-pix_fmt", "rgb24",
+            "-",
+        ],
+        capture_output=True,
+        timeout=30,
+        check=True,
+    )
+    data = result.stdout
+    n = len(data) // 3
+    return (sum(data[0::3]) / n, sum(data[1::3]) / n, sum(data[2::3]) / n)
+
+
 def test_melt_respects_nonzero_clip_in_point(tmp_path: Path, melt):
     """Regression test for a real upstream MLT behavior: a playlist
     <entry>'s in/out are relative to the producer/chain it references, not
@@ -453,3 +477,61 @@ scenes:
         f"expected a monotonic red->blue blend across the transition, got "
         f"{before=:.2f} {early=:.2f} {mid=:.2f} {late=:.2f} {after=:.2f}"
     )
+
+
+def test_scenes_wipe_produces_a_real_spatial_wipe(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """Empirical check for `transition: wipe` (scenes.py, new this cycle):
+    renders a two-clip scene (red -> blue, `luma: linear_x`) and confirms
+    the reveal genuinely sweeps left-to-right - at a given moment, the
+    left edge of the frame can already be blue while the right edge is
+    still red - not a uniform cross-fade (which `_mean_rgb`'s whole-frame
+    average couldn't tell apart from a real wipe; `_mean_rgb_at_x` samples
+    a specific column instead). Regression test for a real bug found while
+    building this: an MLT tractor applies its transitions in declaration
+    order, and once a qtblend compositing transition had already run
+    against a track, a later `luma` transition between two *other* tracks
+    stopped progressing over time entirely (every sampled frame landed on
+    the same side of the wipe, `in`/`out` seemingly ignored) - fixed by
+    emitting the wipe transitions before the qtblend ones in xmlgen.py."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: wipe
+    transition_duration: 1.0
+    luma: linear_x
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def red_fraction_at(t: float, frac_x: float) -> float:
+        r, _g, b = _mean_rgb_at_x(rendered, timestamp=t, frac_x=frac_x)
+        return r / (r + b + 1e-6)
+
+    # photo.png is red, photo2.png is blue (assets_dir, conftest.py); the
+    # transition spans [1.5, 2.5)s. linear_x is dark on the left, bright
+    # on the right, and the left side of a luma map reveals first.
+    assert red_fraction_at(1.3, 0.1) > 0.95, "expected pure red before the transition"
+
+    left_early = red_fraction_at(1.7, 0.1)
+    right_early = red_fraction_at(1.7, 0.9)
+    assert left_early < 0.5 < right_early, (
+        f"expected the left edge to have already turned blue while the right "
+        f"edge is still red, got {left_early=:.2f} {right_early=:.2f}"
+    )
+
+    assert red_fraction_at(2.7, 0.9) < 0.05, "expected pure blue after the transition"

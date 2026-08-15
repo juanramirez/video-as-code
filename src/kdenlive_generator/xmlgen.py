@@ -18,6 +18,7 @@ import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from . import lumas
 from .ids import deterministic_document_id, deterministic_uuid
 from .models import ResolvedPlacement, ResolvedProject, ResolvedTrack
 
@@ -366,6 +367,32 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     ET.SubElement(sequence, "track", {"producer": "producer_black"})
     for _, tid in track_tractor_ids:
         ET.SubElement(sequence, "track", {"producer": tid})
+
+    if project.wipe_transitions:
+        # Must come before the a_track=0 compositing transitions below: MLT
+        # applies a tractor's transitions in declaration order, and (found
+        # empirically - see tests/test_melt_validation.py's wipe test)
+        # once qtblend has already run against a track, a later luma
+        # transition between two *other* tracks stops progressing over
+        # time at all (every sampled frame lands on the same, wrong side
+        # of the wipe, as if `in`/`out` were ignored). Putting the luma
+        # transitions first avoids whatever state qtblend's compositing
+        # disturbs.
+        track_position = {track.name: pos for pos, track in enumerate(project.tracks, start=1)}
+        for w in project.wipe_transitions:
+            t = ET.SubElement(
+                sequence,
+                "transition",
+                {"id": ids.next("transition"), "in": str(w.start_frame), "out": str(w.end_frame)},
+            )
+            _prop(t, "a_track", track_position[w.track_a])
+            _prop(t, "b_track", track_position[w.track_b])
+            _prop(t, "mlt_service", "luma")
+            _prop(t, "kdenlive_id", "luma")
+            _prop(t, "resource", str(lumas.luma_path(w.luma)))
+            _prop(t, "softness", 0)
+            _prop(t, "alpha_over", 1)
+            _prop(t, "fix_background_alpha", 1)
 
     for pos, (kind, _) in enumerate(track_tractor_ids, start=1):
         t = ET.SubElement(sequence, "transition", {"id": ids.next("transition")})

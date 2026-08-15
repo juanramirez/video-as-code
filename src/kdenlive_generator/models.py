@@ -56,6 +56,22 @@ class TrackSpec:
 
 
 @dataclass
+class WipeTransitionSpec:
+    """One overlap window between two adjacent clips on alternating video
+    tracks, produced by scenes.py's `transition: wipe`. Unlike `dissolve`
+    (a per-clip alpha filter fakes the cross-fade), a wipe needs a real
+    two-source MLT transition (`mlt_service: luma`) so the luma map can
+    decide, per pixel, which of the two overlapping clips shows - so this
+    carries enough to let xmlgen.py emit that transition directly, instead
+    of being folded into `ClipPlacementSpec` like a fade is."""
+    track_a: str
+    track_b: str
+    start: float
+    end: float
+    luma: str  # one of lumas.AVAILABLE_LUMAS
+
+
+@dataclass
 class ProjectDoc:
     project: ProjectSpec
     bin: list[BinClipSpec]
@@ -63,6 +79,7 @@ class ProjectDoc:
     source_path: Path
     raw_extras: Optional[dict] = None  # see reverse.py: `x_kdenlive_raw` block
     scenes_raw: list = field(default_factory=list)  # uncompiled; see scenes.py
+    wipe_transitions: list[WipeTransitionSpec] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +126,15 @@ class ResolvedTrack:
 
 
 @dataclass
+class ResolvedWipeTransition:
+    track_a: str
+    track_b: str
+    start_frame: int
+    end_frame: int  # last included frame (MLT convention, like ResolvedPlacement.out_frame)
+    luma: str
+
+
+@dataclass
 class ResolvedProject:
     project_id: str
     title: str
@@ -119,6 +145,7 @@ class ResolvedProject:
     bin_clips: list[ResolvedBinClip]
     tracks: list[ResolvedTrack]
     source_dir: Path
+    wipe_transitions: list[ResolvedWipeTransition] = field(default_factory=list)
 
     @property
     def total_frames(self) -> int:
