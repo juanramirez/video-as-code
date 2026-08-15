@@ -324,3 +324,66 @@ feature.
   same unit (all percentages, in this project's case), matching what the
   MLT docs say but easy to violate by accident since nothing rejects the
   mix.
+
+## v0.4 — scoped (2026-08-15)
+
+Four groups: two new transitions as the headline (both already verified
+by real render during backlog research, moved here from BACKLOG.md
+rather than re-investigated from scratch), two quick fixes, a symmetry
+close for `reverse.py`, and a project/track metadata round-trip theme.
+
+- **New transitions: `iris` and `flip`**:
+  - **`style: iris`** (`transition: affine`'s sibling in `scenes.py`,
+    or its own `transition: iris` - implementation detail TBD): a tiny
+    center shape grows into a full-frame reveal with a soft edge, via
+    `frei0r.alphaspot` as a **filter** (param `0` = shape, `0.0`
+    rectangle / `>=0.15` circle-ellipse; param `6` = soft-edge width) on
+    the incoming clip, composited through the `qtblend` this project
+    already emits per video track. No new `<transition>` XML at all -
+    simpler than `wipe`/`affine`. Already verified by real render
+    (center-out reveal, soft edge) during the backlog research round;
+    needs the same rigor applied to the actual generated output
+    (`tests/test_melt_validation.py`-level check), not just the
+    standalone probe.
+  - **`style: flip`**: a genuine 3D cube/page-turn effect via
+    `frei0r.3dflippo` as a filter on the top clip (Y-axis-rotation
+    param, animated `0.5` -> `1.0` across the overlap window) - the
+    mechanism that actually delivers what v0.3's `affine`
+    `rotate_z`/`rotate_y` couldn't (see that entry above: real
+    perspective foreshortening, verified against a checkerboard test
+    source, not a solid color). Same "verify against the real generated
+    project, not just a standalone probe XML" bar as `iris`.
+- **Quick fixes**:
+  - **Guides/markers**: `xmlgen.py` hardcodes
+    `kdenlive:sequenceproperties.guides` to `"[]"`; wire a YAML
+    `guides:` list into that JSON - the placeholder already exists in
+    the emitted XML.
+  - **`--keep-kdenlive`/`-k` for `kdgen render`**: it currently builds
+    into a `tempfile.TemporaryDirectory()` and discards the
+    intermediate `.kdenlive` once `melt` finishes, with no way to keep
+    the file it just generated.
+- **Cross-track transitions reconstructable into `scenes:`**: a wipe's
+  (or now zoom/slide's) transition between two content tracks is
+  flagged into `x_kdenlive_raw` on import instead of silently dropped,
+  but there's still no way to rebuild it back into a `scenes:`-level
+  `transition:` - the low-level model has no cross-track-transition
+  concept on the import side at all. With now four (soon six) real
+  transition kinds on the generate side, closing this keeps the
+  round-trip story consistent instead of falling further behind.
+- **Project/track metadata round-trip**:
+  - **Track names**: `reverse.py` hardcodes reconstructed track names
+    to `V1`/`A1`-style auto-generated ones instead of reading a real
+    name from the source XML; `xmlgen.py` never writes `TrackSpec.name`
+    out as a `kdenlive:track_name` property even though the field
+    already exists and `scenes.py` already uses it internally. Neither
+    producible from YAML nor round-tripped today.
+  - **Hidden/locked track state**: no code path anywhere reads or
+    writes a track's hidden/locked flag (`<track hide="...">` in a
+    real kdenlive project).
+  - **Bin folder organization**: every clip producer hardcodes
+    `kdenlive:folderid = -1`; `main_bin` only ever declares one fixed
+    folder. No YAML concept of clip folders/grouping exists at all.
+  - **Project-level notes/author metadata**: `xmlgen.py` writes
+    `kdenlive:documentnotesversion` (a format-version marker) but never
+    `kdenlive:documentnotes` (actual content) or an author field, with
+    no `notes:`/`author:` YAML equivalent to set one.

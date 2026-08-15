@@ -14,11 +14,6 @@ code itself already marks the boundary.
   a title clip's *presence* but falls back to `x_kdenlive_raw` for
   anything richer (multiple items, animation, image/rect items) since
   there's nothing in the YAML model to represent them.
-- **Cross-track transitions reconstructable into `scenes:`**: a wipe's
-  `luma` transition between two content tracks is now flagged instead of
-  silently dropped on import, but there's still no way to rebuild it back
-  into a `scenes:`-level `transition:` — the low-level model has no
-  cross-track-transition concept at all on the import side.
 - **`kdgen reconstruct`: matching through fades**: known limitation,
   documented but not addressed at the root — matching compares against
   each asset's *plain* content, so a segment that's mid-fade (darkened/
@@ -35,10 +30,6 @@ Not documented gaps — real kdenlive project capabilities this generator's
 schema/model has never addressed, found by reading what's already
 plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
 
-- **Guides/markers**: `xmlgen.py` hardcodes
-  `kdenlive:sequenceproperties.guides` to `"[]"`. The placeholder already
-  exists in the emitted XML; this is just wiring a YAML `guides:` list
-  into that JSON. Smallest lift of anything here.
 - **Animated/keyframed picture-in-picture position**:
   `ClipPlacementSpec.position`/`size` and the `qtblend` `rect` property
   are already plumbed, but only as one static rectangle per clip
@@ -65,43 +56,6 @@ plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
   proxy media files, not just flipping a flag — out of proportion with
   the rest of the schema's "just emit static XML" scope.
 
-## Ergonomics, validation & docs gaps
-
-Not missing MLT capabilities — places where the CLI, schema validation,
-or examples don't live up to the bar the project already holds itself to
-elsewhere.
-
-- **`kdgen render` discards its intermediate `.kdenlive`**: it writes the
-  built project into a `tempfile.TemporaryDirectory()` that's deleted
-  right after `melt` runs, with no `--keep-kdenlive`/`-k` flag to keep the
-  file it just generated — even though `build` and `render` share the
-  same `xmlgen.write` call.
-
-## Track/project metadata not round-tripped
-
-- **Track names are discarded in both directions**: `reverse.py`
-  hardcodes reconstructed track names to `V1`/`A1`-style
-  auto-generated names, never reading a real name from the source XML.
-  On the generate side, `TrackSpec.name` exists and scenes.py already
-  uses it internally for wipe-transition track lookups, but `xmlgen.py`
-  never writes it out as a `kdenlive:track_name` property — a real
-  project's custom track names never round-trip, and can't even be
-  produced from YAML today.
-- **Hidden/locked track state is invisible to the whole pipeline**: no
-  code path in `reverse.py`, `xmlgen.py`, `schema.py`, or `models.py`
-  reads or writes a track's hidden/locked flag (`<track hide="...">` in
-  a real kdenlive project) — neither recognized on import nor settable
-  on generation.
-- **Bin folder organization is hardcoded off**: every clip producer in
-  `xmlgen.py` writes `kdenlive:folderid = -1` unconditionally, and
-  `main_bin` only ever declares one fixed folder. There's no YAML concept
-  of clip folders/grouping anywhere in `models.py`/`schema.py` — bin
-  organization can't be produced or round-tripped at all.
-- **No project-level notes/author metadata**: `xmlgen.py` writes
-  `kdenlive:documentnotesversion` (a format-version marker) but never
-  `kdenlive:documentnotes` (actual notes content) or any author field,
-  and there's no `notes:`/`author:` YAML equivalent to set one.
-
 ## Creative transitions beyond kdenlive's own set
 
 kdenlive's UI only exposes `dissolve`/`wipe`-style transitions, but MLT
@@ -127,38 +81,14 @@ mechanisms competitors' editors don't expose either.
 - **"Broken TV" / analog-roll transition**: `frei0r.nosync0r` (h-sync
   offset, "broken tv" look) — same filter-burst-over-overlap construction
   as the glitch transition above, different visual family.
-- **`flip` (3D cube/page-turn) transition — verified by real render,
-  next-in-line to actually deliver "cube"**: `transition: affine`'s
-  `rotate_z`/`rotate_y` was investigated for v0.3 and dropped after
-  confirming it doesn't really rotate pixels on this project's real melt
-  build (see ROADMAP.md's v0.3 entry). A *different* mechanism does the
-  job: `frei0r.3dflippo` as a **filter** (not a transition) on the top
-  clip in the existing two-track qtblend-composite structure, animating
-  its Y-axis-rotation parameter (param `1`, 0-1 range, 0.5=neutral) from
-  `0.5` to `1.0` across the overlap window. Verified against a
-  checkerboard test source (a solid color can't show perspective
-  distortion, which is what makes this a real 3D-flip and not a
-  disguised wipe): the color bars visibly compress toward the turning
-  edge, genuine perspective foreshortening. Same alternating-track shape
-  as `dissolve`/`wipe`/`affine`, no new dependency (already-installed
-  frei0r plugin) - implementation would add `style: flip` to `scenes.py`
-  alongside `zoom`/`slide`.
-- **`iris` (circle/rectangle wipe) transition — verified by real
-  render**: `frei0r.alphaspot` as a filter (param `0` = shape: `0.0` for
-  rectangle, `>=0.15` for circle/ellipse; param `6` = soft-edge
-  transition width) makes a tiny center shape genuinely grow into a
-  full-frame reveal with a soft edge - the classic film/TV "iris wipe."
-  Simpler to implement than `wipe` or `flip`: no new `<transition>` XML
-  at all, just a filter plus the `qtblend` compositing this project
-  already emits for every video track.
 - **New procedural luma shapes for `wipe`**: cross-referenced against
   gl-transitions.com's open (MIT) 125-transition catalog for concepts
   reproducible via `lumas.py`'s existing gradient/angle/distance-math
   approach (same shape as the project's own non-copied luma set) -
   `circleopen`/`CircleCrop` and `cube`/`BookFlip` turned out to already
-  be covered by the `iris` and `flip` candidates above (found
-  independently); two more are still open, sketched but **not yet
-  rendered/verified**:
+  be covered by the `iris`/`flip` transitions now scoped into v0.4 (see
+  ROADMAP.md, found independently during the same research round); two
+  more are still open, sketched but **not yet rendered/verified**:
   - **heart**: per-pixel implicit heart curve
     `(x²+y²-1)³ - x²y³` (x, y centered/normalized to the frame), mapped
     to a 0-255 gradient around the zero-crossing - a heart-silhouette
