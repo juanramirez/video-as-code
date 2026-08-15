@@ -127,3 +127,42 @@ mechanisms competitors' editors don't expose either.
 - **"Broken TV" / analog-roll transition**: `frei0r.nosync0r` (h-sync
   offset, "broken tv" look) — same filter-burst-over-overlap construction
   as the glitch transition above, different visual family.
+
+## Effects other NLEs have, verified buildable (or confirmed absent) via melt
+
+Found by asking what DaVinci/Premiere/CapCut-class editors have that
+kdenlive-generator doesn't yet produce. Several turned out to be effects
+kdenlive's *own* UI already exposes (their MLT filters are credited to
+kdenlive's own lead developer) — not competitor-exclusive after all, but
+still real gaps for this project, since none of them are in the schema.
+All confirmed against `melt -query filter=`/`producer=` on this machine's
+melt 7.32.0, not assumed.
+
+- **Freeze-frame / hold**: MLT ships a `freeze` filter and a `hold`
+  producer (`type: producer`, `title: Still`), both already used by
+  kdenlive's own "Freeze" effect. Absent from this project's schema.
+- **Video stabilization**: `vidstab`/`deshake` filters present — what
+  kdenlive's own "Stabilize" effect uses. Absent from this project.
+- **Motion tracking**: `opencv.tracker` present, credited to kdenlive's
+  own lead developer (`jb@kdenlive.org`) — this *is* kdenlive's tracker
+  effect. Absent from this project.
+- **Chroma-key / green-screen**: `avfilter.chromakey` confirmed present;
+  kdenlive's own UI already has `frei0r.bluescreen0r`. Absent from this
+  project.
+- **LUT-based color grading**: `avfilter.lut3d`/`avfilter.lut1d`
+  confirmed present — DaVinci-style `.cube` LUT application, distinct
+  from (and a smaller lift than) the generic `lift_gamma_gain` grading
+  filter already listed above under "Capabilities not yet touched at
+  all."
+- **Audio ducking/compression/gate**: `avfilter.acompressor`/
+  `avfilter.agate` confirmed present, plus a `sox.*` family
+  (`sox.compand`, `sox.noisered` for noise reduction) — sidechain-style
+  ducking (a Premiere/Resolve staple) is buildable from `acompressor`,
+  not currently in the schema.
+- **Frame-blend speed interpolation confirmed absent**: `avfilter.
+  minterpolate` (true optical-flow retiming, what DaVinci/Premiere use
+  for smooth slow-motion) is **not present** in this machine's compiled
+  filter list — only `avfilter.tblend` (cruder temporal frame blending)
+  exists as a fallback. A genuine, verified ceiling: this build of MLT
+  can't do real optical-flow retiming, only a blend-based approximation,
+  relevant if "speed ramps" (already listed above) is ever scoped.
