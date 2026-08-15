@@ -92,6 +92,75 @@ timeline:
     assert video_clip["preserve_pitch"] is True
 
 
+def test_round_trip_preserves_project_notes(tmp_path: Path, assets_dir: Path):
+    """`notes:` on the project (new this cycle) round-trips through a
+    real generated .kdenlive: `kdenlive:documentnotes` on `main_bin`
+    (confirmed against kdenlive's own source,
+    ProjectManager::slotSaveProject)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240, notes: "Shot on location, needs color grading."}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    assert result.data["project"]["notes"] == "Shot on location, needs color grading."
+
+
+def test_round_trip_preserves_bin_folder(tmp_path: Path, assets_dir: Path):
+    """`folder:` on a bin clip (new this cycle) round-trips through a
+    real generated .kdenlive: `kdenlive:folder.-1.<id>` on `main_bin`
+    (confirmed against kdenlive's own source,
+    BinPlaylist::manageBinItemInsertion) - a clip with no `folder:` must
+    stay folder-less, not fall into the same folder by accident."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+    folder: "B-Roll"
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    by_id = {c["id"]: c for c in result.data["bin"]}
+    assert by_id["photo"]["folder"] == "B-Roll"
+    assert "folder" not in by_id["tone"]
+
+
 def test_round_trip_preserves_custom_track_name(tmp_path: Path, assets_dir: Path):
     """A custom `name:` on a track (new this cycle) round-trips through a
     real generated .kdenlive: `kdenlive:track_name` on the track's own

@@ -25,6 +25,7 @@ class ProjectSpec:
     height: int
     colorspace: int = 709
     default_image_duration: float = 4.0
+    notes: Optional[str] = None
 
 
 @dataclass
@@ -32,6 +33,7 @@ class BinClipSpec:
     id: str
     path: Optional[Path]  # None for type: title - schema.py generates and fills it in
     type: Optional[str] = None  # overrides the extension-based autodetection
+    folder: Optional[str] = None  # bin folder name (root-level only), None = no folder
     # title-only fields (type: title), ignored otherwise:
     text: Optional[str] = None
     font: str = "Sans"
@@ -141,6 +143,7 @@ class ResolvedBinClip:
     path: Path
     kind: str  # video | audio | image
     duration_frames: int
+    folder: Optional[str] = None
 
 
 @dataclass
@@ -226,6 +229,7 @@ class ResolvedProject:
     wipe_transitions: list[ResolvedWipeTransition] = field(default_factory=list)
     affine_transitions: list[ResolvedAffineTransition] = field(default_factory=list)
     guides: list[ResolvedGuide] = field(default_factory=list)
+    notes: Optional[str] = None
 
     @property
     def total_frames(self) -> int:

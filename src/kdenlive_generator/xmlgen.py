@@ -86,6 +86,7 @@ def _build_media_element(
     control_uuid: str,
     speed: Optional[float] = None,
     preserve_pitch: bool = False,
+    folder_id: int = -1,
 ) -> ET.Element:
     if speed is not None:
         # A real `timewarp` producer (not a `chain`) - matches what
@@ -105,7 +106,7 @@ def _build_media_element(
         _prop(el, "warp_pitch", int(preserve_pitch))
         _prop(el, "mlt_service", "timewarp")
         _prop(el, "kdenlive:originalurl", str(path))
-        _prop(el, "kdenlive:folderid", -1)
+        _prop(el, "kdenlive:folderid", folder_id)
         _prop(el, "kdenlive:id", numeric_id)
         _prop(el, "kdenlive:control_uuid", control_uuid)
         return el, xml_id
@@ -125,7 +126,7 @@ def _build_media_element(
         _prop(el, "seekable", 1)
         _prop(el, "progressive", 1)
         _prop(el, "mlt_service", "kdenlivetitle")
-        _prop(el, "kdenlive:folderid", -1)
+        _prop(el, "kdenlive:folderid", folder_id)
         _prop(el, "kdenlive:id", numeric_id)
         _prop(el, "kdenlive:control_uuid", control_uuid)
         return el, xml_id
@@ -146,7 +147,7 @@ def _build_media_element(
         _prop(el, "resource", _resource_for(kind, path))
         _prop(el, "mlt_service", service)
         _prop(el, "seekable", 1)
-    _prop(el, "kdenlive:folderid", -1)
+    _prop(el, "kdenlive:folderid", folder_id)
     _prop(el, "kdenlive:id", numeric_id)
     _prop(el, "kdenlive:control_uuid", control_uuid)
     return el, xml_id
@@ -607,6 +608,16 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
 
     root.append(sequence)
 
+    # Deterministic folder ids for `folder:` on bin clips (root-level
+    # only) - sorted by name so output doesn't depend on YAML ordering.
+    # Starts at 3: id 2 is already claimed by the "Secuencias" folder
+    # every project gets below (kdenlive:sequenceFolder) - confirmed
+    # against kdenlive's own source (BinPlaylist::manageBinItemInsertion,
+    # `kdenlive:folder.<parentId>.<id>` = name, set on `main_bin`), not
+    # modeled by analogy.
+    folder_names = sorted({c.folder for c in project.bin_clips if c.folder})
+    folder_ids = {name: i + 3 for i, name in enumerate(folder_names)}
+
     # "Master" bin chains (one full-length reference per asset, for the Project Bin listing).
     bin_chain_ids: dict[str, str] = {}
     for clip in project.bin_clips:
@@ -619,12 +630,15 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
             fast=False,
             numeric_id=clip.numeric_id,
             control_uuid=control_uuid_for[clip.id],
+            folder_id=folder_ids.get(clip.folder, -1),
         )
         root.append(el)
         bin_chain_ids[clip.id] = xml_id
 
     main_bin = ET.Element("playlist", {"id": "main_bin"})
     _prop(main_bin, "kdenlive:folder.-1.2", "Secuencias")
+    for name, fid in folder_ids.items():
+        _prop(main_bin, f"kdenlive:folder.-1.{fid}", name)
     _prop(main_bin, "kdenlive:sequenceFolder", 2)
     _prop(main_bin, "kdenlive:docproperties.audioChannels", 2)
     _prop(main_bin, "kdenlive:docproperties.binsort", 0)
@@ -646,6 +660,14 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     _prop(main_bin, "kdenlive:docproperties.opensequences", sequence_uuid)
     _prop(main_bin, "kdenlive:docproperties.activetimeline", sequence_uuid)
     _prop(main_bin, "kdenlive:documentnotesversion", 2)
+    if project.notes:
+        # Confirmed against kdenlive's own source
+        # (ProjectManager::slotSaveProject -> saveProperty("kdenlive:
+        # documentnotes", ...), src/project/projectmanager.cpp) - a plain
+        # string property on main_bin, not modeled by analogy. Only
+        # written when set: a fresh kdenlive project doesn't write this
+        # property at all until a user actually enters notes.
+        _prop(main_bin, "kdenlive:documentnotes", project.notes)
     _prop(main_bin, "xml_retain", 1)
 
     ET.SubElement(main_bin, "entry", {"producer": sequence_uuid, "in": "0", "out": "0"})

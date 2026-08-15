@@ -150,6 +150,27 @@ class Importer:
             title_data = titles.parse_title_xml(title_xml) if title_xml is not None else None
         return resource, is_timewarp, is_title, title_data
 
+    def bin_folder_names(self) -> dict[int, str]:
+        """`kdenlive:folder.-1.<id>` properties on `main_bin` (confirmed
+        against kdenlive's own source, BinPlaylist::manageBinItemInsertion)
+        - id 2 is excluded, it's always the "Secuencias" folder every
+        project gets (xmlgen.py's `kdenlive:sequenceFolder`), not a
+        user-content folder from `folder:`."""
+        main_bin = self.by_id.get("main_bin")
+        if main_bin is None:
+            return {}
+        names: dict[int, str] = {}
+        for name, value in _props(main_bin).items():
+            if not name.startswith("kdenlive:folder.-1."):
+                continue
+            try:
+                folder_id = int(name.rsplit(".", 1)[1])
+            except ValueError:
+                continue
+            if folder_id != 2:
+                names[folder_id] = value
+        return names
+
     def preregister_bin_order(self) -> None:
         """Seeds bin order from `main_bin`'s own entries before anything else
         registers a clip. `main_bin` lists bin clips in their original
@@ -162,6 +183,7 @@ class Importer:
         main_bin = self.by_id.get("main_bin")
         if main_bin is None:
             return
+        folder_names = self.bin_folder_names()
         for entry in main_bin.findall("entry"):
             producer_el = self.by_id.get(entry.get("producer"))
             if producer_el is None:
@@ -170,15 +192,20 @@ class Importer:
             if classified is None:
                 continue
             resource, _is_timewarp, is_title, title_data = classified
+            try:
+                folder_id = int(_props(producer_el).get("kdenlive:folderid", "-1"))
+            except ValueError:
+                folder_id = -1
+            folder = folder_names.get(folder_id)
             if is_title:
                 if title_data is not None:
-                    self.register_title_bin_clip(resource, title_data)
+                    self.register_title_bin_clip(resource, title_data, folder)
                 # Unsupported title content: skip preregistering: the
                 # actual timeline entry (convert_playlist) reports it.
             else:
-                self.register_bin_clip(resource)
+                self.register_bin_clip(resource, folder)
 
-    def register_bin_clip(self, resource: str) -> str:
+    def register_bin_clip(self, resource: str, folder: Optional[str] = None) -> str:
         if resource in self.bin_by_path:
             return self.bin_by_path[resource]
         p = Path(resource)
@@ -193,11 +220,14 @@ class Importer:
         while clip_id in existing_ids:
             clip_id = f"{base_id}_{n}"
             n += 1
-        self.bin_entries.append({"id": clip_id, "path": display_path})
+        entry = {"id": clip_id, "path": display_path}
+        if folder:
+            entry["folder"] = folder
+        self.bin_entries.append(entry)
         self.bin_by_path[resource] = clip_id
         return clip_id
 
-    def register_title_bin_clip(self, resource: str, title_data: dict) -> str:
+    def register_title_bin_clip(self, resource: str, title_data: dict, folder: Optional[str] = None) -> str:
         if resource in self.bin_by_path:
             return self.bin_by_path[resource]
         base_id = Path(resource).stem or "title"
@@ -206,7 +236,10 @@ class Importer:
         while clip_id in existing_ids:
             clip_id = f"{base_id}_{n}"
             n += 1
-        self.bin_entries.append({"id": clip_id, "type": "title", **title_data})
+        entry = {"id": clip_id, "type": "title", **title_data}
+        if folder:
+            entry["folder"] = folder
+        self.bin_entries.append(entry)
         self.bin_by_path[resource] = clip_id
         return clip_id
 
@@ -513,15 +546,21 @@ class Importer:
 
         transitions_yaml = self.convert_cross_track_transitions(sequence, track_names_by_position)
 
+        project_yaml = {
+            "id": self.path.stem,
+            "title": title,
+            "fps": self.fps.num if self.fps.den == 1 else round(self.fps.fps, 3),
+            "width": self.width,
+            "height": self.height,
+            "colorspace": self.colorspace,
+        }
+        main_bin = self.by_id.get("main_bin")
+        notes = _props(main_bin).get("kdenlive:documentnotes") if main_bin is not None else None
+        if notes:
+            project_yaml["notes"] = notes
+
         data = {
-            "project": {
-                "id": self.path.stem,
-                "title": title,
-                "fps": self.fps.num if self.fps.den == 1 else round(self.fps.fps, 3),
-                "width": self.width,
-                "height": self.height,
-                "colorspace": self.colorspace,
-            },
+            "project": project_yaml,
             "bin": self.bin_entries,
             "timeline": {"tracks": tracks_yaml},
         }

@@ -42,6 +42,13 @@ code itself already marks the boundary.
   service yet, so an `iris`/`flip` clip still imports (position/timing
   preserved) but the reveal itself falls to `x_kdenlive_raw` per-filter,
   the same way an unrecognized qtblend keyframe animation already does.
+- **Track-level audio mute (`hide`'s bit 2)**: v0.4's `hidden:`/`locked:`
+  only exposes bit 1 of the track tractor's `hide` bitmask
+  (`TrackModel::isHidden`) - bit 2 (`TrackModel::isMute`, a whole-track
+  audio mute, distinct from the per-*clip* `mute:` this project already
+  has) was confirmed to exist in kdenlive's own source but deliberately
+  left unexposed to keep that item's scope narrow. Same shape as
+  `hidden:`, just the other bit.
 
 ## Capabilities not yet touched at all
 

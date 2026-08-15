@@ -409,20 +409,43 @@ close for `reverse.py`, and a project/track metadata round-trip theme.
   `test_round_trip_preserves_affine_transition`), including that the
   reconstructed YAML is itself re-buildable (validates against this
   project's own schema, not just "looks right").
-- **Project/track metadata round-trip**:
-  - **Track names**: `reverse.py` hardcodes reconstructed track names
-    to `V1`/`A1`-style auto-generated ones instead of reading a real
-    name from the source XML; `xmlgen.py` never writes `TrackSpec.name`
-    out as a `kdenlive:track_name` property even though the field
-    already exists and `scenes.py` already uses it internally. Neither
-    producible from YAML nor round-tripped today.
-  - **Hidden/locked track state**: no code path anywhere reads or
-    writes a track's hidden/locked flag (`<track hide="...">` in a
-    real kdenlive project).
-  - **Bin folder organization**: every clip producer hardcodes
-    `kdenlive:folderid = -1`; `main_bin` only ever declares one fixed
-    folder. No YAML concept of clip folders/grouping exists at all.
-  - **Project-level notes/author metadata**: `xmlgen.py` writes
-    `kdenlive:documentnotesversion` (a format-version marker) but never
-    `kdenlive:documentnotes` (actual content) or an author field, with
-    no `notes:`/`author:` YAML equivalent to set one.
+- **Project/track metadata round-trip** — **implemented**: every field
+  in this group is only *written* when set (a fresh kdenlive project
+  itself doesn't write most of these properties at all until a user
+  actually touches the corresponding UI control - confirmed against
+  kdenlive's own source for each, not modeled by analogy), and every
+  one round-trips on import.
+  - **Track names**: `name:` on a track now writes
+    `kdenlive:track_name` on the track's own tractor
+    (`TrackModel::TrackModel`, `src/timeline2/model/trackmodel.cpp`);
+    `reverse.py` reads it back instead of always falling to the
+    `V1`/`A1` auto-generated fallback.
+  - **Hidden/locked track state**: new `hidden:`/`locked:` on a track
+    write `hide` (a bitmask on the track's own tractor - bit 1 = hidden,
+    bit 2 = muted, though only the `hidden:` bit is exposed for now,
+    matching the ROADMAP's original narrower scope) and
+    `kdenlive:locked_track` (`TrackModel::isHidden`/`isMute`/
+    `isLocked`). Verified with a real render, not assumed from the
+    source alone - a genuine surprise along the way: `hidden:` actually
+    blacks out the track in melt's rendered output, not just kdenlive's
+    own editor UI (`test_melt_hides_a_hidden_track`); `locked:` has no
+    such render-time effect, purely an editor-lock toggle.
+  - **Bin folder organization**: new `folder:` on a bin clip assigns a
+    deterministic folder id (sorted by name, starting at 3 - id 2 is
+    always the "Secuencias" folder every project already gets) and
+    writes `kdenlive:folder.-1.<id>` on `main_bin`
+    (`BinPlaylist::manageBinItemInsertion`,
+    `src/bin/binplaylist.cpp`) plus a non-default `kdenlive:folderid`
+    on that clip's *master* bin chain only (the per-track embedded
+    copies stay `-1` - folder membership is a Project Bin concept, not
+    a timeline one). `reverse.py` reads `main_bin`'s own
+    `kdenlive:folder.-1.<id>` properties back into `folder:` on each
+    bin entry.
+  - **Project-level notes**: new `notes:` on the project writes
+    `kdenlive:documentnotes` on `main_bin`
+    (`ProjectManager::slotSaveProject`,
+    `src/project/projectmanager.cpp`) - **not** paired with an
+    `author:` field as originally scoped: kdenlive has no author/creator
+    concept anywhere in its own source (checked directly, not assumed),
+    so that half of the original item was dropped as not real rather
+    than invented.

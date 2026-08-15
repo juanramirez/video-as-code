@@ -126,6 +126,69 @@ timeline:
     assert r < 10 and g < 10 and b < 10, f"expected a hidden track to render black, got {(r, g, b)}"
 
 
+def test_melt_loads_a_project_with_notes(tmp_path: Path, assets_dir: Path, melt):
+    """`notes:` on the project (new this cycle) has no visual/audible
+    effect - melt just needs to accept the real
+    `kdenlive:documentnotes` property without choking on it."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240, notes: "Needs a color pass."}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    xml_out = tmp_path / "roundtrip.xml"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"xml:{xml_out}", "all_frames=0"])
+
+    _assert_no_fatal_load_error(result)
+    assert xml_out.exists() and xml_out.stat().st_size > 0
+
+
+def test_melt_loads_a_project_with_a_bin_folder(tmp_path: Path, assets_dir: Path, melt):
+    """`folder:` on a bin clip (new this cycle) has no visual/audible
+    effect (it's a Project Bin organization concept only) - melt just
+    needs to accept the real `kdenlive:folder.-1.<id>` property and a
+    non-default `kdenlive:folderid` on the clip's producer without
+    choking on either."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+    folder: "B-Roll"
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    xml_out = tmp_path / "roundtrip.xml"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"xml:{xml_out}", "all_frames=0"])
+
+    _assert_no_fatal_load_error(result)
+    assert xml_out.exists() and xml_out.stat().st_size > 0
+
+
 def test_melt_loads_a_project_with_guides(tmp_path: Path, assets_dir: Path, melt):
     """`guides:` (new this cycle) has no visual/audible effect - melt just
     needs to accept the real JSON `kdenlive:sequenceproperties.guides`

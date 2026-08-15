@@ -165,6 +165,7 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
         height=int(data["height"]),
         colorspace=colorspace,
         default_image_duration=float(data.get("default_image_duration", 4.0)),
+        notes=str(data["notes"]) if data.get("notes") is not None else None,
     )
 
 
@@ -177,6 +178,9 @@ def _parse_bin_clip(item: Any, source_dir: Path, errors: list[str]) -> BinClipSp
         errors.append(
             msg("validation.bin_type_invalid", id=item.get("id"), type=clip_type, valid=VALID_CLIP_TYPES)
         )
+    folder = item.get("folder")
+    if folder is not None:
+        folder = str(folder)
 
     if clip_type == "title":
         # No `path`: schema.py generates the .kdenlivetitle file itself
@@ -194,6 +198,7 @@ def _parse_bin_clip(item: Any, source_dir: Path, errors: list[str]) -> BinClipSp
             id=str(item["id"]),
             path=None,
             type=clip_type,
+            folder=folder,
             text=str(text),
             font=str(item.get("font", "Sans")),
             font_size=font_size,
@@ -206,7 +211,7 @@ def _parse_bin_clip(item: Any, source_dir: Path, errors: list[str]) -> BinClipSp
         return None
     raw_path = Path(item["path"])
     resolved = raw_path if raw_path.is_absolute() else (source_dir / raw_path)
-    return BinClipSpec(id=str(item["id"]), path=resolved, type=clip_type)
+    return BinClipSpec(id=str(item["id"]), path=resolved, type=clip_type, folder=folder)
 
 
 def _parse_track(item: Any, idx: int, errors: list[str]) -> TrackSpec | None:
@@ -407,6 +412,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             path=clip.path,
             kind=kind,
             duration_frames=fps.seconds_to_frames(duration_seconds),
+            folder=clip.folder,
         )
 
     if errors:
@@ -587,4 +593,5 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         wipe_transitions=resolved_wipes,
         affine_transitions=resolved_affines,
         guides=resolved_guides,
+        notes=doc.project.notes,
     )
