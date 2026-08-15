@@ -127,6 +127,59 @@ mechanisms competitors' editors don't expose either.
 - **"Broken TV" / analog-roll transition**: `frei0r.nosync0r` (h-sync
   offset, "broken tv" look) — same filter-burst-over-overlap construction
   as the glitch transition above, different visual family.
+- **`flip` (3D cube/page-turn) transition — verified by real render,
+  next-in-line to actually deliver "cube"**: `transition: affine`'s
+  `rotate_z`/`rotate_y` was investigated for v0.3 and dropped after
+  confirming it doesn't really rotate pixels on this project's real melt
+  build (see ROADMAP.md's v0.3 entry). A *different* mechanism does the
+  job: `frei0r.3dflippo` as a **filter** (not a transition) on the top
+  clip in the existing two-track qtblend-composite structure, animating
+  its Y-axis-rotation parameter (param `1`, 0-1 range, 0.5=neutral) from
+  `0.5` to `1.0` across the overlap window. Verified against a
+  checkerboard test source (a solid color can't show perspective
+  distortion, which is what makes this a real 3D-flip and not a
+  disguised wipe): the color bars visibly compress toward the turning
+  edge, genuine perspective foreshortening. Same alternating-track shape
+  as `dissolve`/`wipe`/`affine`, no new dependency (already-installed
+  frei0r plugin) - implementation would add `style: flip` to `scenes.py`
+  alongside `zoom`/`slide`.
+- **`iris` (circle/rectangle wipe) transition — verified by real
+  render**: `frei0r.alphaspot` as a filter (param `0` = shape: `0.0` for
+  rectangle, `>=0.15` for circle/ellipse; param `6` = soft-edge
+  transition width) makes a tiny center shape genuinely grow into a
+  full-frame reveal with a soft edge - the classic film/TV "iris wipe."
+  Simpler to implement than `wipe` or `flip`: no new `<transition>` XML
+  at all, just a filter plus the `qtblend` compositing this project
+  already emits for every video track.
+- **New procedural luma shapes for `wipe`**: cross-referenced against
+  gl-transitions.com's open (MIT) 125-transition catalog for concepts
+  reproducible via `lumas.py`'s existing gradient/angle/distance-math
+  approach (same shape as the project's own non-copied luma set) -
+  `circleopen`/`CircleCrop` and `cube`/`BookFlip` turned out to already
+  be covered by the `iris` and `flip` candidates above (found
+  independently); two more are still open, sketched but **not yet
+  rendered/verified**:
+  - **heart**: per-pixel implicit heart curve
+    `(x²+y²-1)³ - x²y³` (x, y centered/normalized to the frame), mapped
+    to a 0-255 gradient around the zero-crossing - a heart-silhouette
+    reveal growing from/into center.
+  - **bowtie**: `luma = clamp(255 * (|x/w| - |y/h| + 0.5), 0, 255)` -
+    two opposing triangular reveal wedges meeting at a vertical center
+    band.
+- **Leads not yet investigated**: `frei0r.delaygrab` ("delayed frame
+  blitting on a time bitmap" - the name suggests a real trailing-ghost/
+  temporal-echo effect) and `frei0r.cairogradient` (a real gradient-
+  overlay filter, could drive a light-leak/color-wash transition) both
+  exist on this machine's melt build but weren't render-verified -
+  flagged as leads, not claims.
+- **Ken Burns pan+zoom as a single-clip filter**: `melt -query
+  filter=affine` confirms the same `affine` service used for the `zoom`/
+  `slide` *transitions* also exists as a plain **filter** applicable to
+  one clip alone (no second track needed) - since the `rect` keyframe
+  mechanism is already proven working for the transition case, a
+  Ken-Burns-style pan+zoom effect on a single clip is very likely to
+  work the same way, but this specific single-clip usage hasn't been
+  render-verified yet.
 
 ## Effects other NLEs have, verified buildable (or confirmed absent) via melt
 
