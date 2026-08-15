@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
 
-from . import reverse, xmlgen
+from . import probe, reverse, xmlgen
 from .errors import KdgenError
 from .i18n import msg
 from .schema import load_and_resolve
@@ -65,6 +67,37 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_render(args: argparse.Namespace) -> int:
+    yaml_path = Path(args.project)
+    output = Path(args.output) if args.output else yaml_path.with_suffix(".mp4")
+
+    try:
+        resolved = load_and_resolve(yaml_path)
+    except KdgenError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    melt = probe.find_melt()
+    if melt is None:
+        print(msg("cli.render_missing_melt"), file=sys.stderr)
+        return 1
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        kdenlive_path = Path(tmp_dir) / (yaml_path.stem + ".kdenlive")
+        xmlgen.write(resolved, kdenlive_path)
+        result = subprocess.run(
+            [melt, str(kdenlive_path), "-consumer", f"avformat:{output}"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            print(msg("cli.render_failed", path=output, stderr=result.stderr.strip()), file=sys.stderr)
+            return 1
+
+    print(msg("cli.render_done", output=output, frames=resolved.total_frames, fps=resolved.fps.fps))
+    return 0
+
+
 def cmd_reconstruct(args: argparse.Namespace) -> int:
     video_path = Path(args.video)
     assets_dir = Path(args.assets_dir)
@@ -109,6 +142,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_import.add_argument("kdenlive_file", help=msg("cli.help.kdenlive_path"))
     p_import.add_argument("-o", "--output", help=msg("cli.help.import_output"))
     p_import.set_defaults(func=cmd_import)
+
+    p_render = sub.add_parser("render", help=msg("cli.help.render"))
+    p_render.add_argument("project", help=msg("cli.help.project_path"))
+    p_render.add_argument("-o", "--output", help=msg("cli.help.render_output"))
+    p_render.set_defaults(func=cmd_render)
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
     p_reconstruct.add_argument("video", help=msg("cli.help.reconstruct_video"))
