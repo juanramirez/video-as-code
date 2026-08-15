@@ -381,14 +381,34 @@ close for `reverse.py`, and a project/track metadata round-trip theme.
     into a `tempfile.TemporaryDirectory()` and discards the
     intermediate `.kdenlive` once `melt` finishes, with no way to keep
     the file it just generated.
-- **Cross-track transitions reconstructable into `scenes:`**: a wipe's
-  (or now zoom/slide's) transition between two content tracks is
-  flagged into `x_kdenlive_raw` on import instead of silently dropped,
-  but there's still no way to rebuild it back into a `scenes:`-level
-  `transition:` - the low-level model has no cross-track-transition
-  concept on the import side at all. With now four (soon six) real
-  transition kinds on the generate side, closing this keeps the
-  round-trip story consistent instead of falling further behind.
+- **Cross-track transitions reconstructable** — **implemented, scope
+  narrowed from "into `scenes:`" to the low-level model**: reconstructing
+  the original `scenes:` sugar (which clips, in what order, `pacing`/
+  `duration`) from an arbitrary sequence would need real pattern
+  recognition - detecting that two tracks' clips alternate with
+  transitions at exactly the boundaries `scenes.py` itself would have
+  produced - a much bigger task than "don't lose the data." Instead,
+  `wipe`/`affine` cross-track `<transition>`s this generator itself
+  could have produced are now recognized on import and written back as a
+  new top-level `transitions:` YAML key - the low-level, `scenes:`-free
+  way to declare one directly between two named `timeline.tracks:`
+  (`schema.py`'s `_parse_transition`, resolved into the same
+  `WipeTransitionSpec`/`AffineTransitionSpec` `scenes.py` already
+  produces, so `xmlgen.py` needed no changes at all to consume either
+  source). Recognition is conservative, matching this project's "never
+  guess" bar: a `luma` transition's resource has to match one of this
+  project's own lumas by filename, an `affine` transition's `rect` has
+  to match the exact zoom/slide keyframe template `xmlgen.py` itself
+  emits (reusing `_AFFINE_STYLE_RECT`, the same table that generates
+  them) - anything else still falls back to `x_kdenlive_raw`, unchanged.
+  `iris`/`flip` aren't covered by this (they're single-clip filters, not
+  `<transition>` elements - a different, unaddressed gap, see
+  BACKLOG.md). Verified with a real generated .kdenlive round-tripping
+  back through this exact path, not just structurally: both `wipe` and
+  `affine` (`test_round_trip_preserves_wipe_transition`,
+  `test_round_trip_preserves_affine_transition`), including that the
+  reconstructed YAML is itself re-buildable (validates against this
+  project's own schema, not just "looks right").
 - **Project/track metadata round-trip**:
   - **Track names**: `reverse.py` hardcodes reconstructed track names
     to `V1`/`A1`-style auto-generated ones instead of reading a real

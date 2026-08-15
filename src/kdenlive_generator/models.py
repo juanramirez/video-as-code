@@ -81,6 +81,9 @@ class WipeTransitionSpec:
     luma: str  # one of lumas.AVAILABLE_LUMAS
 
 
+AFFINE_STYLES = ("zoom", "slide")  # shared with scenes.py and schema.py's `transitions:` parsing
+
+
 @dataclass
 class AffineTransitionSpec:
     """One overlap window between two adjacent clips on alternating video

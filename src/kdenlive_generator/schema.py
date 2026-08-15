@@ -19,7 +19,10 @@ import yaml
 from . import probe, titles
 from .errors import ValidationErrors
 from .i18n import msg
+from .lumas import AVAILABLE_LUMAS
 from .models import (
+    AFFINE_STYLES,
+    AffineTransitionSpec,
     BinClipSpec,
     ClipPlacementSpec,
     GuideSpec,
@@ -35,11 +38,13 @@ from .models import (
     TrackSpec,
     VALID_CLIP_TYPES,
     VALID_TRACK_TYPES,
+    WipeTransitionSpec,
 )
 from .timecode import FrameRate, resolve_fps
 
 RESERVED_TOP_LEVEL_KEYS = {
-    "project", "bin", "timeline", "scenes", "guides", "x_kdenlive_raw", "x_reconstruct_unmatched",
+    "project", "bin", "timeline", "scenes", "guides", "transitions",
+    "x_kdenlive_raw", "x_reconstruct_unmatched",
 }
 
 
@@ -91,6 +96,20 @@ def load_yaml(path: str | Path) -> ProjectDoc:
         guides_data = []
     guides = [g for g in (_parse_guide(item, idx, errors) for idx, item in enumerate(guides_data)) if g]
 
+    transitions_data = data.get("transitions", [])
+    if not isinstance(transitions_data, list):
+        errors.append(msg("validation.transitions_not_list"))
+        transitions_data = []
+    track_names = {t.name for t in tracks}
+    wipe_transitions: list[WipeTransitionSpec] = []
+    affine_transitions: list[AffineTransitionSpec] = []
+    for idx, item in enumerate(transitions_data):
+        wipe, affine = _parse_transition(item, idx, track_names, errors)
+        if wipe is not None:
+            wipe_transitions.append(wipe)
+        if affine is not None:
+            affine_transitions.append(affine)
+
     if errors:
         raise ValidationErrors(errors)
 
@@ -102,6 +121,8 @@ def load_yaml(path: str | Path) -> ProjectDoc:
         raw_extras=data.get("x_kdenlive_raw"),
         scenes_raw=scenes_data,
         guides=guides,
+        wipe_transitions=wipe_transitions,
+        affine_transitions=affine_transitions,
     )
 
 
@@ -272,6 +293,52 @@ def _parse_guide(item: Any, idx: int, errors: list[str]) -> GuideSpec | None:
         text=str(item.get("text", "Marker")),
         category=int(item.get("category", 0)),
     )
+
+
+def _parse_transition(
+    item: Any, idx: int, track_names: set[str], errors: list[str]
+) -> tuple[WipeTransitionSpec | None, AffineTransitionSpec | None]:
+    """A top-level `transitions:` entry - the low-level, `scenes:`-free way
+    to declare a cross-track `wipe`/`affine` transition directly between
+    two `timeline.tracks:` (by name). This is what `reverse.py` emits for
+    a wipe/affine `<transition>` it recognizes on import: reconstructing
+    the original `scenes:` sugar (clip list, pacing) isn't attempted, but
+    the transition itself is no longer silently lost to `x_kdenlive_raw`
+    either - see ROADMAP.md's v0.4 entry."""
+    ctx = f"transitions[{idx}]"
+    if not isinstance(item, dict) or "type" not in item:
+        errors.append(msg("validation.transition_missing_type", ctx=ctx, item=item))
+        return None, None
+    t_type = item["type"]
+    if t_type not in ("wipe", "affine"):
+        errors.append(msg("validation.transition_type_invalid", ctx=ctx, type=t_type))
+        return None, None
+
+    track_a, track_b = item.get("track_a"), item.get("track_b")
+    if track_a not in track_names or track_b not in track_names:
+        errors.append(msg("validation.transition_unknown_track", ctx=ctx, track_a=track_a, track_b=track_b))
+        return None, None
+
+    if "start" not in item or "end" not in item:
+        errors.append(msg("validation.transition_missing_span", ctx=ctx))
+        return None, None
+    start, end = float(item["start"]), float(item["end"])
+    if end <= start:
+        errors.append(msg("validation.transition_end_not_after_start", ctx=ctx, start=start, end=end))
+        return None, None
+
+    if t_type == "wipe":
+        luma = item.get("luma", "linear_x")
+        if luma not in AVAILABLE_LUMAS:
+            errors.append(msg("validation.transition_luma_invalid", ctx=ctx, luma=luma, valid=list(AVAILABLE_LUMAS)))
+            return None, None
+        return WipeTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, luma=luma), None
+
+    style = item.get("style", "zoom")
+    if style not in AFFINE_STYLES:
+        errors.append(msg("validation.transition_style_invalid", ctx=ctx, style=style, valid=list(AFFINE_STYLES)))
+        return None, None
+    return None, AffineTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, style=style)
 
 
 def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:

@@ -223,6 +223,58 @@ guides:
     assert resolved.guides[0].category == 2
 
 
+def test_transition_unknown_track_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      name: A
+      clips:
+        - {{clip: photo, start: 0, duration: 2}}
+transitions:
+  - {{type: wipe, track_a: A, track_b: DoesNotExist, start: 0, end: 1}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "track" in str(exc.value)
+
+
+def test_transition_resolves_to_frames(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: red
+    path: {assets_dir / "photo.png"}
+  - id: blue
+    path: {assets_dir / "photo2.png"}
+timeline:
+  tracks:
+    - type: video
+      name: A
+      clips:
+        - {{clip: red, start: 0, duration: 2.5}}
+    - type: video
+      name: B
+      clips:
+        - {{clip: blue, start: 1.5, duration: 2.5}}
+transitions:
+  - {{type: affine, track_a: A, track_b: B, start: 1.5, end: 2.5, style: slide}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    assert len(resolved.affine_transitions) == 1
+    at = resolved.affine_transitions[0]
+    assert at.track_a == "A"
+    assert at.track_b == "B"
+    assert at.style == "slide"
+    assert at.start_frame == 38  # 1.5s @ 25fps, round-half-up
+
+
 def test_valid_project_resolves(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

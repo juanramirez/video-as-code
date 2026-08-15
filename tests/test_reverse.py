@@ -136,6 +136,83 @@ guides:
     assert guides[1]["category"] == 3
 
 
+def test_round_trip_preserves_wipe_transition(tmp_path: Path, assets_dir: Path):
+    """A `scenes:` wipe transition (new this cycle) round-trips through a
+    real generated .kdenlive into the low-level `transitions:` YAML key -
+    reconstructing the original `scenes:` sugar (clip list, pacing) isn't
+    attempted, but it's no longer silently lost to `x_kdenlive_raw`
+    either, closing the gap `wipe`'s own ROADMAP entry flagged."""
+    import yaml as pyyaml
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: wipe
+    transition_duration: 1.0
+    luma: diagonal
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    transitions = result.data.get("transitions")
+    assert transitions, f"expected a reconstructed transitions: entry, got raw_items={result.raw_items}"
+    assert len(transitions) == 1
+    t = transitions[0]
+    assert t["type"] == "wipe"
+    assert t["luma"] == "diagonal"
+    track_names = {tr["name"] for tr in result.data["timeline"]["tracks"]}
+    assert t["track_a"] in track_names
+    assert t["track_b"] in track_names
+
+    reimported_path = tmp_path / "reimported.yaml"
+    reimported_path.write_text(pyyaml.dump(result.data), encoding="utf-8")
+    load_and_resolve(reimported_path)  # must not raise: re-buildable, not just plausible-looking
+
+
+def test_round_trip_preserves_affine_transition(tmp_path: Path, assets_dir: Path):
+    """Same as `test_round_trip_preserves_wipe_transition`, for the
+    `affine`-based `zoom` transition (new this cycle)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: affine
+    style: zoom
+    transition_duration: 1.0
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    transitions = result.data.get("transitions")
+    assert transitions, f"expected a reconstructed transitions: entry, got raw_items={result.raw_items}"
+    assert len(transitions) == 1
+    assert transitions[0]["type"] == "affine"
+    assert transitions[0]["style"] == "zoom"
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -

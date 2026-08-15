@@ -117,7 +117,15 @@ from typing import Any, Optional
 from . import probe
 from .i18n import msg
 from .lumas import AVAILABLE_LUMAS
-from .models import AffineTransitionSpec, BinClipSpec, ClipPlacementSpec, ProjectDoc, TrackSpec, WipeTransitionSpec
+from .models import (
+    AFFINE_STYLES,
+    AffineTransitionSpec,
+    BinClipSpec,
+    ClipPlacementSpec,
+    ProjectDoc,
+    TrackSpec,
+    WipeTransitionSpec,
+)
 
 # Seconds per clip based on the scene's "pacing", if no `duration` is given.
 # image: fixed duration. video_cap: upper bound (if the source clip is
@@ -139,7 +147,6 @@ DEFAULT_LUMA = "linear_x"
 # understood - see BACKLOG.md. "zoom" (rect scale) and "slide" (rect
 # offset) don't need rotation and are verified working.
 DEFAULT_AFFINE_STYLE = "zoom"
-AFFINE_STYLES = ("zoom", "slide")
 SCENE_TRACK_NAMES = (msg("scenes.track_a"), msg("scenes.track_b"))
 # A separate alternating pair for scenes whose clips are *all* audio: audio
 # tracks get volume fade filters (not brightness alpha), and the a_track=0

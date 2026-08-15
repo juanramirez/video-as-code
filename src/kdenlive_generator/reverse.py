@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from . import probe, titles
+from . import lumas, probe, titles, xmlgen
 from .i18n import msg
 from .timecode import FrameRate, resolve_fps
 
@@ -348,29 +348,79 @@ class Importer:
             cursor += out_frame - in_frame + 1
         return clips
 
-    def check_unrecognized_transitions(self, sequence: ET.Element) -> None:
+    def _match_affine_style(self, rect: str, length_frames: int) -> Optional[str]:
+        for style, template in xmlgen._AFFINE_STYLE_RECT.items():
+            if rect == template.format(first=0, last=length_frames):
+                return style
+        return None
+
+    def _recognize_cross_track_transition(
+        self, t: ET.Element, props: dict[str, str], track_names_by_position: dict[int, str]
+    ) -> Optional[dict]:
+        try:
+            track_a = track_names_by_position[int(props["a_track"])]
+            track_b = track_names_by_position[int(props["b_track"])]
+        except (KeyError, ValueError):
+            return None
+
+        start_frame = _parse_frame_value(t.get("in"), self.fps)
+        end_frame = _parse_frame_value(t.get("out"), self.fps)
+        start_s = round(self.fps.frames_to_seconds(start_frame), 3)
+        end_s = round(self.fps.frames_to_seconds(end_frame + 1), 3)
+        service = props.get("mlt_service")
+
+        if service == "luma":
+            luma_name = Path(props.get("resource", "")).stem
+            if luma_name not in lumas.AVAILABLE_LUMAS:
+                return None
+            return {"type": "wipe", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "luma": luma_name}
+
+        if service == "affine":
+            style = self._match_affine_style(props.get("rect", ""), end_frame - start_frame)
+            if style is None:
+                return None
+            return {"type": "affine", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "style": style}
+
+        return None
+
+    def convert_cross_track_transitions(
+        self, sequence: ET.Element, track_names_by_position: dict[int, str]
+    ) -> list[dict]:
         """The compositing transitions this generator itself always adds
         (qtblend/mix against the black background, `a_track="0"`) are
         harmless to not reconstruct here - rebuilding from the tracks/
         clips this importer *does* recognize regenerates them identically.
-        But any other sequence-level transition (non-zero `a_track`, e.g.
-        a `wipe`'s `luma` transition between two content tracks) carries
-        real visual information with no way to represent it in the
-        low-level YAML model (there's no cross-track-transition concept
-        below `scenes:`, and `scenes:` itself is never reconstructed on
-        import - see `test_scenes_dissolve_produces_a_real_crossfade`'s
-        sibling round-trip check). Flag it instead of silently dropping
-        it: rebuilding without this would silently lose the transition
-        entirely, not just the fact that it *was* a transition."""
+        Any other sequence-level transition (non-zero `a_track`) carries
+        real visual information; a `wipe`'s `luma` transition or an
+        `affine` transition between two content tracks *this generator
+        itself could have produced* is translated back into a top-level
+        `transitions:` entry (the low-level, `scenes:`-free way to
+        declare one - schema.py's `_parse_transition`) instead of being
+        silently lost. Reconstructing the original `scenes:` sugar (clip
+        list, pacing) isn't attempted - only the transition itself,
+        referencing the already-recognized track names. Anything that
+        doesn't match what this generator itself would produce (unknown
+        service, an out-of-range track position, a luma resource that
+        isn't one of this project's own lumas, an affine `rect` that
+        doesn't match the zoom/slide keyframe shape xmlgen.py emits)
+        falls back to the previous behavior: flagged into `raw_items`
+        instead of guessed."""
+        transitions_yaml: list[dict] = []
         for t in sequence.findall("transition"):
             props = _props(t)
-            if props.get("a_track", "0") != "0":
+            if props.get("a_track", "0") == "0":
+                continue
+            recognized = self._recognize_cross_track_transition(t, props, track_names_by_position)
+            if recognized is not None:
+                transitions_yaml.append(recognized)
+            else:
                 self.raw_items.append(
                     RawItem(
                         msg("reverse.cross_track_transition_unsupported", service=props.get("mlt_service", "?")),
                         _pretty(t),
                     )
                 )
+        return transitions_yaml
 
     def parse_guides(self, sequence: ET.Element) -> list[dict]:
         """`kdenlive:sequenceproperties.guides` is a JSON array of
@@ -407,13 +457,13 @@ class Importer:
         sequence = self.find_main_sequence()
         for extra in self.other_sequences(sequence):
             self.raw_items.append(RawItem(msg("reverse.extra_sequence_not_imported"), _pretty(extra)))
-        self.check_unrecognized_transitions(sequence)
         guides = self.parse_guides(sequence)
 
         title = _props(sequence).get("kdenlive:clipname", self.path.stem)
         track_els = [t for t in sequence.findall("track") if t.get("producer") not in self.black_ids]
 
         tracks_yaml = []
+        track_names_by_position: dict[int, str] = {}
         for i, track_el in enumerate(track_els):
             ctx = f"timeline.tracks[{i}]"
             try:
@@ -423,7 +473,11 @@ class Importer:
                 self.raw_items.append(RawItem(msg("reverse.track_not_imported", ctx=ctx), _pretty(track_el)))
                 continue
             clips = self.convert_playlist(playlist, kind, ctx)
-            tracks_yaml.append({"type": kind, "name": f"{'V' if kind == 'video' else 'A'}{i + 1}", "clips": clips})
+            name = f"{'V' if kind == 'video' else 'A'}{i + 1}"
+            tracks_yaml.append({"type": kind, "name": name, "clips": clips})
+            track_names_by_position[i + 1] = name
+
+        transitions_yaml = self.convert_cross_track_transitions(sequence, track_names_by_position)
 
         data = {
             "project": {
@@ -439,6 +493,8 @@ class Importer:
         }
         if guides:
             data["guides"] = guides
+        if transitions_yaml:
+            data["transitions"] = transitions_yaml
         if self.raw_items:
             data["x_kdenlive_raw"] = [{"where": r.where, "xml": r.xml} for r in self.raw_items]
 

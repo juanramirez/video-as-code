@@ -32,6 +32,16 @@ code itself already marks the boundary.
   back as `pan`-less today - same shape as the mute/speed recognition
   work already done, just at the track level instead of the entry
   level.
+- **`iris`/`flip` aren't recognized on import**: v0.4's cross-track-
+  transition recognition (`reverse.py`'s `convert_cross_track_transitions`)
+  only looks at `<transition>` elements - it can't see `iris`/`flip`
+  at all, since both are single-clip filters (`frei0r.alphaspot`/
+  `frei0r.3dflippo`) on a playlist entry, the same shape `dissolve`'s
+  fade is. `convert_clip_filter` (the function that *does* recognize
+  per-entry filters - fades, mute, qtblend) doesn't know about either
+  service yet, so an `iris`/`flip` clip still imports (position/timing
+  preserved) but the reveal itself falls to `x_kdenlive_raw` per-filter,
+  the same way an unrecognized qtblend keyframe animation already does.
 
 ## Capabilities not yet touched at all
 
