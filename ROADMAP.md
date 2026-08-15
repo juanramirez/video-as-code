@@ -552,3 +552,77 @@ more small filter capability.
   same "plain values round-trip freely" bar `chroma_key:` uses - except
   the fixed centered/full-frame layout this generator always writes has
   to match exactly, since `geometry:` itself isn't a settable field.
+
+## v0.6 — scoped (2026-08-16)
+
+Two blocks: a headline of three mechanisms already verified by real
+render during backlog research (moved here from BACKLOG.md, not
+re-investigated from scratch - same pattern as v0.4's `delaygrab`/
+`cairogradient` write-up), and a second block of two kdenlive-native
+effects that still need their own verification pass before
+implementation, same discipline that dropped `affine`'s `spin`/`cube`
+(v0.3), `broken-tv` (v0.5), and `avfilter.chromakey`/`rgbashift`
+(v0.5) after they failed it.
+
+- **Ken Burns pan+zoom, single-clip filter** — headline. `affine` used
+  as a lone filter (not a transition, unlike `zoom`/`slide`) with `rect`
+  keyframed from a full-frame rect to a smaller/offset one, animating a
+  smooth pan+zoom over the clip's duration. Already verified by real
+  render and cross-checked directly against kdenlive's own effect
+  definition (`~/dev/kdenlive/data/effects/pan_zoom.xml`): kdenlive's
+  real "Position and Zoom" effect is literally the same `tag="affine"`
+  mechanism with an `animatedrect` parameter, not modeled by analogy.
+  New per-clip field(s) on `timeline.tracks[].clips[]` (and as a
+  `scenes:`-clip extra) to specify start/end rect - shape still to be
+  decided during implementation (e.g. `ken_burns: {from: ..., to: ...}`
+  vs. reusing `position:`/`size:` with a second keyframe), since this
+  is the first filter in the schema that's genuinely two keyframes of
+  the same property rather than one static value.
+- **New transition: `delaygrab`** — headline. `frei0r.delaygrab`
+  ("delayed frame blitting on a time bitmap") already verified by real
+  render: against a moving test source it produces a genuine circular
+  vignette mask plus a visible temporal ghosting/trailing streak behind
+  moving elements (a diagonal color bar left a clear smeared trail; an
+  on-screen timestamp overlay dragged a comet-like tail). Exact
+  transition shape (single-clip filter like `iris`/`flip`/`glitch`, or
+  a genuine two-source `<transition>` like `wipe`/`affine`) still to be
+  confirmed against the generator's own output during implementation,
+  not assumed from the standalone probe render.
+- **New transition: `cairogradient`** — headline. `frei0r.cairogradient`
+  already verified by real render: an orange-to-transparent linear
+  gradient (start/end color+opacity+position params) produces a genuine
+  diagonal color-wash tint across the frame, visibly warmer on one
+  side - a light-leak/gradient-overlay effect. Same caveat as
+  `delaygrab` on exact mechanism shape, to be confirmed during
+  implementation.
+- **`pillar_echo` focus-pull effect** — second block, **needs
+  verification before implementation**. Kdenlive's own real effect
+  (`~/dev/kdenlive/data/effects/pillar_echo.xml`, credited to
+  Meltytech itself - MLT-native, not frei0r), confirmed present via
+  `melt -query filters` but not yet rendered: keeps a rectangular area
+  of interest sharp while blurring everything outside it. If it doesn't
+  hold up under a real render (no visible effect, or the effect doesn't
+  match its documented behavior), drop it the same way `broken-tv`/
+  `spin`/`cube` were dropped, and note that honestly here rather than
+  shipping it unverified.
+- **`dance` audio-reactive visualizer** — second block, **needs
+  verification before implementation**. Kdenlive's own real effect
+  (`~/dev/kdenlive/data/effects/dance.xml`), confirmed present via
+  `melt -query filters` but not yet rendered: moves/zooms the image
+  proportional to the audio spectrum's magnitude (params: frequency
+  band, level threshold, oscillation rate, initial zoom). Same
+  verify-first bar as `pillar_echo` above - drop and document if it
+  doesn't hold up.
+
+**Explicitly deferred, not in v0.6**: speed ramps/`timeremap` (mechanism
+confirmed real in BACKLOG.md but the exact working XML recipe isn't
+nailed down yet - needs its own verification pass, not a fit for a
+version whose headline is already three separate new mechanisms);
+`mask_apply`/`mask_start` family and the `heart`/`bowtie` luma shapes
+(leads/sketches only, unverified); subtitles, proxy generation, generic
+color grading (`lift_gamma_gain`), richer title clips (large standalone
+lifts with no natural pairing here); freeze-frame, stabilization,
+motion tracking, LUT-based grading (`avfilter.lut3d`), audio ducking
+(reserved for a later "kdenlive-native/competitor-parity effects"
+theme, together with whichever of `pillar_echo`/`dance` doesn't ship
+here).
