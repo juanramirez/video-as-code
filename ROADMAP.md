@@ -325,7 +325,7 @@ feature.
   MLT docs say but easy to violate by accident since nothing rejects the
   mix.
 
-## v0.4 — scoped (2026-08-15)
+## v0.4 — shipped (2026-08-15)
 
 Four groups: two new transitions as the headline (both already verified
 by real render during backlog research, moved here from BACKLOG.md

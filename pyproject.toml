@@ -1,6 +1,6 @@
 [project]
 name = "kdenlive-generator"
-version = "0.3.0"
+version = "0.4.0"
 description = "Programmatic kdenlive project generator from a declarative YAML description, meant for versioning videos with a VCS (like Git)."
 readme = "README.md"
 requires-python = ">=3.9"
