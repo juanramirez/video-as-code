@@ -18,7 +18,7 @@ backlog.
 - i18n message catalog for user-facing output (`en`/`es`, via `KDGEN_LANG`).
 - Example project with tiny committed assets (`examples/simple/`).
 
-## v0.2 — scoped (2026-08-14)
+## v0.2 — shipped (2026-08-15)
 
 - **Mute** — **implemented** (2026-08-15): `mute: true` on a clip placement
   (video or audio) silences its audio track. Same `mlt_service="volume"`
@@ -206,3 +206,52 @@ backlog.
       Emitting the wipe transitions before the qtblend ones in
       `xmlgen.py` fixed it - root cause not fully understood, but the fix
       was verified empirically and is documented as such in code.
+
+## v0.3 — scoped (2026-08-15)
+
+Three groups: quick fixes (low risk, bundled housekeeping), symmetry
+closes (mirror a pattern a v0.2 feature already shipped), and one new
+transition mechanism as the headline feature.
+
+- **Quick fixes**:
+  - `font_size`/`colorspace` range validation in `schema.py` (currently
+    unchecked, unlike the sibling `speed_not_positive` check).
+  - PiP `position`/`size` bounds-checking against the project canvas in
+    `schema.py` (currently only checks shape, not that the rect stays
+    within `width`/`height`).
+  - `cli.py` output-write errors (`xmlgen.write`, `output.write_text`)
+    routed through the same `KdgenError`/`msg()` path every other
+    failure mode already uses, instead of a raw traceback.
+  - `--lang` CLI flag as an alternative to the `KDGEN_LANG` environment
+    variable.
+  - `pyproject.toml` version bump to match what's actually shipped.
+  - `examples/` updated to demonstrate `mute:`, `speed:`, `type: title`,
+    and a `scenes:` block with `dissolve`/`wipe` — currently only shows
+    v0.1-era fades and plain placements.
+- **Reverse speed (negative timewarp)**: `speed:` accepts negative
+  values on the generate side; `reverse.py` recognizes negative
+  `warp_speed` on import instead of falling back to `x_kdenlive_raw`.
+  Mirrors the forward-speed work already shipped in v0.2.
+- **Audio pan/balance**: makes the already-emitted `panner` filter a
+  real per-track/per-clip control instead of the hardcoded
+  `disable=1` placeholder. Same shape as `mute` — one already-plumbed
+  filter, no new mechanism.
+- **`scenes:` ergonomics**:
+  - Exposes `mute:`, `speed:`, and PiP `position:`/`size:` at the
+    scene-clip level, so a user doesn't have to drop out of `scenes:`
+    down to the low-level `timeline.tracks` model to reach fields that
+    already work there.
+  - Fixes `scenes:` transitions being hardcoded to a video-typed track
+    regardless of whether the scene's clips are audio — an audio-only
+    scene with `transition: dissolve` should produce a working audio
+    crossfade (MLT's `mix` transition), not force audio clips onto a
+    video track.
+- **New transition: `affine`-based zoom/spin/cube/push-slide**: a third
+  transition engine alongside `dissolve`'s alpha fade and `wipe`'s luma
+  map, built on MLT's own `affine` transition (Meltytech, LGPLv2.1 —
+  already shipped with MLT, confirmed via `melt -query
+  transition=affine` on this machine, no new dependency). Animates
+  keyframed `rect`/`rotate_x,y,z`/`scale_x,y` across the overlap window
+  to produce the zoom-in, spin, 3D-cube, and push/slide transitions
+  competitor NLEs ship. To be verified with a real render the same way
+  `wipe` was — spatially/temporally, not just structurally.
