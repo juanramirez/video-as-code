@@ -12,6 +12,9 @@ bin:
     path: assets/clip.mp4
   - id: tone
     path: assets/tone.mp3
+  - id: caption
+    type: title
+    text: "kdenlive-generator"
 
 timeline:
   tracks:
@@ -21,4 +24,8 @@ timeline:
     - type: video
       clips:
         - {clip: photo, start: 0, duration: 1.5, fade_in: 0.5}
-        - {clip: clip, start: 1.5, duration: 2}
+        # speed: plays clip.mp4 at 1.5x - `duration:` below is on the
+        # already-warped (sped-up) timeline (2s / 1.5 = 1.33s), not the
+        # source file's.
+        - {clip: clip, start: 1.5, duration: 1.3, speed: 1.5, mute: true}
+        - {clip: caption, start: 2.85, duration: 1.5, fade_in: 0.3}

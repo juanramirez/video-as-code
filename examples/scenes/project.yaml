@@ -1,0 +1,36 @@
+project:
+  id: scenes_demo
+  title: "Scenes demo"
+  fps: 25
+  width: 160
+  height: 90
+
+# `scenes:` is the high-level compiler: a scene is just a list of clips
+# that play one after another, with duration computed automatically
+# (`pacing`, or an explicit `duration` split across the clips) - no need
+# to set `start:`/`duration:` by hand the way `timeline.tracks:` requires
+# (see examples/simple/ for that lower-level form). Paths are
+# auto-registered in the bin; no `bin:` section needed here.
+scenes:
+  - scene: cut
+    clips:
+      - assets/red.png
+      - assets/blue.png
+    duration: 3.0
+
+  - scene: crossfade
+    transition: dissolve
+    transition_duration: 0.5
+    clips:
+      - assets/red.png
+      - assets/blue.png
+    duration: 3.0
+
+  - scene: wipe_reveal
+    transition: wipe
+    transition_duration: 0.5
+    luma: diagonal
+    clips:
+      - assets/red.png
+      - assets/blue.png
+    duration: 3.0

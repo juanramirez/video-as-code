@@ -13,6 +13,7 @@ dist/
 # Don't version these unless you want to freeze a specific copy.
 *.kdenlive
 !examples/**/*.kdenlive.expected
+.kdgen_titles/
 
 # Caches created by kdenlive/melt when opening a project
 *.kdenlive.tmp

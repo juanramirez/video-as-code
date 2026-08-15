@@ -46,8 +46,11 @@ discarded: it's kept as-is under `x_kdenlive_raw:` in the output YAML so
 you can decide by hand what to do with it.
 
 See `examples/simple/` for a minimal working project (tiny generated
-assets, one audio + one video track, fades and trims):
-`kdgen build examples/simple/project.yaml`.
+assets, one audio + one video track, fades, trims, a speed change, mute,
+and a title clip): `kdgen build examples/simple/project.yaml`. See
+`examples/scenes/` for the high-level `scenes:` compiler (a cut, a
+`dissolve`, and a `wipe`, all from the same two tiny images):
+`kdgen build examples/scenes/project.yaml`.
 
 ### `kdgen reconstruct`: recovering a YAML from a rendered video
 
