@@ -226,6 +226,70 @@ timeline:
     assert track["locked"] is True
 
 
+def test_round_trip_preserves_audio_muted_track(tmp_path: Path, assets_dir: Path):
+    """`audio_muted:` on a track (new this cycle) round-trips through a
+    real generated .kdenlive: `hide`'s bit 2 (`TrackModel::isMute`) -
+    distinct from `hidden:` (bit 1) and from the per-clip `mute:`
+    already supported."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      audio_muted: true
+      clips:
+        - {{clip: tone, start: 0, out: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    track = result.data["timeline"]["tracks"][0]
+    assert track["audio_muted"] is True
+    assert "hidden" not in track
+
+
+def test_round_trip_preserves_pan(tmp_path: Path, assets_dir: Path):
+    """`pan:` on an audio track (v0.3) round-trips through a real
+    generated .kdenlive (new this cycle) - reverse.py previously only
+    read per-*entry* filters, never a track tractor's own `panner`
+    filter."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      pan: -0.5
+      clips:
+        - {{clip: tone, start: 0, out: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    assert result.data["timeline"]["tracks"][0]["pan"] == -0.5
+
+
 def test_round_trip_preserves_guides(tmp_path: Path, assets_dir: Path):
     """`guides:` (new this cycle) round-trips through a real generated
     .kdenlive: the JSON array format (`{"pos", "comment", "type"}`) was

@@ -126,6 +126,42 @@ timeline:
     assert r < 10 and g < 10 and b < 10, f"expected a hidden track to render black, got {(r, g, b)}"
 
 
+def test_melt_mutes_an_audio_muted_track(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `audio_muted:` on a track (new this cycle,
+    v0.5): the whole track should render silent, same as `hidden:`
+    genuinely blacks out a video track's render - not just an editor-UI
+    toggle. Distinct mechanism from the per-clip `mute:` filter already
+    supported (this is `hide`'s bit 2 on the track's own tractor, not a
+    `volume`/`gain=0` filter on the entry)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      audio_muted: true
+      clips:
+        - {{clip: tone, start: 0, out: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.wav"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    muted = _mean_volume_db(rendered, start=1.0, duration=1.0)
+    assert muted < -90, f"expected near-silence with audio_muted: true, got {muted}dB"
+
+
 def test_melt_loads_a_project_with_notes(tmp_path: Path, assets_dir: Path, melt):
     """`notes:` on the project (new this cycle) has no visual/audible
     effect - melt just needs to accept the real

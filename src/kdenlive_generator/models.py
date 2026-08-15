@@ -67,6 +67,7 @@ class TrackSpec:
     pan: Optional[float] = None  # audio only: -1.0 (full left) .. 1.0 (full right)
     hidden: bool = False
     locked: bool = False
+    audio_muted: bool = False  # whole-track audio mute (hide's bit 2) - distinct from per-clip mute:
 
 
 @dataclass
@@ -181,6 +182,7 @@ class ResolvedTrack:
     pan: Optional[float] = None
     hidden: bool = False
     locked: bool = False
+    audio_muted: bool = False
 
     @property
     def end_frame(self) -> int:

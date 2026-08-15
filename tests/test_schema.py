@@ -201,6 +201,43 @@ timeline:
     assert resolved.tracks[0].locked is True
 
 
+def test_audio_muted_must_be_boolean(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      audio_muted: "yes"
+      clips:
+        - {{clip: tone, start: 0, out: 1}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "audio_muted" in str(exc.value)
+
+
+def test_audio_muted_resolves(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      audio_muted: true
+      clips:
+        - {{clip: tone, start: 0, out: 1}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    assert resolved.tracks[0].audio_muted is True
+
+
 def test_pan_on_video_track_rejected(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

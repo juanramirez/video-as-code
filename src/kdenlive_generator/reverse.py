@@ -46,6 +46,8 @@ class TrackMeta:
     name: Optional[str] = None
     hidden: bool = False
     locked: bool = False
+    audio_muted: bool = False
+    pan: Optional[float] = None
 
 
 @dataclass
@@ -268,10 +270,21 @@ class Importer:
                 hide_bits = int(track_props.get("hide", "0"))
             except ValueError:
                 hide_bits = 0
+            pan = None
+            for filt in ref.findall("filter"):
+                fprops = _props(filt)
+                if fprops.get("mlt_service") == "panner" and fprops.get("disable", "1") == "0":
+                    try:
+                        pan = round(float(fprops.get("start", "0.5")) * 2 - 1, 3)
+                    except ValueError:
+                        pan = None
+                    break
             meta = TrackMeta(
                 name=track_props.get("kdenlive:track_name") or None,
                 hidden=bool(hide_bits & 1),
                 locked=track_props.get("kdenlive:locked_track", "0") not in ("0", "", None),
+                audio_muted=bool(hide_bits & 2),
+                pan=pan,
             )
             sub_tracks = ref.findall("track")
             candidates = []
@@ -540,6 +553,10 @@ class Importer:
                 track_yaml["hidden"] = True
             if meta.locked:
                 track_yaml["locked"] = True
+            if meta.audio_muted:
+                track_yaml["audio_muted"] = True
+            if meta.pan is not None:
+                track_yaml["pan"] = meta.pan
             track_yaml["clips"] = clips
             tracks_yaml.append(track_yaml)
             track_names_by_position[i + 1] = name

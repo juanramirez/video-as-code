@@ -250,7 +250,14 @@ def _parse_track(item: Any, idx: int, errors: list[str]) -> TrackSpec | None:
         errors.append(msg("validation.locked_invalid", idx=idx, locked=locked))
         locked = False
 
-    return TrackSpec(type=track_type, name=name, clips=clips, pan=pan, hidden=hidden, locked=locked)
+    audio_muted = item.get("audio_muted", False)
+    if not isinstance(audio_muted, bool):
+        errors.append(msg("validation.audio_muted_invalid", idx=idx, audio_muted=audio_muted))
+        audio_muted = False
+
+    return TrackSpec(
+        type=track_type, name=name, clips=clips, pan=pan, hidden=hidden, locked=locked, audio_muted=audio_muted
+    )
 
 
 def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list[str]) -> ClipPlacementSpec | None:
@@ -549,6 +556,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 pan=track.pan,
                 hidden=track.hidden,
                 locked=track.locked,
+                audio_muted=track.audio_muted,
             )
         )
 

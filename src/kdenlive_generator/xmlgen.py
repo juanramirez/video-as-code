@@ -382,7 +382,7 @@ def _build_track(
     # src/timeline2/model/trackmodel.cpp: `m_track->set("kdenlive:track_name",
     # ...)` on the track's own tractor) - not modeled by analogy.
     _prop(track_tractor, "kdenlive:track_name", track.name)
-    if track.hidden or track.locked:
+    if track.hidden or track.audio_muted or track.locked:
         # `hide` here is the track's own tractor bitmask (bit 1 = video
         # hidden, bit 2 = audio muted - TrackModel::isHidden/isMute in
         # kdenlive's source), not the `hide="video"/"audio"` attribute on
@@ -391,10 +391,11 @@ def _build_track(
         # separate, unrelated mechanism this generator already emits
         # unconditionally). Only written when true - a real kdenlive
         # project doesn't write either property until a user actually
-        # toggles visibility/lock, so omitting them for the default
-        # (visible, unlocked) case matches that.
-        if track.hidden:
-            _prop(track_tractor, "hide", 1)
+        # toggles visibility/mute/lock, so omitting them for the default
+        # (visible, unmuted, unlocked) case matches that.
+        hide_bits = (1 if track.hidden else 0) | (2 if track.audio_muted else 0)
+        if hide_bits:
+            _prop(track_tractor, "hide", hide_bits)
         if track.locked:
             _prop(track_tractor, "kdenlive:locked_track", 1)
     _prop(track_tractor, "kdenlive:trackheight", 69)
