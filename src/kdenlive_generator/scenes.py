@@ -51,6 +51,33 @@ visibility.
 (plain gradient/angle/distance math, not copies of kdenlive's own
 GPL-licensed luma maps - see `lumas.py`), so they're a similar but not
 identical set to what kdenlive itself ships.
+
+## Audio-only scenes
+
+If every clip in a scene is audio, the compiler routes it to a *separate*
+alternating track pair ("Scenes A (audio)" / "Scenes B (audio)") typed
+`audio` instead of `video`, so fade_in/fade_out become volume fades (not
+brightness alpha) and the overlap is summed by the a_track=0 `mix`
+transition every audio track already gets (xmlgen.py) - same alternating-
+track-overlap shape as the video case, but *not* the same fade
+assignment: a video dissolve only needs the "top" clip in each pair to
+fade (alpha compositing hides the bottom layer wherever the top is
+opaque), while an audio dissolve is a genuine sum, so *both* the outgoing
+and incoming clip need complementary fades or the un-faded one plays at
+full volume and stops dead at its own boundary - an audible glitch, not a
+crossfade (verified with a real render, two different tones one fading
+into the other:
+`tests/test_melt_validation.py::test_scenes_audio_dissolve_produces_a_real_crossfade`).
+`transition: wipe` has no audio equivalent (a luma map decides pixels,
+not samples) and is rejected for an audio-only scene.
+
+## Per-clip overrides (`mute`/`speed`/`position`/`size`)
+
+A scene clip entry can be a dict instead of a bare path/`{clip: id}` -
+`{clip: id, mute: true}` or `{path: '...', speed: 2.0}` - carrying the
+same per-placement fields `timeline.tracks[].clips[]` already supports at
+the low-level model, so reaching them doesn't force dropping out of
+`scenes:` down to hand-written tracks (see `extract_clip_extras`).
 """
 from __future__ import annotations
 
@@ -73,6 +100,14 @@ PACING_PRESETS = {
 DEFAULT_TRANSITION_DURATION = 1.0
 DEFAULT_LUMA = "linear_x"
 SCENE_TRACK_NAMES = (msg("scenes.track_a"), msg("scenes.track_b"))
+# A separate alternating pair for scenes whose clips are *all* audio: audio
+# tracks get volume fade filters (not brightness alpha), and the a_track=0
+# `mix` transition every audio track already gets (see xmlgen.py) sums
+# them together - so a "dissolve" between two audio clips just falls out
+# of overlapping them on two tracks, no separate audio transition kind
+# needed. `wipe` has no audio equivalent (a luma map decides pixels, not
+# samples) - rejected instead, see compile_scenes.
+SCENE_TRACK_NAMES_AUDIO = (msg("scenes.track_a_audio"), msg("scenes.track_b_audio"))
 
 
 def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> ProjectDoc:
@@ -85,24 +120,29 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
     new_bin: list[BinClipSpec] = list(doc.bin)
 
     def register_clip(raw: Any, ctx: str, idx: int) -> Optional[str]:
-        """Accepts a path ('beach_01.jpeg') or {'clip': id, ...} referencing
-        an id already defined in `bin:`. Paths are auto-registered in the bin
-        (id = filename without extension, disambiguated if needed)."""
+        """Accepts a path ('beach_01.jpeg'), {'clip': id, ...} referencing an
+        id already defined in `bin:`, or {'path': '...', ...} - the dict
+        forms may carry the same per-clip extras `_extract_clip_extras`
+        reads (mute/speed/position/size/...). Bare paths (string or
+        'path:') are auto-registered in the bin (id = filename without
+        extension, disambiguated if needed)."""
         if isinstance(raw, dict) and "clip" in raw:
             clip_id = str(raw["clip"])
             if clip_id not in bin_by_id:
                 errors.append(msg("validation.scene_clip_undefined", ctx=ctx, idx=idx, clip_id=clip_id))
                 return None
             return clip_id
-        if not isinstance(raw, str):
+
+        path_str = raw["path"] if isinstance(raw, dict) and "path" in raw else raw
+        if not isinstance(path_str, str):
             errors.append(msg("validation.scene_clip_invalid", ctx=ctx, idx=idx, raw=raw))
             return None
 
-        candidate = (source_dir / raw).resolve() if not Path(raw).is_absolute() else Path(raw)
+        candidate = (source_dir / path_str).resolve() if not Path(path_str).is_absolute() else Path(path_str)
         if candidate in bin_by_path:
             return bin_by_path[candidate].id
 
-        clip_id = base_id = Path(raw).stem
+        clip_id = base_id = Path(path_str).stem
         n = 2
         while clip_id in bin_by_id:
             clip_id = f"{base_id}_{n}"
@@ -113,7 +153,51 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         bin_by_path[candidate] = spec
         return clip_id
 
+    def extract_clip_extras(raw: Any, ctx: str, idx: int) -> dict:
+        """Per-clip overrides carried by the dict forms of a scene clip
+        entry ({'clip': id, mute: true, ...} / {'path': ..., speed: 2.0}) -
+        the same fields `timeline.tracks[].clips[]` already supports at the
+        low-level, so a scene clip doesn't force dropping out of `scenes:`
+        to reach them."""
+        if not isinstance(raw, dict):
+            return {}
+        extras: dict = {}
+        entry_ctx = f"{ctx}.clips[{idx}]"
+
+        mute = raw.get("mute", False)
+        if not isinstance(mute, bool):
+            errors.append(msg("validation.mute_invalid", ctx=entry_ctx, mute=mute))
+        else:
+            extras["mute"] = mute
+
+        if raw.get("speed") is not None:
+            speed = float(raw["speed"])
+            if speed == 0:
+                errors.append(msg("validation.speed_zero", ctx=entry_ctx))
+            else:
+                extras["speed"] = speed
+                extras["preserve_pitch"] = bool(raw.get("preserve_pitch", False))
+
+        def pair(key: str) -> Optional[tuple[float, float]]:
+            val = raw.get(key)
+            if val is None:
+                return None
+            if not (isinstance(val, (list, tuple)) and len(val) == 2):
+                errors.append(msg("validation.pair_invalid", ctx=entry_ctx, key=key))
+                return None
+            return (float(val[0]), float(val[1]))
+
+        position = pair("position")
+        if position is not None:
+            extras["position"] = position
+        size = pair("size")
+        if size is not None:
+            extras["size"] = size
+
+        return extras
+
     track_clips: tuple[list[ClipPlacementSpec], list[ClipPlacementSpec]] = ([], [])
+    track_clips_audio: tuple[list[ClipPlacementSpec], list[ClipPlacementSpec]] = ([], [])
     wipe_transitions: list[WipeTransitionSpec] = []
     cursor = 0.0  # global second at which the scenes block starts
 
@@ -149,6 +233,15 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         if any(c is None for c in clip_ids):
             continue
         n = len(clip_ids)
+        clip_extras = [extract_clip_extras(raw, ctx, i) for i, raw in enumerate(raw_clips)]
+        clip_kinds = [bin_by_id[cid].type or probe.guess_type(bin_by_id[cid].path) for cid in clip_ids]
+
+        is_audio_scene = all(k == "audio" for k in clip_kinds)
+        if transition == "wipe" and is_audio_scene:
+            errors.append(msg("validation.scene_wipe_needs_video", ctx=ctx))
+            continue
+        active_track_clips = track_clips_audio if is_audio_scene else track_clips
+        active_track_names = SCENE_TRACK_NAMES_AUDIO if is_audio_scene else SCENE_TRACK_NAMES
 
         explicit_duration = scene.get("duration")
         if explicit_duration is not None:
@@ -157,9 +250,8 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         else:
             lengths = []
             probe_failed = False
-            for clip_id in clip_ids:
+            for i, (clip_id, kind) in enumerate(zip(clip_ids, clip_kinds)):
                 spec = bin_by_id[clip_id]
-                kind = spec.type or probe.guess_type(spec.path)
                 if kind == "image":
                     lengths.append(preset["image"])
                     continue
@@ -169,17 +261,39 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                     errors.append(f"{ctx}: {exc}")
                     probe_failed = True
                     continue
-                lengths.append(min(source_s, preset["video_cap"]))
+                # `speed` warps a clip's *usable* duration (schema.py
+                # applies the same abs(speed) division) - the auto-pacing
+                # cap has to compare against that warped length, not the
+                # unwarped source, or a sped-up clip gets an `out:` beyond
+                # what it actually has left on the warped timeline.
+                speed = clip_extras[i].get("speed")
+                warped_s = source_s / abs(speed) if speed else source_s
+                lengths.append(min(warped_s, preset["video_cap"]))
             if probe_failed:
                 continue
 
         start = cursor
         for i, (clip_id, length) in enumerate(zip(clip_ids, lengths)):
-            # With dissolve, only the "top" clip in each transition carries
-            # the fade: it alternates, so it's exactly the odd indices.
-            is_top = transition == "dissolve" and i % 2 == 1
-            fade_in = overlap if (is_top and i > 0) else None
-            fade_out = overlap if (is_top and i < n - 1) else None
+            if is_audio_scene and transition == "dissolve":
+                # MLT's audio `mix` transition *sums* both tracks (unlike
+                # qtblend's alpha compositing, which hides the bottom
+                # layer wherever the top is opaque) - so a real audio
+                # crossfade needs *both* the outgoing and incoming clip to
+                # fade complementarily, not just the "top" one. Without
+                # this, the un-faded clip plays at full volume and then
+                # stops dead at its own boundary - an audible glitch, not
+                # a crossfade (caught by
+                # test_scenes_audio_dissolve_produces_a_real_crossfade).
+                fade_in = overlap if i > 0 else None
+                fade_out = overlap if i < n - 1 else None
+            else:
+                # With a video dissolve, only the "top" clip in each
+                # transition carries the fade: it alternates, so it's
+                # exactly the odd indices.
+                is_top = transition == "dissolve" and i % 2 == 1
+                fade_in = overlap if (is_top and i > 0) else None
+                fade_out = overlap if (is_top and i < n - 1) else None
+            extras = clip_extras[i]
             placement = ClipPlacementSpec(
                 clip=clip_id,
                 start=start,
@@ -187,8 +301,13 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                 duration=length,
                 fade_in=fade_in,
                 fade_out=fade_out,
+                mute=extras.get("mute", False),
+                speed=extras.get("speed"),
+                preserve_pitch=extras.get("preserve_pitch", False),
+                position=extras.get("position"),
+                size=extras.get("size"),
             )
-            track_clips[i % 2].append(placement)
+            active_track_clips[i % 2].append(placement)
             # Wipe doesn't touch either clip's alpha (both stay fully
             # opaque) - the reveal comes entirely from a real two-source
             # MLT transition xmlgen.py adds between the alternating
@@ -196,8 +315,8 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             if transition == "wipe" and i > 0:
                 wipe_transitions.append(
                     WipeTransitionSpec(
-                        track_a=SCENE_TRACK_NAMES[(i - 1) % 2],
-                        track_b=SCENE_TRACK_NAMES[i % 2],
+                        track_a=active_track_names[(i - 1) % 2],
+                        track_b=active_track_names[i % 2],
                         start=start,
                         end=start + overlap,
                         luma=luma,
@@ -214,6 +333,9 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
     for name, clips in zip(SCENE_TRACK_NAMES, track_clips):
         if clips:
             tracks.append(TrackSpec(type="video", name=name, clips=clips))
+    for name, clips in zip(SCENE_TRACK_NAMES_AUDIO, track_clips_audio):
+        if clips:
+            tracks.append(TrackSpec(type="audio", name=name, clips=clips))
 
     return ProjectDoc(
         project=doc.project,

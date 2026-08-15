@@ -597,6 +597,87 @@ scenes:
     assert red_fraction_at(2.7, 0.9) < 0.05, "expected pure blue after the transition"
 
 
+def _band_volume_db(path: Path, freq: int, start: float, duration: float) -> float:
+    result = subprocess.run(
+        [
+            "ffmpeg", "-hide_banner",
+            "-i", str(path),
+            "-ss", str(start), "-t", str(duration),
+            "-af", f"bandpass=f={freq}:width_type=h:w=100,volumedetect",
+            "-f", "null", "-",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    for line in result.stderr.splitlines():
+        if "mean_volume:" in line:
+            return float(line.split("mean_volume:")[1].strip().split(" ")[0])
+    raise RuntimeError(f"could not parse mean_volume from ffmpeg output:\n{result.stderr}")
+
+
+def test_scenes_audio_dissolve_produces_a_real_crossfade(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for an audio-only `scenes:` scene (new this cycle,
+    fixes `scenes:` transitions being hardcoded to a video-typed track):
+    a 220Hz tone dissolving into an 880Hz tone should produce a genuine
+    crossfade - both bands present during the overlap, 220Hz fading out
+    while 880Hz fades in - not a hard cut. Doesn't need `qtblend` (unlike
+    the video dissolve test): an audio crossfade is just two volume-faded
+    clips on two audio tracks, summed by the a_track=0 `mix` transition
+    every audio track already gets."""
+    low = tmp_path / "low.wav"
+    high = tmp_path / "high.wav"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=3", str(low)],
+        check=True,
+    )
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=880:duration=3", str(high)],
+        check=True,
+    )
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: dissolve
+    transition_duration: 1.0
+    clips:
+      - {low}
+      - {high}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.wav"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    # the transition spans [1.5, 2.5)s (two 2s clips, 1s overlap).
+    low_before = _band_volume_db(rendered, 220, start=1.3, duration=0.1)
+    low_mid = _band_volume_db(rendered, 220, start=2.0, duration=0.1)
+    low_after = _band_volume_db(rendered, 220, start=2.7, duration=0.1)
+    high_before = _band_volume_db(rendered, 880, start=1.3, duration=0.1)
+    high_mid = _band_volume_db(rendered, 880, start=2.0, duration=0.1)
+    high_after = _band_volume_db(rendered, 880, start=2.7, duration=0.1)
+
+    assert low_before > low_mid > low_after, (
+        f"expected the 220Hz band to fade out across the transition, got "
+        f"before={low_before}dB mid={low_mid}dB after={low_after}dB"
+    )
+    assert high_after > high_mid > high_before, (
+        f"expected the 880Hz band to fade in across the transition, got "
+        f"before={high_before}dB mid={high_mid}dB after={high_after}dB"
+    )
+
+
 def test_melt_respects_video_speed_change(tmp_path: Path, assets_dir: Path, melt):
     """Empirical check for `speed:` (timewarp) on a video clip: at 2x, the
     3s testsrc clip (assets_dir) should occupy 1.5s on the timeline - not
