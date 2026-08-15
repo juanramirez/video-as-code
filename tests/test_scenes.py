@@ -146,3 +146,61 @@ scenes:
     assert bottom_placement.reveal_style is None
     assert top_placement.reveal_style == transition
     assert top_placement.fade_in_frames > 0
+
+
+def test_glitch_places_every_clip_on_a_single_track(tmp_path: Path, assets_dir: Path):
+    """`glitch` (frei0r.glitch0r, new this cycle) writes no alpha at all,
+    so a two-track qtblend reveal (like `iris`/`flip` use) would just
+    have the fully-opaque "top" clip obscure the bottom one throughout,
+    pointlessly - clips stay on one single track instead, every clip
+    (not just an alternating "top" one) carrying `reveal_style`, and
+    with no real time overlap between them (transition_duration is a
+    burst-dressing length, not an overlap)."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: glitch
+    transition_duration: 0.4
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    scene_tracks = [t for t in resolved.tracks if t.placements]
+    assert len(scene_tracks) == 1
+    placements = scene_tracks[0].placements
+    assert len(placements) == 2
+    assert placements[0].reveal_style == "glitch"
+    assert placements[0].fade_out_frames > 0
+    assert placements[0].fade_in_frames == 0
+    assert placements[1].reveal_style == "glitch"
+    assert placements[1].fade_in_frames > 0
+    assert placements[1].fade_out_frames == 0
+    # No real time overlap: clip 2 starts exactly where clip 1 ends.
+    assert placements[1].start_frame == placements[0].start_frame + placements[0].length_frames
+
+
+def test_glitch_needs_video(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone_a
+    path: {assets_dir / "tone.mp3"}
+  - id: tone_b
+    path: {assets_dir / "tone.mp3"}
+scenes:
+  - scene: s1
+    transition: glitch
+    transition_duration: 0.4
+    clips:
+      - {{clip: tone_a}}
+      - {{clip: tone_b}}
+    duration: 3.0
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "glitch" in str(exc.value)

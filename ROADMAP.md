@@ -488,18 +488,38 @@ more small filter capability.
   `iris`/`flip` were: a solid-color background clip should key out
   entirely, revealing the track below, not just "the filter got
   attached without erroring."
-- **New transitions: `glitch` and `broken-tv`**: `frei0r.glitch0r`
-  (block shifting + color-channel glitching) and `avfilter.rgbashift`
-  (chromatic aberration) for `glitch`; `frei0r.nosync0r` (h-sync offset)
-  for `broken-tv` - both confirmed present on this machine's melt
-  build but **not yet render-verified** (unlike `iris`/`flip`, which
-  were checked empirically before being scoped in). Applied as a brief
-  animated filter burst over the overlap window rather than a
-  crossfade, same alternating-track shape `dissolve`/`iris`/`flip`
-  already use. Verification happens first, same discipline that
-  dropped `affine`'s `spin`/`cube` from v0.3 after they turned out not
-  to work - if either doesn't hold up under a real render, it's cut
-  from this scope rather than shipped unverified.
+- **New transition: `glitch`** — **implemented**, **`broken-tv` dropped
+  after verification**: both were investigated first, same discipline
+  that dropped `affine`'s `spin`/`cube` from v0.3.
+  - `frei0r.nosync0r` (the intended mechanism for `broken-tv`) produces
+    **no visible effect** on this project's real melt build - a
+    rendered frame differs from its unfiltered baseline by a mean pixel
+    difference of ~1/255, imperceptible, even at the parameter's
+    maximum value. Not shipped.
+  - `avfilter.rgbashift` (the intended chromatic-aberration companion
+    for `glitch`) also produced no visible shift, paired with a
+    "Cannot set src colorspace" warning - dropped too. `glitch` uses
+    `frei0r.glitch0r` alone, which *is* clearly working (real,
+    distinctive block-shifting, verified by render).
+  - **Mechanism turned out different from what was planned**: `glitch0r`
+    writes no alpha channel at all (unlike `iris`/`flip`'s
+    `alphaspot`/`3dflippo`), so the alternating-two-track qtblend-reveal
+    shape those use doesn't apply here - a fully-opaque "top" clip would
+    just obscure the bottom one for the whole overlap, pointlessly.
+    `glitch` clips instead stay on a single dedicated track
+    (`scenes.py`'s `GLITCH_TRACK_NAME`), placed back-to-back with no
+    real time overlap - `transition_duration` means "how long the burst
+    dressing each cut lasts," not an overlap. Reuses the same
+    `reveal_style`/`fade_in`/`fade_out` per-clip mechanism `iris`/`flip`
+    introduced in v0.4, just applied to *every* clip's own edges instead
+    of an alternating "top" one.
+
+  Verified with a real melt render: a solid-color clip shows much
+  higher pixel variance during the glitch burst window than outside it
+  (`test_scenes_glitch_produces_real_block_shifting`) - and recognized
+  on import too (`reverse.py`'s `_match_reveal_filter`, same
+  conservative exact-parameter-match bar `iris`/`flip` recognition
+  already holds to), round-tripping back to `reveal: glitch`.
 - **`dynamictext` filter (burned-in timecode/date overlay)**: MLT's
   core `dynamictext` filter overlays text as a filter *on any existing
   clip*, with keyword substitution (`#timecode#`, `#frame#`,

@@ -308,17 +308,22 @@ class Importer:
 
         raise ValueError(msg("reverse.unrecognized_track_structure", ctx=ctx, tag=ref.tag))
 
-    def _match_reveal_filter(self, props: dict[str, str], f_in: int, f_out: int) -> Optional[dict]:
+    def _match_reveal_filter(
+        self, filter_el: ET.Element, props: dict[str, str], f_in: int, f_out: int
+    ) -> Optional[dict]:
         """Recognizes an `iris` (frei0r.alphaspot) / `flip`
-        (frei0r.3dflippo) reveal filter this generator itself could have
-        produced (xmlgen.py's `_add_reveal_style_filter`) - conservative,
-        matching the exact keyframe strings that function emits (same
-        "never guess" bar `wipe`/`affine` cross-track-transition
-        recognition already holds to), not just "looks like the right
-        service". `kind` is "in" (growing/entering, `fade_in`) or "out"
-        (shrinking/exiting, `fade_out`) - which one it is comes purely
-        from which keyframe direction matches, the same values regardless
-        of where in the clip this filter sits."""
+        (frei0r.3dflippo) / `glitch` (frei0r.glitch0r) reveal filter this
+        generator itself could have produced (xmlgen.py's
+        `_add_reveal_style_filter`) - conservative, matching the exact
+        keyframe strings that function emits (same "never guess" bar
+        `wipe`/`affine` cross-track-transition recognition already holds
+        to), not just "looks like the right service". `kind` is "in"
+        (fade_in) or "out" (fade_out): for `iris`/`flip` that comes purely
+        from which keyframe direction matches; `glitch` has no keyframe
+        direction at all (a constant burst), so it's read off whether
+        this filter has an explicit `in` attribute the same way
+        `_add_reveal_style_filter` itself distinguishes the two windows -
+        absent means it starts at the entry's own `in` (fade_in)."""
         service = props.get("mlt_service")
         length = f_out - f_in + 1
         if service == "frei0r.alphaspot":
@@ -343,6 +348,13 @@ class Importer:
             if kf == f"0=0.5;{length - 1}=0.92":
                 return {"style": "flip", "kind": "out"}
             return None
+        if service == "frei0r.glitch0r":
+            if (
+                props.get("0") != "1" or props.get("1") != "0.5" or props.get("2") != "0.8"
+                or props.get("3") != "0.5"
+            ):
+                return None
+            return {"style": "glitch", "kind": "in" if filter_el.get("in") is None else "out"}
         return None
 
     def convert_clip_filter(self, filter_el: ET.Element, entry_in: int, entry_out: int, ctx: str) -> dict:
@@ -366,8 +378,8 @@ class Importer:
             return {"fade_out": round(length_s, 3)}
         if service == "volume" and kid == "mute":
             return {"mute": True}
-        if service in ("frei0r.alphaspot", "frei0r.3dflippo"):
-            matched = self._match_reveal_filter(props, f_in, f_out)
+        if service in ("frei0r.alphaspot", "frei0r.3dflippo", "frei0r.glitch0r"):
+            matched = self._match_reveal_filter(filter_el, props, f_in, f_out)
             if matched is not None:
                 key = "fade_in" if matched["kind"] == "in" else "fade_out"
                 return {key: round(length_s, 3), "reveal": matched["style"]}

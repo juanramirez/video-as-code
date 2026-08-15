@@ -286,7 +286,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         speed = None
 
     reveal = item.get("reveal")
-    if reveal is not None and reveal not in ("iris", "flip"):
+    if reveal is not None and reveal not in ("iris", "flip", "glitch"):
         errors.append(msg("validation.reveal_invalid", ctx=ctx, reveal=reveal))
         reveal = None
 

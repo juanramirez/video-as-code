@@ -520,6 +520,35 @@ def _mean_rgb(path: Path, timestamp: float = 0.0) -> tuple[float, float, float]:
     return (sum(data[0::3]) / n, sum(data[1::3]) / n, sum(data[2::3]) / n)
 
 
+def _color_stddev(path: Path, timestamp: float) -> float:
+    """Standard deviation of pixel values across a whole frame - near 0
+    for a plain solid color, much higher once block-shifting/color
+    glitching mixes in patches of other colors. Used to detect `glitch`
+    (frei0r.glitch0r) without needing to know exactly where the glitched
+    blocks land."""
+    result = subprocess.run(
+        [
+            "ffmpeg", "-v", "error",
+            "-ss", str(timestamp), "-i", str(path),
+            "-frames:v", "1",
+            "-f", "rawvideo", "-pix_fmt", "rgb24",
+            "-",
+        ],
+        capture_output=True,
+        timeout=30,
+        check=True,
+    )
+    # Isolate a single channel (R): a solid-color frame has ~zero spatial
+    # variation *within* one channel, even though the raw interleaved
+    # RGB byte stream itself oscillates a lot between channels - mixing
+    # channels together would make a plain solid color look "high
+    # variance" for no real reason.
+    r = result.stdout[0::3]
+    mean = sum(r) / len(r)
+    variance = sum((b - mean) ** 2 for b in r) / len(r)
+    return variance**0.5
+
+
 def _mean_rgb_at_x(path: Path, timestamp: float, frac_x: float, width: int = 320) -> tuple[float, float, float]:
     """Like `_mean_rgb`, but only a thin vertical strip at `frac_x` (0..1)
     of the frame width - lets a test tell a spatially-varying wipe apart
@@ -1050,6 +1079,49 @@ scenes:
         f"the right edge is still red, got {left_mid=:.2f} {right_mid=:.2f}"
     )
     assert red_fraction_at(2.7, 0.9) < 0.05, "expected pure blue everywhere after the transition"
+
+
+def test_scenes_glitch_produces_real_block_shifting(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `transition: glitch` (new this cycle,
+    frei0r.glitch0r - a single-clip filter burst dressing a plain cut,
+    not a two-source reveal like iris/flip: glitch0r writes no alpha, so
+    it doesn't need `qtblend`/a second track at all, unlike every other
+    transition this project has). A solid-color clip should render with
+    much higher pixel variance during the glitch burst window (block-
+    shifted patches of other colors mixed in) than outside it."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: glitch
+    transition_duration: 0.4
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    # 2 clips, duration 4.0, no real overlap -> each clip spans 2.0s;
+    # the glitch burst dresses [1.6, 2.0)s (outgoing) and [2.0, 2.4)s
+    # (incoming).
+    calm = _color_stddev(rendered, timestamp=1.0)
+    glitched = _color_stddev(rendered, timestamp=1.85)
+    assert glitched > calm + 5, (
+        f"expected clearly higher pixel variance during the glitch burst, "
+        f"got calm={calm:.2f} glitched={glitched:.2f}"
+    )
 
 
 def test_melt_respects_video_speed_change(tmp_path: Path, assets_dir: Path, melt):

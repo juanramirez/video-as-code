@@ -218,9 +218,39 @@ def _add_reveal_style_filter(ids: _IdCounters, entry: ET.Element, placement: Res
     clip's own unrotated pixels underneath instead, and against a plain
     black background the two look identical without a real render to
     tell them apart (see ROADMAP.md's v0.4 entry for how this was
-    checked)."""
+    checked).
+
+    `glitch` (frei0r.glitch0r) is a different case entirely - it writes
+    no alpha at all, so there's no "from/to" reveal direction the way
+    iris/flip's size or rotation animate: just a constant-parameter burst
+    for whichever window (fade_in and/or fade_out) is set, verified by
+    real render to produce clearly visible block-shifting distortion
+    (`avfilter.rgbashift`, its would-be chromatic-aberration companion,
+    produced no visible effect in this build and isn't used - see
+    scenes.py's `SCENE_TRACK_NAMES` comment)."""
     p_in, p_out = placement.in_frame, placement.out_frame
     style = placement.reveal_style
+
+    if style == "glitch":
+        def glitch_props(f: ET.Element) -> None:
+            _prop(f, "mlt_service", "frei0r.glitch0r")
+            _prop(f, "0", 1)  # Glitch frequency: constant for the whole burst window
+            _prop(f, "1", 0.5)  # Block height
+            _prop(f, "2", 0.8)  # Shift intensity
+            _prop(f, "3", 0.5)  # Color glitching intensity
+
+        if placement.fade_in_frames > 0:
+            L = placement.fade_in_frames
+            f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
+            glitch_props(f)
+            _prop(f, "kdenlive:collapsed", 0)
+        if placement.fade_out_frames > 0:
+            L = placement.fade_out_frames
+            f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "in": str(p_out - L + 1), "out": str(p_out)})
+            glitch_props(f)
+            _prop(f, "kdenlive:collapsed", 0)
+        return
+
     service = "frei0r.alphaspot" if style == "iris" else "frei0r.3dflippo"
 
     def iris_props(f: ET.Element, size_from: float, size_to: float, length: int) -> None:

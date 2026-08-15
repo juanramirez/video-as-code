@@ -74,7 +74,7 @@ _EN: dict[str, str] = {
         "duration on the timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
-    "validation.reveal_invalid": "{ctx}: 'reveal' must be 'iris' or 'flip', got {reveal!r}",
+    "validation.reveal_invalid": "{ctx}: 'reveal' must be 'iris', 'flip', or 'glitch', got {reveal!r}",
     "validation.speed_zero": "{ctx}: 'speed' cannot be 0 (use a positive value for forward, negative for reverse)",
     "validation.speed_on_image": "{ctx}: 'speed' has no effect on an image or title clip ('{clip}')",
     "validation.clip_overlap": (
@@ -85,7 +85,7 @@ _EN: dict[str, str] = {
     "validation.scene_clip_invalid": "{ctx}.clips[{idx}] is invalid: {raw!r}",
     "validation.scene_missing_clips": "scenes[{idx}] is invalid (missing 'clips'): {scene!r}",
     "validation.scene_clips_not_list": "{ctx}.clips must be a non-empty list",
-    "validation.scene_transition_invalid": "{ctx}.transition={transition!r} must be one of 'none', 'dissolve', 'wipe', 'affine', 'iris', 'flip'",
+    "validation.scene_transition_invalid": "{ctx}.transition={transition!r} must be one of 'none', 'dissolve', 'wipe', 'affine', 'iris', 'flip', 'glitch'",
     "validation.scene_pacing_invalid": "{ctx}.pacing={pacing!r} must be one of {valid}",
     "validation.scene_luma_invalid": "{ctx}.luma={luma!r} must be one of {valid}",
     "validation.scene_transition_needs_video": "{ctx}: transition: {transition} has no audio equivalent (it geometrically transforms/masks pixels, not samples) - use 'dissolve' for an audio-only scene",
@@ -94,6 +94,7 @@ _EN: dict[str, str] = {
     "scenes.track_b": "Scenes B",
     "scenes.track_a_audio": "Scenes A (audio)",
     "scenes.track_b_audio": "Scenes B (audio)",
+    "scenes.track_glitch": "Scenes Glitch",
     "reverse.no_profile": "File has no <profile>: doesn't look like a valid MLT/kdenlive project",
     "reverse.no_sequence_found": "No sequence found (tractor with kdenlive:uuid) in the file",
     "reverse.broken_reference": "{ctx}: broken reference to '{ref}'",
@@ -235,7 +236,7 @@ _ES: dict[str, str] = {
         "duración del clip en el timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
-    "validation.reveal_invalid": "{ctx}: 'reveal' debe ser 'iris' o 'flip', se recibió {reveal!r}",
+    "validation.reveal_invalid": "{ctx}: 'reveal' debe ser 'iris', 'flip' o 'glitch', se recibió {reveal!r}",
     "validation.speed_zero": "{ctx}: 'speed' no puede ser 0 (usa un valor positivo para avance, negativo para reversa)",
     "validation.speed_on_image": "{ctx}: 'speed' no tiene efecto en un clip de imagen o título ('{clip}')",
     "validation.clip_overlap": (
@@ -246,7 +247,7 @@ _ES: dict[str, str] = {
     "validation.scene_clip_invalid": "{ctx}.clips[{idx}] inválido: {raw!r}",
     "validation.scene_missing_clips": "scenes[{idx}] inválida (falta 'clips'): {scene!r}",
     "validation.scene_clips_not_list": "{ctx}.clips debe ser una lista no vacía",
-    "validation.scene_transition_invalid": "{ctx}.transition={transition!r} debe ser uno de 'none', 'dissolve', 'wipe', 'affine', 'iris', 'flip'",
+    "validation.scene_transition_invalid": "{ctx}.transition={transition!r} debe ser uno de 'none', 'dissolve', 'wipe', 'affine', 'iris', 'flip', 'glitch'",
     "validation.scene_pacing_invalid": "{ctx}.pacing={pacing!r} debe ser uno de {valid}",
     "validation.scene_luma_invalid": "{ctx}.luma={luma!r} debe ser uno de {valid}",
     "validation.scene_transition_needs_video": "{ctx}: transition: {transition} no tiene equivalente en audio (transforma/enmascara píxeles geométricamente, no muestras) - usa 'dissolve' para una escena solo de audio",
@@ -255,6 +256,7 @@ _ES: dict[str, str] = {
     "scenes.track_b": "Escenas B",
     "scenes.track_a_audio": "Escenas A (audio)",
     "scenes.track_b_audio": "Escenas B (audio)",
+    "scenes.track_glitch": "Escenas Glitch",
     "reverse.no_profile": "El archivo no tiene <profile>: no parece un proyecto MLT/kdenlive válido",
     "reverse.no_sequence_found": "No se ha encontrado ninguna secuencia (tractor con kdenlive:uuid) en el archivo",
     "reverse.broken_reference": "{ctx}: referencia rota a '{ref}'",

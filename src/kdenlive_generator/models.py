@@ -56,7 +56,7 @@ class ClipPlacementSpec:
     preserve_pitch: bool = False
     position: Optional[tuple[float, float]] = None
     size: Optional[tuple[float, float]] = None
-    reveal_style: Optional[str] = None  # None | "iris" | "flip" - see ResolvedPlacement
+    reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" - see ResolvedPlacement
 
 
 @dataclass
@@ -159,15 +159,16 @@ class ResolvedPlacement:
     speed: Optional[float] = None
     preserve_pitch: bool = False
     rect: Optional[tuple[float, float, float, float]] = None  # x y w h in pixels
-    # scenes.py-only, not a raw YAML field (same as WipeTransitionSpec/
-    # AffineTransitionSpec being scenes.py-internal constructs): which
-    # filter `fade_in_frames`/`fade_out_frames` should drive instead of
-    # the plain brightness alpha fade - "iris" (frei0r.alphaspot) or
-    # "flip" (frei0r.3dflippo), both real two-source-*looking* reveals
-    # built from a single-clip filter composited via the qtblend this
-    # project already emits per video track, same mechanism `dissolve`
-    # itself uses (only the "top" clip needs the filter).
-    reveal_style: Optional[str] = None  # None | "iris" | "flip"
+    # which filter `fade_in_frames`/`fade_out_frames` should drive instead
+    # of the plain brightness alpha fade. "iris" (frei0r.alphaspot) and
+    # "flip" (frei0r.3dflippo) are real two-source-*looking* reveals built
+    # from a single-clip filter composited via the qtblend this project
+    # already emits per video track, same mechanism `dissolve` itself
+    # uses (only the "top" clip needs the filter). "glitch"
+    # (frei0r.glitch0r) is different again - it writes no alpha at all,
+    # so it isn't a reveal/composite in any sense, just a brief distortion
+    # burst dressing a plain cut (see scenes.py's `GLITCH_TRACK_NAME`).
+    reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch"
 
     @property
     def length_frames(self) -> int:
