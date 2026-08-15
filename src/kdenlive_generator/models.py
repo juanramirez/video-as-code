@@ -43,6 +43,7 @@ class ClipPlacementSpec:
     duration: Optional[float] = None
     fade_in: Optional[float] = None
     fade_out: Optional[float] = None
+    mute: bool = False
     position: Optional[tuple[float, float]] = None
     size: Optional[tuple[float, float]] = None
 
@@ -85,6 +86,7 @@ class ResolvedPlacement:
     out_frame: int  # last included frame (MLT convention)
     fade_in_frames: int = 0
     fade_out_frames: int = 0
+    mute: bool = False
     rect: Optional[tuple[float, float, float, float]] = None  # x y w h in pixels
 
     @property

@@ -173,6 +173,20 @@ def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
         _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_mute_filter(ids: _IdCounters, entry: ET.Element) -> None:
+    """Matches kdenlive's own "Mute" effect (share/kdenlive/effects/mute.xml):
+    mlt_service "volume", kdenlive_id "mute", a fixed gain of 0 with no
+    in/out span - it silences the entry's full duration, video-track
+    clips included (the filter only touches audio samples, so the picture
+    still renders; this is what lets a video clip's embedded audio be
+    silenced independently of its image)."""
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "volume")
+    _prop(f, "kdenlive_id", "mute")
+    _prop(f, "gain", 0)
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _build_track(
     root: ET.Element,
     ids: _IdCounters,
@@ -220,6 +234,8 @@ def _build_track(
         else:
             _add_video_fade_filters(ids, entry, placement)
             _add_video_default_filter(ids, entry, project.width, project.height, placement.rect)
+        if placement.mute:
+            _add_mute_filter(ids, entry)
         cursor = placement.start_frame + placement.length_frames
 
     root.append(playlist_main)

@@ -49,6 +49,7 @@ _EN: dict[str, str] = {
         "{ctx}: fade_in ({fade_in}s) + fade_out ({fade_out}s) exceed the clip's "
         "duration on the timeline ({clip_len:.3f}s)"
     ),
+    "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
     "validation.clip_overlap": (
         "timeline.tracks[{idx}]({name}): overlap between clips '{prev}' "
         "(ends at frame {prev_end}) and '{next}' (starts at frame {next_start})"
@@ -138,6 +139,7 @@ _ES: dict[str, str] = {
         "{ctx}: fade_in ({fade_in}s) + fade_out ({fade_out}s) superan la "
         "duración del clip en el timeline ({clip_len:.3f}s)"
     ),
+    "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
     "validation.clip_overlap": (
         "timeline.tracks[{idx}]({name}): solape entre clips '{prev}' "
         "(termina en fotograma {prev_end}) y '{next}' (empieza en fotograma {next_start})"
