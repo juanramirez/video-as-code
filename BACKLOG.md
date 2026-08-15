@@ -45,9 +45,18 @@ plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
   `lift_gamma_gain`) would be a new filter category with no existing
   analog to copy from.
 - **Speed ramps (non-flat timewarp)**: `speed:` is a single flat
-  multiplier for the whole clip. kdenlive's speed-ramp effect uses a
-  keyframed mechanism, not just a fancier `timewarp` producer — new
-  mechanism, no existing analog.
+  multiplier for the whole clip. **Update**: kdenlive's real mechanism
+  is confirmed - MLT's `timeremap` **link** (not a plain producer
+  property like `timewarp`), found via kdenlive's own source
+  (`~/dev/kdenlive/src/dialogs/timeremap.cpp`,
+  `mlt_service() == "timeremap"`) and confirmed present on this
+  machine's melt (`melt -query link=timeremap`, Meltytech, LGPLv2.1) -
+  keyframed `time_map`/`speed_map` params, structurally a `<link>`
+  child inside a `<chain>`, a different XML shape from `timewarp`
+  entirely. A first render attempt didn't clearly show the expected
+  duration stretch (likely needs explicit `length`/`out` on the chain
+  to work) - mechanism confirmed real, but the exact working XML recipe
+  still needs one more verification pass before this is ready to scope.
 - **Subtitles**: completely absent from schema/models/xmlgen; kdenlive
   subtitles are a separate track type/file format with no relationship
   to anything currently emitted. Large lift, new mechanism end-to-end.
@@ -84,20 +93,52 @@ mechanisms competitors' editors don't expose either.
   - **bowtie**: `luma = clamp(255 * (|x/w| - |y/h| + 0.5), 0, 255)` -
     two opposing triangular reveal wedges meeting at a vertical center
     band.
-- **Leads not yet investigated**: `frei0r.delaygrab` ("delayed frame
-  blitting on a time bitmap" - the name suggests a real trailing-ghost/
-  temporal-echo effect) and `frei0r.cairogradient` (a real gradient-
-  overlay filter, could drive a light-leak/color-wash transition) both
-  exist on this machine's melt build but weren't render-verified -
-  flagged as leads, not claims.
-- **Ken Burns pan+zoom as a single-clip filter**: `melt -query
-  filter=affine` confirms the same `affine` service used for the `zoom`/
-  `slide` *transitions* also exists as a plain **filter** applicable to
-  one clip alone (no second track needed) - since the `rect` keyframe
-  mechanism is already proven working for the transition case, a
-  Ken-Burns-style pan+zoom effect on a single clip is very likely to
-  work the same way, but this specific single-clip usage hasn't been
-  render-verified yet.
+- **`delaygrab` trailing-ghost/temporal-echo effect — verified by real
+  render**: `frei0r.delaygrab` ("delayed frame blitting on a time
+  bitmap") rendered against a moving test source produces a genuine
+  circular vignette mask plus a visible temporal ghosting/trailing
+  streak behind moving elements (a diagonal color bar left a clear
+  smeared trail; an on-screen timestamp overlay dragged a comet-like
+  tail) - a real, distinctive effect, not a dud.
+- **`cairogradient` light-leak/color-wash — verified by real render**:
+  `frei0r.cairogradient` rendered with an orange-to-transparent linear
+  gradient (start/end color+opacity+position params) produces a genuine
+  diagonal color-wash tint across the frame, visibly warmer on one
+  side - confirms the light-leak/gradient-overlay use case.
+- **Ken Burns pan+zoom as a single-clip filter — verified by real
+  render, and confirmed against kdenlive's own source**: `affine` as a
+  lone filter (not a transition) with `rect` keyframed
+  `0%/0%:100%x100%` -> `-25%/-25%:150%x150%` visibly zooms the frame in
+  smoothly over the animation window. Cross-checked against kdenlive's
+  own effect definitions (`~/dev/kdenlive/data/effects/pan_zoom.xml`):
+  kdenlive's real "Position and Zoom" effect is literally `tag="affine"`
+  with an `animatedrect` parameter - the exact same mechanism, not
+  modeled by analogy.
+- **`pillar_echo` focus-pull effect**: verified present (`melt -query
+  filters`), kdenlive's own real effect
+  (`~/dev/kdenlive/data/effects/pillar_echo.xml`, credited to
+  Meltytech itself - MLT-native, not frei0r): keeps a rectangular area
+  of interest sharp while blurring everything outside it - a genuinely
+  different creative mechanism from anything else in this backlog (not
+  a crop, not a mask-reveal like `iris`, a focus-pull-style effect).
+  Not yet rendered/verified.
+- **`dance` audio-reactive visualizer**: verified present (`melt -query
+  filters`), kdenlive's own real effect
+  (`~/dev/kdenlive/data/effects/dance.xml`): moves/zooms the image
+  proportional to the audio spectrum's magnitude (params: frequency
+  band, level threshold, oscillation rate, initial zoom) - a real,
+  MLT-native "beat-reactive auto-zoom," the same category of effect
+  CapCut/TikTok-style editors are known for, but genuinely kdenlive's
+  own, not ported from a competitor. Not yet rendered/verified.
+- **Leads for the next research round**: `~/dev/kdenlive/data/effects/`
+  has ~80 more effect definitions not yet surveyed - the `mask_apply`/
+  `mask_start_*` family looked worth a follow-up pass (real masking/
+  rotoscoping, distinct from crop/`iris`). Compound-clip import
+  recognition (a nested `<tractor>` inside a playlist `<entry>`,
+  currently falls through to `x_kdenlive_raw` like any other
+  unrecognized structure) also hasn't been investigated - unclear
+  whether even *recognizing* the shape on import (without fully
+  supporting it) is tractable.
 
 ## Effects other NLEs have, verified buildable (or confirmed absent) via melt
 
