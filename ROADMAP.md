@@ -39,8 +39,8 @@ backlog.
   placement's own embedded audio would have played at the same time as
   the audio-track copy's faded audio, overlapping instead of the
   audio-track copy standing in cleanly for the video's sound.
-- **`kdgen reconstruct`** — **implemented** (2026-08-14, branch
-  `kdgen-reconstruct`, not yet merged): reconstructs a YAML from an
+- **`kdgen reconstruct`** — **implemented** (2026-08-14, merged to
+  `master` 2026-08-15): reconstructs a YAML from an
   already-rendered video + an assets folder, via content-based matching
   (not XML parsing — there's no structure to walk, just pixels and audio
   samples). Its own module (`reconstruct.py`) and CLI subcommand
