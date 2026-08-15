@@ -159,6 +159,15 @@ melt 7.32.0, not assumed.
   (`sox.compand`, `sox.noisered` for noise reduction) — sidechain-style
   ducking (a Premiere/Resolve staple) is buildable from `acompressor`,
   not currently in the schema.
+- **`dynamictext` filter (burned-in timecode/frame counter/date
+  overlays)**: MLT's core `dynamictext` filter (documented at
+  mltframework.org/plugins/FilterDynamictext, part of MLT's own "plus"
+  module) overlays text as a filter *on any existing clip*, with keyword
+  substitution (`#timecode#`, `#frame#`, `#localtime#`) — kdenlive
+  already exposes it as "Dynamic Text." `titles.py` only produces
+  standalone title clips today, not a text-overlay filter on existing
+  footage, so this is a distinct capability, not a variant of the
+  richer-title-clips item above.
 - **Frame-blend speed interpolation confirmed absent**: `avfilter.
   minterpolate` (true optical-flow retiming, what DaVinci/Premiere use
   for smooth slow-motion) is **not present** in this machine's compiled
