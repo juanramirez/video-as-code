@@ -30,6 +30,13 @@ _EN: dict[str, str] = {
     "validation.bin_entry_invalid": "Invalid 'bin:' entry (missing 'id' or 'path'): {item!r}",
     "validation.bin_type_invalid": "bin[{id}].type={type!r} is invalid, must be one of {valid}",
     "validation.title_missing_text": "bin[{id}]: type: title requires 'text'",
+    "validation.title_font_size_invalid": "bin[{id}]: font_size must be greater than 0, got {font_size}",
+    "validation.colorspace_invalid": "project.colorspace must be greater than 0, got {colorspace}",
+    "validation.pip_size_invalid": "{ctx}: position/size must have a positive width and height, got w={w:g} h={h:g}",
+    "validation.pip_out_of_bounds": (
+        "{ctx}: position/size ([{x:g}, {y:g}] {w:g}x{h:g}) falls outside "
+        "the project canvas ({width}x{height})"
+    ),
     "validation.track_missing_type": "timeline.tracks[{idx}] is invalid (missing 'type'): {item!r}",
     "validation.track_type_invalid": "timeline.tracks[{idx}].type={type!r} must be one of {valid}",
     "validation.tracks_clips_not_list": "timeline.tracks[{idx}].clips must be a list",
@@ -158,6 +165,13 @@ _ES: dict[str, str] = {
     "validation.bin_entry_invalid": "Entrada de 'bin:' inválida (falta 'id' o 'path'): {item!r}",
     "validation.bin_type_invalid": "bin[{id}].type={type!r} inválido, debe ser uno de {valid}",
     "validation.title_missing_text": "bin[{id}]: type: title requiere 'text'",
+    "validation.title_font_size_invalid": "bin[{id}]: font_size debe ser mayor que 0, se recibió {font_size}",
+    "validation.colorspace_invalid": "project.colorspace debe ser mayor que 0, se recibió {colorspace}",
+    "validation.pip_size_invalid": "{ctx}: position/size debe tener ancho y alto positivos, se recibió w={w:g} h={h:g}",
+    "validation.pip_out_of_bounds": (
+        "{ctx}: position/size ([{x:g}, {y:g}] {w:g}x{h:g}) queda fuera "
+        "del lienzo del proyecto ({width}x{height})"
+    ),
     "validation.track_missing_type": "timeline.tracks[{idx}] inválida (falta 'type'): {item!r}",
     "validation.track_type_invalid": "timeline.tracks[{idx}].type={type!r} debe ser uno de {valid}",
     "validation.tracks_clips_not_list": "timeline.tracks[{idx}].clips debe ser una lista",

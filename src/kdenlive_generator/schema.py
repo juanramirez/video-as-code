@@ -121,13 +121,16 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
             width=int(data.get("width", 1920)),
             height=int(data.get("height", 1080)),
         )
+    colorspace = int(data.get("colorspace", 709))
+    if colorspace <= 0:
+        errors.append(msg("validation.colorspace_invalid", colorspace=colorspace))
     return ProjectSpec(
         id=str(data["id"]),
         title=str(data["title"]),
         fps=float(data["fps"]),
         width=int(data["width"]),
         height=int(data["height"]),
-        colorspace=int(data.get("colorspace", 709)),
+        colorspace=colorspace,
         default_image_duration=float(data.get("default_image_duration", 4.0)),
     )
 
@@ -150,13 +153,17 @@ def _parse_bin_clip(item: Any, source_dir: Path, errors: list[str]) -> BinClipSp
         if not text:
             errors.append(msg("validation.title_missing_text", id=item.get("id")))
             return None
+        font_size = int(item.get("font_size", 48))
+        if font_size <= 0:
+            errors.append(msg("validation.title_font_size_invalid", id=item.get("id"), font_size=font_size))
+            return None
         return BinClipSpec(
             id=str(item["id"]),
             path=None,
             type=clip_type,
             text=str(text),
             font=str(item.get("font", "Sans")),
-            font_size=int(item.get("font_size", 48)),
+            font_size=font_size,
             font_color=tuple(item.get("color", (255, 255, 255, 255))),
             background=tuple(item.get("background", (0, 0, 0, 0))),
         )
@@ -356,16 +363,28 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     )
                 )
 
+            rect = None
+            if placement.position is not None or placement.size is not None:
+                x, y = placement.position or (0.0, 0.0)
+                w, h = placement.size or (float(doc.project.width), float(doc.project.height))
+                if w <= 0 or h <= 0:
+                    errors.append(msg("validation.pip_size_invalid", ctx=ctx, w=w, h=h))
+                elif x < 0 or y < 0 or x + w > doc.project.width + 1e-6 or y + h > doc.project.height + 1e-6:
+                    errors.append(
+                        msg(
+                            "validation.pip_out_of_bounds",
+                            ctx=ctx,
+                            x=x, y=y, w=w, h=h,
+                            width=doc.project.width, height=doc.project.height,
+                        )
+                    )
+                rect = (x, y, w, h)
+
             if errors:
                 continue
 
             in_frame = fps.seconds_to_frames(in_s)
             out_frame = fps.seconds_to_frames(out_s) - 1  # last included frame
-            rect = None
-            if placement.position is not None or placement.size is not None:
-                x, y = placement.position or (0.0, 0.0)
-                w, h = placement.size or (float(doc.project.width), float(doc.project.height))
-                rect = (x, y, w, h)
 
             placements.append(
                 ResolvedPlacement(

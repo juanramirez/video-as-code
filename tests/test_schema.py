@@ -87,6 +87,62 @@ timeline:
     assert "unknown" in str(exc.value)
 
 
+def test_title_font_size_must_be_positive(tmp_path: Path):
+    yaml_text = """
+project: {id: p1, title: T, fps: 25, width: 320, height: 240}
+bin:
+  - id: t
+    type: title
+    text: "Hi"
+    font_size: 0
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {clip: t, start: 0, duration: 1}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "font_size" in str(exc.value)
+
+
+def test_colorspace_must_be_positive(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240, colorspace: -1}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "colorspace" in str(exc.value)
+
+
+def test_pip_rect_out_of_canvas_bounds_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1, position: [300, 0], size: [100, 100]}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "canvas" in str(exc.value)
+
+
 def test_valid_project_resolves(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
