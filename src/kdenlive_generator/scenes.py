@@ -52,6 +52,36 @@ visibility.
 GPL-licensed luma maps - see `lumas.py`), so they're a similar but not
 identical set to what kdenlive itself ships.
 
+## `transition: affine` — how it works
+
+A third transition engine, alongside `dissolve`'s alpha fade and `wipe`'s
+luma map: MLT's own `affine` transition (Meltytech, LGPLv2.1, already
+shipped with MLT - not a new dependency) geometrically transforms the
+incoming ("b") clip's destination rectangle as it composites over the
+outgoing one, driven by an `AffineTransitionSpec` the same way `wipe`
+uses a `WipeTransitionSpec`. `style:` on the scene picks the
+choreography:
+
+- `zoom` (default): the incoming clip's rect grows from a tiny centered
+  point (`50%/50%:1%x1%:100`) to the full frame (`0%/0%:100%x100%:100`) -
+  a zoom-in reveal.
+- `slide`: the incoming clip's rect starts fully off-frame to the right
+  (`100%/0%:100%x100%:100`) and slides to fully cover the frame
+  (`0%/0%:100%x100%:100`) - a push/slide-in reveal.
+
+Both verified with real melt renders, not just structurally: `zoom`
+against a center-vs-edge pixel sample, `slide` against a left-to-right
+sweep sample (the same technique `wipe`'s own spatial test uses).
+`spin`/`cube` (rotation, via `affine`'s `rotate_z`/`rotate_y`/
+`fix_rotate_z`/`fix_rotate_y` properties) were investigated for this
+cycle too, but empirically **don't work** on this project's real melt
+build - those properties are accepted without error but only shrink the
+destination rect's bounding box instead of actually rotating pixels
+(checked directly: a rotated full-frame rect should expose the
+background at its corners, and never did, keyframed or fixed, with
+`fill`/`distort`/`rotate_center` toggled every way tried). Not shipped
+until that's understood - see BACKLOG.md.
+
 ## Audio-only scenes
 
 If every clip in a scene is audio, the compiler routes it to a *separate*
@@ -68,8 +98,8 @@ full volume and stops dead at its own boundary - an audible glitch, not a
 crossfade (verified with a real render, two different tones one fading
 into the other:
 `tests/test_melt_validation.py::test_scenes_audio_dissolve_produces_a_real_crossfade`).
-`transition: wipe` has no audio equivalent (a luma map decides pixels,
-not samples) and is rejected for an audio-only scene.
+`transition: wipe`/`affine` have no audio equivalent (they transform or
+mask pixels, not samples) and are rejected for an audio-only scene.
 
 ## Per-clip overrides (`mute`/`speed`/`position`/`size`)
 
@@ -87,7 +117,7 @@ from typing import Any, Optional
 from . import probe
 from .i18n import msg
 from .lumas import AVAILABLE_LUMAS
-from .models import BinClipSpec, ClipPlacementSpec, ProjectDoc, TrackSpec, WipeTransitionSpec
+from .models import AffineTransitionSpec, BinClipSpec, ClipPlacementSpec, ProjectDoc, TrackSpec, WipeTransitionSpec
 
 # Seconds per clip based on the scene's "pacing", if no `duration` is given.
 # image: fixed duration. video_cap: upper bound (if the source clip is
@@ -99,6 +129,17 @@ PACING_PRESETS = {
 }
 DEFAULT_TRANSITION_DURATION = 1.0
 DEFAULT_LUMA = "linear_x"
+# "spin"/"cube" (rotate_z/rotate_y) were investigated for this cycle too,
+# but this project's real melt build doesn't actually rotate pixels for
+# them - fix_rotate_z/fix_rotate_y are accepted properties that only
+# shrink the destination rect's bounding box, not a true per-pixel
+# rotation (checked empirically: a rotated full-frame rect should expose
+# background at its corners, and it never did, with or without keyframes,
+# in isolation from the rest of this project). Not shipped until that's
+# understood - see BACKLOG.md. "zoom" (rect scale) and "slide" (rect
+# offset) don't need rotation and are verified working.
+DEFAULT_AFFINE_STYLE = "zoom"
+AFFINE_STYLES = ("zoom", "slide")
 SCENE_TRACK_NAMES = (msg("scenes.track_a"), msg("scenes.track_b"))
 # A separate alternating pair for scenes whose clips are *all* audio: audio
 # tracks get volume fade filters (not brightness alpha), and the a_track=0
@@ -199,6 +240,7 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
     track_clips: tuple[list[ClipPlacementSpec], list[ClipPlacementSpec]] = ([], [])
     track_clips_audio: tuple[list[ClipPlacementSpec], list[ClipPlacementSpec]] = ([], [])
     wipe_transitions: list[WipeTransitionSpec] = []
+    affine_transitions: list[AffineTransitionSpec] = []
     cursor = 0.0  # global second at which the scenes block starts
 
     for s_idx, scene in enumerate(scenes_data):
@@ -213,14 +255,23 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             continue
 
         transition = scene.get("transition", "none")
-        if transition not in ("none", "dissolve", "wipe"):
+        if transition not in ("none", "dissolve", "wipe", "affine"):
             errors.append(msg("validation.scene_transition_invalid", ctx=ctx, transition=transition))
             continue
-        overlap = float(scene.get("transition_duration", DEFAULT_TRANSITION_DURATION)) if transition in ("dissolve", "wipe") else 0.0
+        overlap = (
+            float(scene.get("transition_duration", DEFAULT_TRANSITION_DURATION))
+            if transition in ("dissolve", "wipe", "affine")
+            else 0.0
+        )
 
         luma = scene.get("luma", DEFAULT_LUMA)
         if transition == "wipe" and luma not in AVAILABLE_LUMAS:
             errors.append(msg("validation.scene_luma_invalid", ctx=ctx, luma=luma, valid=list(AVAILABLE_LUMAS)))
+            continue
+
+        style = scene.get("style", DEFAULT_AFFINE_STYLE)
+        if transition == "affine" and style not in AFFINE_STYLES:
+            errors.append(msg("validation.scene_style_invalid", ctx=ctx, style=style, valid=list(AFFINE_STYLES)))
             continue
 
         pacing = scene.get("pacing", "normal")
@@ -237,8 +288,8 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         clip_kinds = [bin_by_id[cid].type or probe.guess_type(bin_by_id[cid].path) for cid in clip_ids]
 
         is_audio_scene = all(k == "audio" for k in clip_kinds)
-        if transition == "wipe" and is_audio_scene:
-            errors.append(msg("validation.scene_wipe_needs_video", ctx=ctx))
+        if transition in ("wipe", "affine") and is_audio_scene:
+            errors.append(msg("validation.scene_transition_needs_video", ctx=ctx, transition=transition))
             continue
         active_track_clips = track_clips_audio if is_audio_scene else track_clips
         active_track_names = SCENE_TRACK_NAMES_AUDIO if is_audio_scene else SCENE_TRACK_NAMES
@@ -308,10 +359,10 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                 size=extras.get("size"),
             )
             active_track_clips[i % 2].append(placement)
-            # Wipe doesn't touch either clip's alpha (both stay fully
-            # opaque) - the reveal comes entirely from a real two-source
-            # MLT transition xmlgen.py adds between the alternating
-            # tracks, scoped to exactly this overlap window.
+            # Neither wipe nor affine touches either clip's alpha (both
+            # stay fully opaque) - the reveal comes entirely from a real
+            # two-source MLT transition xmlgen.py adds between the
+            # alternating tracks, scoped to exactly this overlap window.
             if transition == "wipe" and i > 0:
                 wipe_transitions.append(
                     WipeTransitionSpec(
@@ -320,6 +371,16 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                         start=start,
                         end=start + overlap,
                         luma=luma,
+                    )
+                )
+            if transition == "affine" and i > 0:
+                affine_transitions.append(
+                    AffineTransitionSpec(
+                        track_a=active_track_names[(i - 1) % 2],
+                        track_b=active_track_names[i % 2],
+                        start=start,
+                        end=start + overlap,
+                        style=style,
                     )
                 )
             start += length - overlap
@@ -345,4 +406,5 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         raw_extras=doc.raw_extras,
         scenes_raw=[],
         wipe_transitions=doc.wipe_transitions + wipe_transitions,
+        affine_transitions=doc.affine_transitions + affine_transitions,
     )

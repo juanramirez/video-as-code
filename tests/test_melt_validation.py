@@ -678,6 +678,108 @@ scenes:
     )
 
 
+def test_scenes_affine_zoom_produces_a_real_zoom(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """Empirical check for `transition: affine`, `style: zoom` (new this
+    cycle, a third transition engine alongside dissolve's alpha fade and
+    wipe's luma map): renders a two-clip scene (red -> blue) and confirms
+    the incoming clip genuinely grows from a small centered rect - during
+    the transition, the center should already be blue while the edge is
+    still red, unlike a uniform dissolve (`_mean_rgb`'s whole-frame
+    average couldn't tell these apart) or a spatial wipe (which sweeps
+    left-to-right, not center-outward)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: affine
+    style: zoom
+    transition_duration: 1.0
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def red_fraction(x: int, y: int, t: float) -> float:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(t), "-i", str(rendered), "-frames:v", "1",
+             "-vf", f"crop=4:4:{x}:{y}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, timeout=30, check=True,
+        )
+        data = result.stdout
+        n = len(data) // 3
+        r = sum(data[0::3]) / n
+        b = sum(data[2::3]) / n
+        return r / (r + b + 1e-6)
+
+    # photo.png is red, photo2.png is blue; the transition spans [1.5, 2.5)s.
+    assert red_fraction(160, 120, 1.3) > 0.95, "expected pure red before the transition"
+    center_early = red_fraction(160, 120, 1.7)
+    edge_early = red_fraction(10, 10, 1.7)
+    assert center_early < 0.5 < edge_early, (
+        f"expected the center to already be blue (zoomed-in reveal) while the "
+        f"edge is still red, got {center_early=:.2f} {edge_early=:.2f}"
+    )
+    assert red_fraction(10, 10, 2.7) < 0.05, "expected pure blue everywhere after the transition"
+
+
+def test_scenes_affine_slide_produces_a_real_slide(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """Empirical check for `transition: affine`, `style: slide`: the
+    incoming clip should enter from the right edge and sweep left, the
+    same spatial-sweep technique `wipe`'s own test uses (unlike `zoom`,
+    which reveals from the center outward)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: affine
+    style: slide
+    transition_duration: 1.0
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def red_fraction_at(t: float, frac_x: float) -> float:
+        r, _g, b = _mean_rgb_at_x(rendered, timestamp=t, frac_x=frac_x)
+        return r / (r + b + 1e-6)
+
+    # photo.png is red, photo2.png is blue; the transition spans [1.5, 2.5)s.
+    assert red_fraction_at(1.3, 0.9) > 0.95, "expected pure red before the transition"
+    left_early = red_fraction_at(1.7, 0.1)
+    right_early = red_fraction_at(1.7, 0.9)
+    assert right_early < 0.5 < left_early, (
+        f"expected the incoming clip to enter from the right while the left "
+        f"edge is still the outgoing clip, got {left_early=:.2f} {right_early=:.2f}"
+    )
+    assert red_fraction_at(2.7, 0.1) < 0.05, "expected pure blue everywhere after the transition"
+
+
 def test_melt_respects_video_speed_change(tmp_path: Path, assets_dir: Path, melt):
     """Empirical check for `speed:` (timewarp) on a video clip: at 2x, the
     3s testsrc clip (assets_dir) should occupy 1.5s on the timeline - not

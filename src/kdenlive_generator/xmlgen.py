@@ -21,7 +21,18 @@ from typing import Optional
 
 from . import lumas
 from .ids import deterministic_document_id, deterministic_uuid
-from .models import ResolvedPlacement, ResolvedProject, ResolvedTrack
+from .models import ResolvedAffineTransition, ResolvedPlacement, ResolvedProject, ResolvedTrack
+
+# Keyframed `rect` for each `transition: affine` style (scenes.py), 0-relative
+# to the transition's own `in` (confirmed empirically, same convention the
+# fade filters below rely on: a keyframe index is relative to the owning
+# element's own `in`, not an absolute timeline frame). Format is MLT's own
+# "X/Y:WxH:opacity" (percentages throughout - mixing absolute and percentage
+# fields in the same rect is rejected/misbehaves, confirmed empirically).
+_AFFINE_STYLE_RECT = {
+    "zoom": "{first}=50%/50%:1%x1%:100;{last}=0%/0%:100%x100%:100",
+    "slide": "{first}=100%/0%:100%x100%:100;{last}=0%/0%:100%x100%:100",
+}
 
 MLT_VERSION = "7.38.0"
 KDENLIVE_VERSION = "26.04.3"
@@ -437,16 +448,16 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     for _, tid in track_tractor_ids:
         ET.SubElement(sequence, "track", {"producer": tid})
 
-    if project.wipe_transitions:
+    if project.wipe_transitions or project.affine_transitions:
         # Must come before the a_track=0 compositing transitions below: MLT
         # applies a tractor's transitions in declaration order, and (found
         # empirically - see tests/test_melt_validation.py's wipe test)
-        # once qtblend has already run against a track, a later luma
-        # transition between two *other* tracks stops progressing over
-        # time at all (every sampled frame lands on the same, wrong side
-        # of the wipe, as if `in`/`out` were ignored). Putting the luma
-        # transitions first avoids whatever state qtblend's compositing
-        # disturbs.
+        # once qtblend has already run against a track, a later luma (or
+        # affine) transition between two *other* tracks stops progressing
+        # over time at all (every sampled frame lands on the same, wrong
+        # side of the transition, as if `in`/`out` were ignored). Putting
+        # these transitions first avoids whatever state qtblend's
+        # compositing disturbs.
         track_position = {track.name: pos for pos, track in enumerate(project.tracks, start=1)}
         for w in project.wipe_transitions:
             t = ET.SubElement(
@@ -462,6 +473,19 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
             _prop(t, "softness", 0)
             _prop(t, "alpha_over", 1)
             _prop(t, "fix_background_alpha", 1)
+        for a in project.affine_transitions:
+            t = ET.SubElement(
+                sequence,
+                "transition",
+                {"id": ids.next("transition"), "in": str(a.start_frame), "out": str(a.end_frame)},
+            )
+            _prop(t, "a_track", track_position[a.track_a])
+            _prop(t, "b_track", track_position[a.track_b])
+            _prop(t, "mlt_service", "affine")
+            _prop(t, "kdenlive_id", "affine")
+            _prop(t, "rect", _AFFINE_STYLE_RECT[a.style].format(first=0, last=a.end_frame - a.start_frame))
+            _prop(t, "fill", 1)
+            _prop(t, "distort", 0)
 
     for pos, (kind, _) in enumerate(track_tractor_ids, start=1):
         t = ET.SubElement(sequence, "transition", {"id": ids.next("transition")})

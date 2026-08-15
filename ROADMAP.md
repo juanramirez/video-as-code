@@ -207,51 +207,120 @@ backlog.
       `xmlgen.py` fixed it - root cause not fully understood, but the fix
       was verified empirically and is documented as such in code.
 
-## v0.3 — scoped (2026-08-15)
+## v0.3 — shipped (2026-08-15)
 
-Three groups: quick fixes (low risk, bundled housekeeping), symmetry
-closes (mirror a pattern a v0.2 feature already shipped), and one new
-transition mechanism as the headline feature.
+Three groups, all **implemented** (2026-08-15): quick fixes (low risk,
+bundled housekeeping), symmetry closes (mirror a pattern a v0.2 feature
+already shipped), and one new transition mechanism as the headline
+feature.
 
-- **Quick fixes**:
-  - `font_size`/`colorspace` range validation in `schema.py` (currently
-    unchecked, unlike the sibling `speed_not_positive` check).
+- **Quick fixes** — **implemented**:
+  - `font_size`/`colorspace` range validation in `schema.py` (previously
+    unchecked, unlike the sibling `speed_not_positive` check it now
+    replaces - see below).
   - PiP `position`/`size` bounds-checking against the project canvas in
-    `schema.py` (currently only checks shape, not that the rect stays
+    `schema.py` (previously only checked shape, not that the rect stays
     within `width`/`height`).
-  - `cli.py` output-write errors (`xmlgen.write`, `output.write_text`)
-    routed through the same `KdgenError`/`msg()` path every other
-    failure mode already uses, instead of a raw traceback.
+  - `cli.py` output-write errors (`xmlgen.write`, `output.write_text` in
+    `cmd_build`/`cmd_import`/`cmd_reconstruct`) now routed through the
+    same `KdgenError`/`msg()` path every other failure mode already
+    uses, instead of a raw traceback.
   - `--lang` CLI flag as an alternative to the `KDGEN_LANG` environment
-    variable.
+    variable - applied before `build_parser()` (a lightweight pre-parser
+    peels it off `argv`) so `--help` itself comes out localized too.
   - `pyproject.toml` version bump to match what's actually shipped.
-  - `examples/` updated to demonstrate `mute:`, `speed:`, `type: title`,
-    and a `scenes:` block with `dissolve`/`wipe` — currently only shows
-    v0.1-era fades and plain placements.
-- **Reverse speed (negative timewarp)**: `speed:` accepts negative
-  values on the generate side; `reverse.py` recognizes negative
-  `warp_speed` on import instead of falling back to `x_kdenlive_raw`.
-  Mirrors the forward-speed work already shipped in v0.2.
-- **Audio pan/balance**: makes the already-emitted `panner` filter a
-  real per-track/per-clip control instead of the hardcoded
-  `disable=1` placeholder. Same shape as `mute` — one already-plumbed
-  filter, no new mechanism.
-- **`scenes:` ergonomics**:
-  - Exposes `mute:`, `speed:`, and PiP `position:`/`size:` at the
-    scene-clip level, so a user doesn't have to drop out of `scenes:`
-    down to the low-level `timeline.tracks` model to reach fields that
-    already work there.
-  - Fixes `scenes:` transitions being hardcoded to a video-typed track
-    regardless of whether the scene's clips are audio — an audio-only
-    scene with `transition: dissolve` should produce a working audio
-    crossfade (MLT's `mix` transition), not force audio clips onto a
-    video track.
-- **New transition: `affine`-based zoom/spin/cube/push-slide**: a third
-  transition engine alongside `dissolve`'s alpha fade and `wipe`'s luma
-  map, built on MLT's own `affine` transition (Meltytech, LGPLv2.1 —
-  already shipped with MLT, confirmed via `melt -query
-  transition=affine` on this machine, no new dependency). Animates
-  keyframed `rect`/`rotate_x,y,z`/`scale_x,y` across the overlap window
-  to produce the zoom-in, spin, 3D-cube, and push/slide transitions
-  competitor NLEs ship. To be verified with a real render the same way
-  `wipe` was — spatially/temporally, not just structurally.
+  - `examples/simple/project.yaml` now also demonstrates `speed:`,
+    `mute:`, and `type: title`; a new `examples/scenes/project.yaml`
+    demonstrates the `scenes:` compiler itself (a cut, a `dissolve`, and
+    a `wipe`) - previously no example touched any of v0.2's features.
+- **Reverse speed (negative timewarp)** — **implemented**: `speed:` now
+  accepts negative values (0 still rejected - `validation.speed_zero`
+  replaces the old `speed_not_positive` check) on the generate side;
+  `reverse.py` recognizes negative `warp_speed` on import instead of
+  falling back to `x_kdenlive_raw`. Mirrors the forward-speed work
+  shipped in v0.2 - same `resource` convention
+  (`"{speed}:{path}"`), MLT's `timewarp` producer already handles the
+  sign. Verified with a real render (a red-then-blue clip actually plays
+  blue-then-red at `speed: -1.0`,
+  `tests/test_melt_validation.py::test_melt_respects_reverse_speed_change`)
+  and round-trip
+  (`tests/test_reverse.py::test_round_trip_preserves_negative_speed`).
+- **Audio pan/balance** — **implemented**: `pan:` (-1.0..1.0) on an
+  audio track makes the already-emitted `panner` filter (`channel=-1`,
+  stereo balance) a real per-track control instead of the hardcoded
+  `disable=1` mixer-strip placeholder every track already had - same
+  shape as `mute`, one already-plumbed filter, no new mechanism.
+  Audio-only, range-checked. Verified with a real render: full-left pan
+  renders much louder on the left channel than the right
+  (`tests/test_melt_validation.py::test_melt_applies_a_real_audio_pan`) -
+  which also confirmed, as a side effect, that this project's stereo
+  profile upmixes a mono source before the panner filter runs.
+- **`scenes:` ergonomics** — **implemented**:
+  - A scene clip entry can now be `{clip: id, mute: true}` or
+    `{path: '...', speed: 2.0}` - the same `mute`/`speed`/
+    `preserve_pitch`/`position`/`size` fields `timeline.tracks[].clips[]`
+    already supports at the low-level, so reaching them no longer forces
+    dropping out of `scenes:` down to hand-written tracks
+    (`scenes.py`'s `extract_clip_extras`). Fixed a real interaction bug
+    this surfaced along the way: the auto-pacing `video_cap` compared a
+    sped-up clip against its *unwarped* source duration, so it could
+    compute an `out:` beyond what the clip actually has left on the
+    warped timeline.
+  - A scene whose clips are *all* audio now routes to a separate
+    audio-typed alternating track pair ("Scenes A (audio)"/"Scenes B
+    (audio)") instead of being forced onto `scenes.py`'s previously
+    video-only tracks. `transition: wipe`/`affine` have no audio
+    equivalent and are now a validation error there instead of silently
+    misapplying. Verified with a real render, not just structurally:
+    two different tones (220Hz/880Hz) genuinely crossfade
+    (`tests/test_melt_validation.py::test_scenes_audio_dissolve_produces_a_real_crossfade`)
+    — which caught a real mechanism difference from the video case: MLT's
+    audio `mix` transition *sums* both tracks (not `qtblend`'s alpha
+    compositing), so an audio dissolve needs *both* clips to fade
+    complementarily, not just the "top" one as a video dissolve does, or
+    the un-faded clip plays at full volume and stops dead at its own
+    boundary - an audible glitch, not a crossfade.
+- **New transition: `affine`-based `zoom`/`slide`** — **implemented**,
+  **scope trimmed from the original plan**: a third transition engine
+  alongside `dissolve`'s alpha fade and `wipe`'s luma map, built on
+  MLT's own `affine` transition (Meltytech, LGPLv2.1, already shipped
+  with MLT - no new dependency). `transition: affine` + `style: zoom`
+  (default, incoming clip's rect grows from a tiny centered point to the
+  full frame) or `style: slide` (incoming clip's rect slides in from
+  fully off-frame right). Same alternating-track-overlap shape
+  `dissolve`/`wipe` already use; neither clip gets a fade, the
+  transition alone decides visibility, like `wipe`.
+
+  Originally planned as "zoom/spin/cube/push-slide" per the affine
+  transition's own documented `rotate_x/y/z`/`fix_rotate_x/y/z`
+  parameters. **`spin`/`cube` (rotation) were investigated and dropped**:
+  empirically, on this project's real melt build, those properties are
+  accepted without error but never actually rotate pixels - only shrink
+  the destination rect's bounding box (checked directly by rendering a
+  full-frame rect at various fixed and keyframed rotation angles and
+  sampling its corners: a real rotation should expose background there,
+  and never did, with `fill`/`distort`/`rotate_center` toggled every way
+  tried). Not shipped rather than shipping something unverified - see
+  BACKLOG.md for `frei0r.3dflippo`, found afterward via separate
+  research and *verified* by real render to produce a genuine
+  perspective-correct 3D flip/cube effect through a different mechanism
+  entirely (a single-clip filter, not `affine`'s rotation properties),
+  a strong candidate to actually deliver on the original "cube" ambition
+  next.
+
+  `zoom` and `slide` are both verified with real renders, not just
+  structurally: `zoom` against a center-vs-edge pixel sample (center
+  already reveals the incoming clip while the edge doesn't, the opposite
+  spatial signature from `wipe`'s left-to-right sweep) -
+  `tests/test_melt_validation.py::test_scenes_affine_zoom_produces_a_real_zoom`;
+  `slide` against the same column-sampling technique `wipe`'s own test
+  uses -
+  `tests/test_melt_validation.py::test_scenes_affine_slide_produces_a_real_slide`.
+
+  Also surfaced and confirmed a real, easy-to-miss `affine` `rect`
+  syntax trap along the way: mixing absolute-pixel and percentage units
+  in the same rect string (`"320/0:100%x100%:100"`) silently produces a
+  no-op/wrong result instead of an error - every field has to use the
+  same unit (all percentages, in this project's case), matching what the
+  MLT docs say but easy to violate by accident since nothing rejects the
+  mix.

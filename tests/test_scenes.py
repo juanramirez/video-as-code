@@ -76,7 +76,8 @@ scenes:
     assert all(t.kind == "audio" for t in scene_tracks)
 
 
-def test_audio_only_scene_rejects_wipe(tmp_path: Path, assets_dir: Path):
+@pytest.mark.parametrize("transition", ["wipe", "affine"])
+def test_audio_only_scene_rejects_video_only_transitions(tmp_path: Path, assets_dir: Path, transition: str):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
 bin:
@@ -86,7 +87,7 @@ bin:
     path: {assets_dir / "tone.mp3"}
 scenes:
   - scene: s1
-    transition: wipe
+    transition: {transition}
     transition_duration: 0.5
     clips:
       - {{clip: tone_a}}
@@ -96,4 +97,23 @@ scenes:
     path = _write_yaml(tmp_path, yaml_text)
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(path)
-    assert "wipe" in str(exc.value)
+    assert transition in str(exc.value)
+
+
+def test_affine_transition_invalid_style_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: affine
+    style: bounce
+    transition_duration: 0.5
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 3.0
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "style" in str(exc.value)

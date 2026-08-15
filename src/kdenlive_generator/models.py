@@ -81,6 +81,23 @@ class WipeTransitionSpec:
 
 
 @dataclass
+class AffineTransitionSpec:
+    """One overlap window between two adjacent clips on alternating video
+    tracks, produced by scenes.py's `transition: affine` (`style: zoom` or
+    `style: slide`). Like `wipe`, this needs a real two-source MLT
+    transition (`mlt_service: affine`) rather than a per-clip alpha
+    filter, since it geometrically transforms the incoming clip (scaled
+    rect for zoom, offset rect for slide) as it's composited over the
+    outgoing one - a per-clip filter can't do a two-source geometric
+    reveal any more than it could a two-source luma wipe."""
+    track_a: str
+    track_b: str
+    start: float
+    end: float
+    style: str  # "zoom" | "slide"
+
+
+@dataclass
 class ProjectDoc:
     project: ProjectSpec
     bin: list[BinClipSpec]
@@ -89,6 +106,7 @@ class ProjectDoc:
     raw_extras: Optional[dict] = None  # see reverse.py: `x_kdenlive_raw` block
     scenes_raw: list = field(default_factory=list)  # uncompiled; see scenes.py
     wipe_transitions: list[WipeTransitionSpec] = field(default_factory=list)
+    affine_transitions: list[AffineTransitionSpec] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -147,6 +165,15 @@ class ResolvedWipeTransition:
 
 
 @dataclass
+class ResolvedAffineTransition:
+    track_a: str
+    track_b: str
+    start_frame: int
+    end_frame: int  # last included frame (MLT convention, like ResolvedPlacement.out_frame)
+    style: str  # "zoom" | "slide"
+
+
+@dataclass
 class ResolvedProject:
     project_id: str
     title: str
@@ -158,6 +185,7 @@ class ResolvedProject:
     tracks: list[ResolvedTrack]
     source_dir: Path
     wipe_transitions: list[ResolvedWipeTransition] = field(default_factory=list)
+    affine_transitions: list[ResolvedAffineTransition] = field(default_factory=list)
 
     @property
     def total_frames(self) -> int:

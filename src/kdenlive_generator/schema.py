@@ -24,6 +24,7 @@ from .models import (
     ClipPlacementSpec,
     ProjectDoc,
     ProjectSpec,
+    ResolvedAffineTransition,
     ResolvedBinClip,
     ResolvedPlacement,
     ResolvedProject,
@@ -444,6 +445,16 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         )
         for w in doc.wipe_transitions
     ]
+    resolved_affines = [
+        ResolvedAffineTransition(
+            track_a=a.track_a,
+            track_b=a.track_b,
+            start_frame=fps.seconds_to_frames(a.start),
+            end_frame=fps.seconds_to_frames(a.end) - 1,
+            style=a.style,
+        )
+        for a in doc.affine_transitions
+    ]
 
     return ResolvedProject(
         project_id=doc.project.id,
@@ -456,4 +467,5 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         tracks=resolved_tracks,
         source_dir=doc.source_path.parent,
         wipe_transitions=resolved_wipes,
+        affine_transitions=resolved_affines,
     )
