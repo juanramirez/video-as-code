@@ -28,6 +28,7 @@ possible in-progress fade rather than assuming plain content throughout.
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import subprocess
 import tempfile
@@ -69,7 +70,7 @@ class ReconstructError(RuntimeError):
 # -- low-level media extraction ----------------------------------------------
 
 
-def _run_ffmpeg(args: list[str], timeout: int = 1800) -> None:
+def _run_ffmpeg(args: list[str], timeout: int = 1800, capture_stdout: bool = False) -> bytes:
     """`timeout` defaults to 30 minutes, not a few seconds: this runs
     full-video decodes (frame extraction, waveform extraction) on
     whatever real footage the user points it at, which can legitimately
@@ -77,18 +78,23 @@ def _run_ffmpeg(args: list[str], timeout: int = 1800) -> None:
     genuinely hung ffmpeg process was instead tripping on ordinary large
     inputs and crashing with a raw, uncaught `TimeoutExpired` traceback
     (see cmd_reconstruct's docstring reference in cli.py) instead of a
-    clean error."""
+    clean error.
+
+    `capture_stdout=True` returns raw stdout bytes (for a `pipe:1` output,
+    e.g. `extract_frame_signatures`' rawvideo pipe) instead of `b""` -
+    kept binary (no `text=True`) since piped pixel data isn't text."""
     try:
         result = subprocess.run(
             ["ffmpeg", "-y", "-v", "error", *args],
-            capture_output=True,
-            text=True,
+            stdout=subprocess.PIPE if capture_stdout else subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             timeout=timeout,
         )
     except subprocess.TimeoutExpired as exc:
         raise ReconstructError(msg("reconstruct.ffmpeg_timeout", timeout=timeout)) from exc
     if result.returncode != 0:
-        raise ReconstructError(msg("reconstruct.ffmpeg_failed", stderr=result.stderr.strip()))
+        raise ReconstructError(msg("reconstruct.ffmpeg_failed", stderr=result.stderr.decode(errors="replace").strip()))
+    return result.stdout or b""
 
 
 def _signature_from_image(img: Image.Image) -> np.ndarray:
@@ -98,7 +104,6 @@ def _signature_from_image(img: Image.Image) -> np.ndarray:
 
 def extract_frame_signatures(
     path: Path,
-    tmp_dir: Path,
     *,
     fps: float,
     start_s: float = 0.0,
@@ -107,22 +112,35 @@ def extract_frame_signatures(
     """Bulk-extracts frames at `fps` (optionally just a `[start_s, start_s +
     duration_s)` window) and returns one signature per frame, in order.
     Bulk extraction (one ffmpeg call, `-vf fps=`) instead of one call per
-    timestamp — much faster for anything beyond a handful of frames."""
-    out_dir = tmp_dir / f"frames_{path.stem}_{fps}_{start_s}_{duration_s}"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    timestamp — much faster for anything beyond a handful of frames.
+
+    ffmpeg does the downscale itself (`scale=SIGNATURE_SIZExSIGNATURE_SIZE`)
+    and streams raw RGB24 pixels back through a single pipe, instead of
+    writing one `.png` per sampled frame to disk and reopening each with
+    Pillow (the old approach) - encoding/writing/reopening/decoding
+    thousands of tiny PNG files was pure overhead dwarfing the actual
+    signature computation, and was directly responsible for a real
+    60-second-timeout crash on an ordinary full-length render (see
+    `_run_ffmpeg`'s docstring) even before the timeout itself was fixed.
+    Every frame comes back at a fixed SIGNATURE_SIZExSIGNATURE_SIZEx3
+    byte count regardless of source resolution, so the whole pipe output
+    can be reshaped directly - no per-frame Python-side image decoding at
+    all anymore."""
     args = []
     if start_s > 0:
         args += ["-ss", str(start_s)]
     args += ["-i", str(path)]
     if duration_s is not None:
         args += ["-t", str(duration_s)]
-    args += ["-vf", f"fps={fps}", str(out_dir / "f_%06d.png")]
-    _run_ffmpeg(args)
-    signatures = []
-    for png in sorted(out_dir.glob("f_*.png")):
-        with Image.open(png) as img:
-            signatures.append(_signature_from_image(img))
-    return signatures
+    args += [
+        "-vf", f"fps={fps},scale={SIGNATURE_SIZE}:{SIGNATURE_SIZE}:flags=lanczos",
+        "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
+    ]
+    raw = _run_ffmpeg(args, capture_stdout=True)
+    frame_bytes = SIGNATURE_SIZE * SIGNATURE_SIZE * 3
+    n_frames = len(raw) // frame_bytes
+    frames = np.frombuffer(raw[: n_frames * frame_bytes], dtype=np.uint8).astype(np.float64)
+    return list(frames.reshape(n_frames, frame_bytes))
 
 
 def probe_video_info(path: Path) -> dict:
@@ -161,8 +179,16 @@ def extract_image_signature(path: Path) -> np.ndarray:
 def extract_audio_waveform(path: Path, tmp_dir: Path, *, sample_rate: int = AUDIO_SAMPLE_RATE) -> np.ndarray:
     """Mono, 16-bit PCM waveform as float64 samples. Uses the stdlib `wave`
     module to read it back instead of a third-party WAV reader — ffmpeg
-    already guarantees the format via the encoding flags below."""
-    wav_path = tmp_dir / f"audio_{path.stem}.wav"
+    already guarantees the format via the encoding flags below.
+
+    The temp filename is built from `path.name` (full filename, extension
+    included), not `path.stem` - `build_audio_bank` now runs these calls
+    concurrently across a thread pool, and two source assets differing
+    only by extension (e.g. `song.mp3` next to `song.wav`) would
+    otherwise both target the same `audio_song.wav` path and race on it;
+    `.name` is guaranteed unique within one directory (`asset_files`
+    isn't recursive), `.stem` isn't."""
+    wav_path = tmp_dir / f"audio_{path.name}.wav"
     _run_ffmpeg(
         ["-i", str(path), "-vn", "-ac", "1", "-ar", str(sample_rate), "-acodec", "pcm_s16le", str(wav_path)]
     )
@@ -207,26 +233,44 @@ class AudioAsset:
     duration_s: float
 
 
+BANK_MAX_WORKERS = 4  # concurrent ffmpeg/ffprobe processes when building an asset bank - see build_visual_bank
+
+
 def build_visual_bank(
     assets_dir: Path,
-    tmp_dir: Path,
     *,
     fps: float = 1 / COARSE_SAMPLE_INTERVAL,
     on_progress: Optional[Callable[[str], None]] = None,
+    max_workers: int = BANK_MAX_WORKERS,
 ) -> dict[str, VisualAsset]:
-    bank: dict[str, VisualAsset] = {}
-    for path in asset_files(assets_dir):
+    """Each asset file is decoded/probed independently of every other one -
+    this used to process the bank one file at a time even though nearly
+    all the wall time per asset is spent blocked on an external ffmpeg/
+    ffprobe process, not on Python-side CPU work. A thread pool gives
+    real wall-clock parallelism across cores here with no GIL concern
+    (each worker thread is mostly just waiting on `subprocess.run`) -
+    `max_workers` is deliberately modest (not tied to the machine's core
+    count): each ffmpeg process can itself use several threads internally
+    for decoding, so spawning too many concurrent processes on top of
+    that oversubscribes rather than helps."""
+    paths = [p for p in asset_files(assets_dir) if guess_kind(p) in ("image", "video")]
+
+    def _process(path: Path) -> tuple[str, VisualAsset]:
         kind = guess_kind(path)
         if kind == "image":
             if on_progress:
                 on_progress(msg("reconstruct.progress.visual_asset_image", name=path.name))
-            bank[path.name] = VisualAsset(path=path, kind=kind, signatures=[extract_image_signature(path)], duration_s=0.0)
-        elif kind == "video":
-            if on_progress:
-                on_progress(msg("reconstruct.progress.visual_asset_video", name=path.name))
-            duration = probe.probe_duration_seconds(str(path))
-            signatures = extract_frame_signatures(path, tmp_dir, fps=fps)
-            bank[path.name] = VisualAsset(path=path, kind=kind, signatures=signatures, duration_s=duration)
+            return path.name, VisualAsset(path=path, kind=kind, signatures=[extract_image_signature(path)], duration_s=0.0)
+        if on_progress:
+            on_progress(msg("reconstruct.progress.visual_asset_video", name=path.name))
+        duration = probe.probe_duration_seconds(str(path))
+        signatures = extract_frame_signatures(path, fps=fps)
+        return path.name, VisualAsset(path=path, kind=kind, signatures=signatures, duration_s=duration)
+
+    bank: dict[str, VisualAsset] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+        for name, asset in pool.map(_process, paths):
+            bank[name] = asset
     return bank
 
 
@@ -236,21 +280,32 @@ def build_audio_bank(
     *,
     sample_rate: int = AUDIO_SAMPLE_RATE,
     on_progress: Optional[Callable[[str], None]] = None,
+    max_workers: int = BANK_MAX_WORKERS,
 ) -> dict[str, AudioAsset]:
-    bank: dict[str, AudioAsset] = {}
-    for path in asset_files(assets_dir):
-        if guess_kind(path) not in ("audio", "video"):
-            continue
+    """Same rationale as `build_visual_bank` - independent per-asset ffmpeg
+    calls, parallelized with a thread pool instead of run one at a time.
+    Each worker writes to its own `audio_{stem}.wav` in `tmp_dir` (derived
+    from that asset's own filename), so concurrent writes never collide."""
+    paths = [p for p in asset_files(assets_dir) if guess_kind(p) in ("audio", "video")]
+
+    def _process(path: Path) -> Optional[tuple[str, AudioAsset]]:
         if on_progress:
             on_progress(msg("reconstruct.progress.audio_asset", name=path.name))
         try:
             waveform = extract_audio_waveform(path, tmp_dir, sample_rate=sample_rate)
         except ReconstructError:
-            continue  # e.g. a video asset with no audio stream
+            return None  # e.g. a video asset with no audio stream
         if waveform.size == 0:
-            continue
+            return None
         duration = probe.probe_duration_seconds(str(path))
-        bank[path.name] = AudioAsset(path=path, waveform=waveform, duration_s=duration)
+        return path.name, AudioAsset(path=path, waveform=waveform, duration_s=duration)
+
+    bank: dict[str, AudioAsset] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+        for result in pool.map(_process, paths):
+            if result is not None:
+                name, asset = result
+                bank[name] = asset
     return bank
 
 
@@ -621,7 +676,7 @@ def reconstruct(
 
         try:
             _report(msg("reconstruct.progress.building_visual_bank"))
-            visual_bank = build_visual_bank(assets_dir, tmp_dir, on_progress=_report)
+            visual_bank = build_visual_bank(assets_dir, on_progress=_report)
             _report(msg("reconstruct.progress.building_audio_bank"))
             audio_bank = build_audio_bank(assets_dir, tmp_dir, on_progress=_report)
         except probe.ProbeError as exc:
@@ -629,7 +684,7 @@ def reconstruct(
         asset_ids = _make_asset_ids(set(visual_bank) | set(audio_bank))
 
         _report(msg("reconstruct.progress.extracting_render_signatures", name=video_path.name))
-        coarse_signatures = extract_frame_signatures(video_path, tmp_dir, fps=1 / COARSE_SAMPLE_INTERVAL)
+        coarse_signatures = extract_frame_signatures(video_path, fps=1 / COARSE_SAMPLE_INTERVAL)
         segments = segment_by_scene_cuts(coarse_signatures)
         _report(msg("reconstruct.progress.segments_found", n=len(segments)))
 
@@ -667,10 +722,10 @@ def reconstruct(
 
             if asset.kind == "video":
                 segment_fine = extract_frame_signatures(
-                    video_path, tmp_dir, fps=fps, start_s=segment.start_s, duration_s=duration_s
+                    video_path, fps=fps, start_s=segment.start_s, duration_s=duration_s
                 )
                 if match.asset_name not in fine_asset_cache:
-                    fine_asset_cache[match.asset_name] = extract_frame_signatures(asset.path, tmp_dir, fps=fps)
+                    fine_asset_cache[match.asset_name] = extract_frame_signatures(asset.path, fps=fps)
                 trim = find_trim_offset(segment_fine, fine_asset_cache[match.asset_name])
                 in_s = (trim[0] / fps) if trim else 0.0
                 if in_s > 1e-6:
