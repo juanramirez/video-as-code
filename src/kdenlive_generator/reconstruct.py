@@ -58,6 +58,42 @@ AUDIO_SAMPLE_RATE = 8000  # Hz, downsampled for cross-correlation
 VIDEO_MATCH_DISTANCE_THRESHOLD = 500.0
 AUDIO_MATCH_SCORE_THRESHOLD = 0.3
 
+
+def _video_confidence_pct(mean_distance: float) -> float:
+    """`VideoMatch.mean_distance` is a raw signature-space Euclidean
+    distance - lower is better, no natural upper bound (an unrelated
+    frame commonly scores 1000+, but there's no fixed maximum). Not
+    something a human should have to interpret directly in
+    `x_reconstruct_unmatched`, so this rescales it onto an intuitive
+    0-100 "higher is better" percentage, anchored on
+    VIDEO_MATCH_DISTANCE_THRESHOLD itself as the 0% point (that's
+    already the real accept/reject boundary) and clamped so a very bad
+    distractor doesn't come out as a confusing negative percentage. This
+    is a readability aid only - the actual match/no-match decision is
+    still made on the raw `mean_distance` vs. the threshold, not on this
+    rounded percentage."""
+    return max(0.0, round(100 * (1 - mean_distance / VIDEO_MATCH_DISTANCE_THRESHOLD), 1))
+
+
+def _audio_confidence_pct(score: float) -> float:
+    """`AudioMatch.score` is already a ~0..1 normalized correlation peak
+    (~1.0 for a clean match, ~0.0 for unrelated audio) - this just
+    rescales it onto the same 0-100 "higher is better" convention
+    `_video_confidence_pct` uses, clamped so a spurious negative
+    correlation doesn't come out negative."""
+    return max(0.0, round(100 * score, 1))
+
+
+def _match_detail(best_guess: Optional[str], confidence_pct: Optional[float]) -> str:
+    """Short human-readable fragment for `reconstruct.no_confident_match` -
+    factored out so the same wording is used in the printed warning and
+    is derivable from the same `confidence_pct` value that ends up in
+    `x_reconstruct_unmatched` (computed once, not recomputed twice with a
+    risk of drifting out of sync)."""
+    if best_guess is None:
+        return msg("reconstruct.no_candidate")
+    return msg("reconstruct.best_guess_detail", best_guess=best_guess, confidence_pct=confidence_pct)
+
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tiff", ".tif"}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".wma"}
@@ -708,12 +744,13 @@ def reconstruct(
 
             if match is None or match.mean_distance > VIDEO_MATCH_DISTANCE_THRESHOLD:
                 where = f"video [{segment.start_s:.2f}s-{segment.end_s:.2f}s]"
+                confidence_pct = None if match is None else _video_confidence_pct(match.mean_distance)
                 unmatched.append({
                     "where": where,
                     "best_guess": match.asset_name if match else None,
-                    "confidence": None if match is None else round(match.mean_distance, 1),
+                    "confidence_pct": confidence_pct,  # 0-100, higher is better; see _video_confidence_pct
                 })
-                warnings.append(msg("reconstruct.no_confident_match", where=where))
+                warnings.append(msg("reconstruct.no_confident_match", where=where, detail=_match_detail(match.asset_name if match else None, confidence_pct)))
                 continue
 
             asset = visual_bank[match.asset_name]
@@ -754,12 +791,13 @@ def reconstruct(
             audio_match = identify_audio_asset(full_waveform, audio_bank)
             if audio_match is None or audio_match.score < AUDIO_MATCH_SCORE_THRESHOLD:
                 where = "audio [full track]"
+                confidence_pct = None if audio_match is None else _audio_confidence_pct(audio_match.score)
                 unmatched.append({
                     "where": where,
                     "best_guess": audio_match.asset_name if audio_match else None,
-                    "confidence": None if audio_match is None else round(audio_match.score, 3),
+                    "confidence_pct": confidence_pct,  # 0-100, higher is better; see _audio_confidence_pct
                 })
-                warnings.append(msg("reconstruct.no_confident_match", where=where))
+                warnings.append(msg("reconstruct.no_confident_match", where=where, detail=_match_detail(audio_match.asset_name if audio_match else None, confidence_pct)))
             else:
                 clip = {"clip": asset_ids[audio_match.asset_name], "start": 0.0}
                 if audio_match.asset_is_longer:

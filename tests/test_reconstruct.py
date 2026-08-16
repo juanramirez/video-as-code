@@ -525,3 +525,52 @@ timeline:
 
     assert cat_match is not None and cat_match.asset_name == "cat.jpg"
     assert calcutta_match is not None and calcutta_match.asset_name == "calcutta.mp4"
+
+
+def test_confidence_pct_helpers():
+    """0-100, higher-is-better on both sides (new: `x_reconstruct_unmatched`
+    entries used to expose two internal numbers with different scales and
+    opposite directions - a video match's raw signature-distance (LOWER is
+    better, no fixed upper bound) and an audio match's ~0..1 correlation
+    score (HIGHER is better) - under the same ambiguous `confidence` key,
+    genuinely confusing to read without reading the source)."""
+    assert reconstruct._video_confidence_pct(0.0) == 100.0
+    assert reconstruct._video_confidence_pct(reconstruct.VIDEO_MATCH_DISTANCE_THRESHOLD) == 0.0
+    assert reconstruct._video_confidence_pct(reconstruct.VIDEO_MATCH_DISTANCE_THRESHOLD * 2) == 0.0  # clamped, not negative
+
+    assert reconstruct._audio_confidence_pct(1.0) == 100.0
+    assert reconstruct._audio_confidence_pct(0.0) == 0.0
+    assert reconstruct._audio_confidence_pct(-0.5) == 0.0  # clamped, not negative
+
+
+def test_unmatched_segment_reports_confidence_pct(tmp_path: Path, assets_dir: Path, melt):
+    """A real unmatched segment's `x_reconstruct_unmatched` entry carries
+    `confidence_pct` (0-100, higher is better) instead of the old raw,
+    ambiguous `confidence` number."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1.5}}
+"""
+    rendered = _render(tmp_path, yaml_text, melt)
+
+    # photo.png (assets_dir) is red; a bank containing only the unrelated
+    # blue photo2.png should never confidently match it.
+    wrong_assets = tmp_path / "wrong_assets"
+    wrong_assets.mkdir()
+    (wrong_assets / "photo2.png").write_bytes((assets_dir / "photo2.png").read_bytes())
+
+    result = reconstruct.reconstruct(rendered, wrong_assets)
+
+    unmatched = result.data.get("x_reconstruct_unmatched")
+    assert unmatched, f"expected an unmatched entry, got: {result.data}"
+    entry = unmatched[0]
+    assert entry["best_guess"] == "photo2.png"
+    assert "confidence" not in entry  # old, ambiguous key must be gone
+    assert 0.0 <= entry["confidence_pct"] < 100.0
