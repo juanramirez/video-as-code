@@ -82,6 +82,16 @@ def _props(el: ET.Element) -> dict[str, str]:
     return {p.get("name"): (p.text or "") for p in el.findall("property")}
 
 
+def _has_timeremap_link(producer_el: ET.Element) -> bool:
+    """Whether a `<chain>`/`<producer>` has a `timeremap` `<link>` child
+    (v0.7's `speed_ramp:` mechanism - xmlgen.py's `_add_speed_ramp_link`).
+    `<link>` is a sibling of `<filter>` under the chain, its own
+    `mlt_service` is a nested `<property>` (not an XML attribute) -
+    matches MLT's own XML writer, `serialise_link` in
+    `~/dev/mlt/src/modules/xml/consumer_xml.c`."""
+    return any(_props(link_el).get("mlt_service") == "timeremap" for link_el in producer_el.findall("link"))
+
+
 def _parse_frame_value(value: Optional[str], fps: FrameRate) -> int:
     if not value:
         return 0
@@ -588,6 +598,20 @@ class Importer:
                 self.raw_items.append(RawItem(msg("reverse.clip_no_resource", ctx=ctx, tag=producer_el.tag, producer_id=producer_id), _pretty(child)))
                 continue
             resource, is_timewarp, is_title, title_data = classified
+
+            if _has_timeremap_link(producer_el):
+                # A speed ramp (v0.7's `speed_ramp:`) - `classify_producer`
+                # only ever reads the chain's own `resource`/`mlt_service`,
+                # never a child `<link>`, so without this check a ramped
+                # clip would silently come back as an ordinary unramped
+                # one instead of being flagged - reconstructing the
+                # original `[{at, speed}, ...]` breakpoints from a dense,
+                # per-frame `time_map` isn't attempted (same "never guess"
+                # bar as anything else this generator can't cleanly
+                # invert), so this falls to raw_items instead.
+                self.raw_items.append(RawItem(msg("reverse.speed_ramp_unsupported", ctx=ctx), _pretty(child) + "\n" + _pretty(producer_el)))
+                cursor += _parse_frame_value(child.get("out"), self.fps) - _parse_frame_value(child.get("in"), self.fps) + 1
+                continue
 
             speed = None
             if is_timewarp:

@@ -84,6 +84,18 @@ _EN: dict[str, str] = {
     "validation.numeric_range_invalid": "{ctx}: '{field}' must be between {min} and {max}, got {value}",
     "validation.speed_zero": "{ctx}: 'speed' cannot be 0 (use a positive value for forward, negative for reverse)",
     "validation.speed_on_image": "{ctx}: 'speed' has no effect on an image or title clip ('{clip}')",
+    "validation.speed_ramp_conflicts_with_speed": "{ctx}: 'speed_ramp' cannot be combined with 'speed' - use one or the other",
+    "validation.speed_ramp_invalid": "{ctx}: 'speed_ramp' must be a non-empty list of {{at, speed}} keyframes",
+    "validation.speed_ramp_image_mode_invalid": "{ctx}: 'speed_ramp_image_mode' must be 'nearest' or 'blend', got {mode!r}",
+    "validation.speed_ramp_keyframe_invalid": "{ctx}: 'speed_ramp[{idx}]' must be a mapping with 'at' and 'speed'",
+    "validation.speed_ramp_speed_invalid": "{ctx}: 'speed_ramp[{idx}].speed' must be greater than 0, got {speed}",
+    "validation.speed_ramp_must_start_at_zero": "{ctx}: 'speed_ramp''s first keyframe must have 'at: 0'",
+    "validation.speed_ramp_not_sorted": "{ctx}: 'speed_ramp' keyframes must have strictly increasing 'at' values",
+    "validation.speed_ramp_in_not_supported": "{ctx}: 'in' isn't supported together with 'speed_ramp' - a ramp always starts at the source's own beginning",
+    "validation.speed_ramp_on_image": "{ctx}: 'speed_ramp' has no effect on an image or title clip ('{clip}')",
+    "validation.speed_ramp_requires_duration": "{ctx}: 'speed_ramp' needs an explicit 'out' or 'duration' - it isn't inferred automatically",
+    "validation.speed_ramp_breakpoint_out_of_range": "{ctx}: 'speed_ramp' keyframe at {at}s falls at or after the clip's own duration ({out_s}s)",
+    "validation.speed_ramp_exceeds_source": "{ctx}: 'speed_ramp' would consume {consumed_s}s of source material, but only {available_s}s is available",
     "validation.clip_overlap": (
         "timeline.tracks[{idx}]({name}): overlap between clips '{prev}' "
         "(ends at frame {prev_end}) and '{next}' (starts at frame {next_start})"
@@ -119,6 +131,7 @@ _EN: dict[str, str] = {
     "reverse.entry_missing_producer": "{ctx}: entry references a nonexistent producer '{producer_id}', skipping",
     "reverse.clip_no_resource": "{ctx}: clip with a producer that has no recognizable 'resource' ({tag} {producer_id})",
     "reverse.timewarp_unsupported": "{ctx}: clip with a speed change (timewarp), not supported",
+    "reverse.speed_ramp_unsupported": "{ctx}: clip with a speed ramp (timeremap), not reconstructible into speed_ramp: keyframes",
     "reverse.title_unsupported": "{ctx}: title clip richer than this generator can represent (multiple items, animation, image/rect items, or an unreadable file), not supported",
     "reverse.cross_track_transition_unsupported": "cross-track transition ({service}) between two content tracks (e.g. a wipe) - not reconstructable in the low-level YAML model, kept as-is",
     "reverse.track_not_imported": "{ctx}: track not imported",
@@ -268,6 +281,18 @@ _ES: dict[str, str] = {
     "validation.numeric_range_invalid": "{ctx}: '{field}' debe estar entre {min} y {max}, se recibió {value}",
     "validation.speed_zero": "{ctx}: 'speed' no puede ser 0 (usa un valor positivo para avance, negativo para reversa)",
     "validation.speed_on_image": "{ctx}: 'speed' no tiene efecto en un clip de imagen o título ('{clip}')",
+    "validation.speed_ramp_conflicts_with_speed": "{ctx}: 'speed_ramp' no se puede combinar con 'speed' - usa uno u otro",
+    "validation.speed_ramp_invalid": "{ctx}: 'speed_ramp' debe ser una lista no vacía de keyframes {{at, speed}}",
+    "validation.speed_ramp_image_mode_invalid": "{ctx}: 'speed_ramp_image_mode' debe ser 'nearest' o 'blend', se recibió {mode!r}",
+    "validation.speed_ramp_keyframe_invalid": "{ctx}: 'speed_ramp[{idx}]' debe ser un mapeo con 'at' y 'speed'",
+    "validation.speed_ramp_speed_invalid": "{ctx}: 'speed_ramp[{idx}].speed' debe ser mayor que 0, se recibió {speed}",
+    "validation.speed_ramp_must_start_at_zero": "{ctx}: el primer keyframe de 'speed_ramp' debe tener 'at: 0'",
+    "validation.speed_ramp_not_sorted": "{ctx}: los keyframes de 'speed_ramp' deben tener valores 'at' estrictamente crecientes",
+    "validation.speed_ramp_in_not_supported": "{ctx}: 'in' no es compatible junto con 'speed_ramp' - un ramp siempre empieza en el inicio propio de la fuente",
+    "validation.speed_ramp_on_image": "{ctx}: 'speed_ramp' no tiene efecto en un clip de imagen o título ('{clip}')",
+    "validation.speed_ramp_requires_duration": "{ctx}: 'speed_ramp' necesita 'out' o 'duration' explícito - no se infiere automáticamente",
+    "validation.speed_ramp_breakpoint_out_of_range": "{ctx}: el keyframe de 'speed_ramp' en {at}s cae en o después de la duración propia del clip ({out_s}s)",
+    "validation.speed_ramp_exceeds_source": "{ctx}: 'speed_ramp' consumiría {consumed_s}s de material fuente, pero solo hay {available_s}s disponibles",
     "validation.clip_overlap": (
         "timeline.tracks[{idx}]({name}): solape entre clips '{prev}' "
         "(termina en fotograma {prev_end}) y '{next}' (empieza en fotograma {next_start})"
@@ -303,6 +328,7 @@ _ES: dict[str, str] = {
     "reverse.entry_missing_producer": "{ctx}: entry referencia un producer inexistente '{producer_id}', se omite",
     "reverse.clip_no_resource": "{ctx}: clip con producer sin 'resource' reconocible ({tag} {producer_id})",
     "reverse.timewarp_unsupported": "{ctx}: clip con cambio de velocidad (timewarp), no soportado",
+    "reverse.speed_ramp_unsupported": "{ctx}: clip con rampa de velocidad (timeremap), no reconstruible en keyframes de speed_ramp:",
     "reverse.title_unsupported": "{ctx}: clip de título más complejo de lo que este generador puede representar (varios elementos, animación, elementos de imagen/rectángulo, o archivo ilegible), no soportado",
     "reverse.cross_track_transition_unsupported": "transición entre pistas ({service}) entre dos pistas de contenido (p. ej. un wipe) - no reconstruible en el modelo YAML de bajo nivel, se conserva tal cual",
     "reverse.track_not_imported": "{ctx}: pista no importada",

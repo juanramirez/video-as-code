@@ -1685,6 +1685,85 @@ timeline:
     assert late_r > late_b + 20, f"expected the reversed clip to end red, got r={late_r} b={late_b}"
 
 
+def test_melt_respects_speed_ramp(tmp_path: Path, melt):
+    """Empirical check for `speed_ramp:` (v0.7's headline feature, MLT's
+    `timeremap` link) through the generator's own actual output, not
+    just the standalone probe used to first find and fix the real
+    blocker (see ROADMAP.md): `time_map`'s keyframe *values* are
+    seconds, not frames, confirmed in kdenlive's own
+    `GenTime(double seconds)` constructor - frame numbers for both
+    silently produced a wrong, clamped mapping instead of an error.
+
+    A 4-second red/green/blue/yellow source (1s each) ramped at a flat
+    2x for its whole 2s output should play all four colors in order
+    within that window - not a single flat `speed:` multiplier's
+    single-segment case, so this also exercises the multi-breakpoint
+    `time_map` construction (dense per-frame sampling, verified
+    separately to avoid a sparse-keyframe under-shoot bug found during
+    research)."""
+    source = tmp_path / "source.mp4"
+    segments = []
+    for i, color in enumerate(["red", "green", "blue", "yellow"]):
+        seg = tmp_path / f"seg_{i}.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", f"color=c={color}:size=160x120:rate=25:duration=1",
+                "-pix_fmt", "yuv420p", str(seg),
+            ],
+            check=True,
+        )
+        segments.append(seg)
+    concat_list = tmp_path / "concat.txt"
+    concat_list.write_text("".join(f"file '{seg}'\n" for seg in segments), encoding="utf-8")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(concat_list),
+         "-pix_fmt", "yuv420p", str(source)],
+        check=True,
+    )
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 160, height: 120}}
+bin:
+  - id: clip
+    path: {source}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 2.0
+          speed_ramp:
+            - {{at: 0, speed: 2.0}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+    assert "not preprocessed" not in (result.stdout + result.stderr).lower()
+
+    def color_at(t: float) -> tuple[float, float, float]:
+        return _mean_rgb(rendered, timestamp=t)
+
+    r0, g0, b0 = color_at(0.1)
+    r1, g1, b1 = color_at(0.6)
+    r2, g2, b2 = color_at(1.1)
+    r3, g3, b3 = color_at(1.6)
+    assert r0 > g0 + 50 and r0 > b0 + 50, f"expected red near the start, got {(r0, g0, b0)}"
+    assert g1 > r1 + 50 and g1 > b1 + 50, f"expected green a quarter in, got {(r1, g1, b1)}"
+    assert b2 > r2 + 50 and b2 > g2 + 50, f"expected blue halfway through, got {(r2, g2, b2)}"
+    assert r3 > b3 + 50 and g3 > b3 + 50, f"expected yellow (high r+g, low b) near the end, got {(r3, g3, b3)}"
+
+
 def test_melt_renders_a_real_title_clip(tmp_path: Path, melt):
     """Empirical check for `type: title` bin clips (titles.py, new this
     cycle): a real melt render of a title actually shows the text, not

@@ -285,6 +285,45 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         errors.append(msg("validation.speed_zero", ctx=ctx))
         speed = None
 
+    speed_ramp_raw = item.get("speed_ramp")
+    speed_ramp_image_mode = str(item.get("speed_ramp_image_mode", "nearest"))
+    speed_ramp: list[tuple[float, float]] | None = None
+    if speed_ramp_raw is not None:
+        if speed is not None:
+            errors.append(msg("validation.speed_ramp_conflicts_with_speed", ctx=ctx))
+        elif not isinstance(speed_ramp_raw, list) or not speed_ramp_raw:
+            errors.append(msg("validation.speed_ramp_invalid", ctx=ctx))
+        elif speed_ramp_image_mode not in ("nearest", "blend"):
+            errors.append(msg("validation.speed_ramp_image_mode_invalid", ctx=ctx, mode=speed_ramp_image_mode))
+        else:
+            parsed: list[tuple[float, float]] = []
+            valid = True
+            for i, kf in enumerate(speed_ramp_raw):
+                if not isinstance(kf, dict) or "at" not in kf or "speed" not in kf:
+                    errors.append(msg("validation.speed_ramp_keyframe_invalid", ctx=ctx, idx=i))
+                    valid = False
+                    continue
+                at = float(kf["at"])
+                kf_speed = float(kf["speed"])
+                if kf_speed <= 0:
+                    errors.append(msg("validation.speed_ramp_speed_invalid", ctx=ctx, idx=i, speed=kf_speed))
+                    valid = False
+                parsed.append((at, kf_speed))
+            if valid and parsed[0][0] != 0:
+                errors.append(msg("validation.speed_ramp_must_start_at_zero", ctx=ctx))
+                valid = False
+            if valid:
+                for j in range(1, len(parsed)):
+                    if parsed[j][0] <= parsed[j - 1][0]:
+                        errors.append(msg("validation.speed_ramp_not_sorted", ctx=ctx))
+                        valid = False
+                        break
+            if valid and item.get("in") not in (None, 0, 0.0):
+                errors.append(msg("validation.speed_ramp_in_not_supported", ctx=ctx))
+                valid = False
+            if valid:
+                speed_ramp = parsed
+
     reveal = item.get("reveal")
     if reveal is not None and reveal not in ("iris", "flip", "glitch", "delaygrab", "cairogradient"):
         errors.append(msg("validation.reveal_invalid", ctx=ctx, reveal=reveal))
@@ -347,6 +386,8 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         mute=mute,
         speed=speed,
         preserve_pitch=bool(item.get("preserve_pitch", False)),
+        speed_ramp=speed_ramp,
+        speed_ramp_image_mode=speed_ramp_image_mode,
         position=_pair("position"),
         size=_pair("size"),
         reveal_style=reveal,
@@ -504,24 +545,74 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 errors.append(msg("validation.speed_on_image", ctx=ctx, clip=placement.clip))
                 speed = None
 
-            # `speed` shortens (or stretches) the clip's *usable* duration
-            # on the timeline - in/out/duration below are relative to that
-            # warped length, matching how kdenlive itself works (and what
-            # xmlgen.py's timewarp producer actually exposes as its own
-            # [0, warped_duration) range). A negative speed (reverse
-            # playback) still warps the duration by its magnitude - only
-            # the direction flips, not the length.
-            effective_duration_frames = (
-                round(bin_clip.duration_frames / abs(speed)) if speed else bin_clip.duration_frames
-            )
-            source_duration_s = fps.frames_to_seconds(effective_duration_frames)
-            in_s = placement.in_
-            if placement.out is not None:
-                out_s = placement.out
-            elif placement.duration is not None:
-                out_s = in_s + placement.duration
+            speed_ramp = placement.speed_ramp
+            if speed_ramp is not None and bin_clip.kind in ("image", "title"):
+                errors.append(msg("validation.speed_ramp_on_image", ctx=ctx, clip=placement.clip))
+                speed_ramp = None
+
+            if speed_ramp is not None:
+                # Deliberately narrow v0.7 scope (see
+                # ClipPlacementSpec.speed_ramp): always starts at the
+                # source's own beginning (in_s forced to 0 - already
+                # validated in _parse_clip_placement that `in:` isn't
+                # set alongside a ramp), and needs an explicit
+                # out:/duration: - no auto-inferred "use all available
+                # source" default like flat `speed:` gets, since that
+                # would need solving for where a multi-segment ramp
+                # runs out of source material rather than a single
+                # division.
+                in_s = 0.0
+                if placement.out is not None:
+                    out_s = placement.out
+                elif placement.duration is not None:
+                    out_s = placement.duration
+                else:
+                    errors.append(msg("validation.speed_ramp_requires_duration", ctx=ctx))
+                    out_s = max((at for at, _ in speed_ramp), default=0.0) + 1.0
+                for at, _ in speed_ramp:
+                    if at >= out_s:
+                        errors.append(
+                            msg("validation.speed_ramp_breakpoint_out_of_range", ctx=ctx, at=at, out_s=out_s)
+                        )
+                source_consumed_s = 0.0
+                for i, (at, kf_speed) in enumerate(speed_ramp):
+                    segment_end_s = speed_ramp[i + 1][0] if i + 1 < len(speed_ramp) else out_s
+                    source_consumed_s += max(segment_end_s - at, 0.0) * kf_speed
+                available_source_s = fps.frames_to_seconds(bin_clip.duration_frames)
+                if source_consumed_s > available_source_s + 1e-6:
+                    errors.append(
+                        msg(
+                            "validation.speed_ramp_exceeds_source",
+                            ctx=ctx,
+                            consumed_s=round(source_consumed_s, 3),
+                            available_s=round(available_source_s, 3),
+                        )
+                    )
+                # The ramp's own bound checks above already cover what
+                # the shared out_exceeds_duration check below would -
+                # setting source_duration_s = out_s makes that check a
+                # deliberate no-op rather than duplicating it.
+                source_duration_s = out_s
             else:
-                out_s = source_duration_s
+                # `speed` shortens (or stretches) the clip's *usable*
+                # duration on the timeline - in/out/duration below are
+                # relative to that warped length, matching how kdenlive
+                # itself works (and what xmlgen.py's timewarp producer
+                # actually exposes as its own [0, warped_duration)
+                # range). A negative speed (reverse playback) still
+                # warps the duration by its magnitude - only the
+                # direction flips, not the length.
+                effective_duration_frames = (
+                    round(bin_clip.duration_frames / abs(speed)) if speed else bin_clip.duration_frames
+                )
+                source_duration_s = fps.frames_to_seconds(effective_duration_frames)
+                in_s = placement.in_
+                if placement.out is not None:
+                    out_s = placement.out
+                elif placement.duration is not None:
+                    out_s = in_s + placement.duration
+                else:
+                    out_s = source_duration_s
 
             if in_s < 0:
                 errors.append(msg("validation.in_negative", ctx=ctx, in_s=in_s))
@@ -579,6 +670,12 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             in_frame = fps.seconds_to_frames(in_s)
             out_frame = fps.seconds_to_frames(out_s) - 1  # last included frame
 
+            speed_ramp_frames = (
+                [(fps.seconds_to_frames(at), kf_speed) for at, kf_speed in speed_ramp]
+                if speed_ramp is not None
+                else None
+            )
+
             placements.append(
                 ResolvedPlacement(
                     bin_clip=bin_clip,
@@ -590,6 +687,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     mute=placement.mute,
                     speed=speed,
                     preserve_pitch=placement.preserve_pitch,
+                    speed_ramp=speed_ramp_frames,
+                    speed_ramp_image_mode=placement.speed_ramp_image_mode,
                     rect=rect,
                     reveal_style=placement.reveal_style,
                     chroma_key=placement.chroma_key,

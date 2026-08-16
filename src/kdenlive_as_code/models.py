@@ -54,6 +54,22 @@ class ClipPlacementSpec:
     mute: bool = False
     speed: Optional[float] = None
     preserve_pitch: bool = False
+    # Speed ramp (mlt_service "timeremap", a <link> on a <chain> - see
+    # xmlgen.py's _add_speed_ramp_link) - a real, non-flat speed curve,
+    # distinct from `speed`'s single multiplier (mutually exclusive with
+    # it). `[(at_seconds, speed_multiplier), ...]`, sorted, first at 0:
+    # each entry marks where a new constant-speed segment starts: speed
+    # holds flat from that keyframe to the next (or to the clip's own
+    # end for the last one) - a ramp is several flat segments in
+    # sequence, not a smoothly-eased curve. Deliberately narrow v0.7
+    # scope: always starts at the source's own beginning (`in:` isn't
+    # supported alongside it), and needs an explicit `out:`/`duration:`
+    # (no auto-inferred "use all available source" default like flat
+    # `speed:` gets, since that would need solving for where a
+    # multi-segment ramp runs out of source material rather than a
+    # single division).
+    speed_ramp: Optional[list[tuple[float, float]]] = None
+    speed_ramp_image_mode: str = "nearest"  # timeremap's own "nearest" | "blend"
     position: Optional[tuple[float, float]] = None
     size: Optional[tuple[float, float]] = None
     reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" | "delaygrab" | "cairogradient" - see ResolvedPlacement
@@ -191,6 +207,10 @@ class ResolvedPlacement:
     mute: bool = False
     speed: Optional[float] = None
     preserve_pitch: bool = False
+    # Speed ramp - see ClipPlacementSpec. `[(at_frame, speed), ...]`,
+    # frame-based (seconds already resolved to frames), first always 0.
+    speed_ramp: Optional[list[tuple[int, float]]] = None
+    speed_ramp_image_mode: str = "nearest"
     rect: Optional[tuple[float, float, float, float]] = None  # x y w h in pixels
     # which filter `fade_in_frames`/`fade_out_frames` should drive instead
     # of the plain brightness alpha fade. "iris" (frei0r.alphaspot) and

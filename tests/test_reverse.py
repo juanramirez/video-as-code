@@ -726,6 +726,47 @@ timeline:
     assert video_clip["speed"] == -1.0
 
 
+def test_speed_ramp_falls_to_raw_items_instead_of_silently_lost(tmp_path: Path, assets_dir: Path):
+    """`speed_ramp:` (v0.7's headline feature, MLT's `timeremap` link) is
+    NOT reconstructed on import - regression test for a real gap this
+    surfaced: `classify_producer` only ever reads a chain's own
+    `resource`/`mlt_service`, never a child `<link>`, so without an
+    explicit check a ramped clip would silently come back as an
+    ordinary, unramped clip instead of being flagged - a real, silent
+    data loss, not just an unsupported-but-flagged case like reverse
+    speed used to be. Falls to `x_kdenlive_raw` instead, same as
+    anything else this generator can't cleanly invert."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 1.0
+          speed_ramp:
+            - {{at: 0, speed: 2.0}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert len(result.raw_items) == 1, f"expected exactly one flagged item, got: {result.raw_items}"
+    tracks = result.data["timeline"]["tracks"]
+    clips = [c for t in tracks for c in t["clips"]]
+    assert clips == [], f"expected no (incorrectly) recognized clips - the ramp must not silently become a plain clip, got: {clips}"
+
+
 def test_round_trip_preserves_title(tmp_path: Path):
     """`type: title` bin clips round-trip through a real generated
     .kdenlive: reverse.py reads the referenced .kdenlivetitle file back

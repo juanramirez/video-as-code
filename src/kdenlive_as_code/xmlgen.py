@@ -86,6 +86,9 @@ def _build_media_element(
     control_uuid: str,
     speed: Optional[float] = None,
     preserve_pitch: bool = False,
+    speed_ramp: Optional[list[tuple[int, float]]] = None,
+    speed_ramp_image_mode: str = "nearest",
+    fps: Optional[float] = None,
     folder_id: int = -1,
 ) -> ET.Element:
     if speed is not None:
@@ -150,7 +153,73 @@ def _build_media_element(
     _prop(el, "kdenlive:folderid", folder_id)
     _prop(el, "kdenlive:id", numeric_id)
     _prop(el, "kdenlive:control_uuid", control_uuid)
+    if speed_ramp is not None:
+        assert fps is not None, "speed_ramp requires fps"
+        _add_speed_ramp_link(el, speed_ramp, speed_ramp_image_mode, preserve_pitch, out_frame + 1, fps)
     return el, xml_id
+
+
+def _speed_ramp_time_map(ramp: list[tuple[int, float]], out_frames: int, fps: float) -> str:
+    """Dense (one keyframe per output frame) MLT anim string for
+    `timeremap`'s `time_map` property, given piecewise-constant-speed
+    segments (`ramp`: `[(at_frame, speed), ...]`, sorted, first at frame
+    0 - each entry's speed holds flat until the next entry's own frame,
+    matching `ClipPlacementSpec.speed_ramp`'s "several flat segments in
+    sequence" model). Keys are output frames; **values are seconds, not
+    frames** - `time_map` reads are wrapped in kdenlive's own
+    `GenTime(double seconds)` constructor
+    (`~/dev/kdenlive/src/utils/gentime.h`), confirmed the hard way: an
+    earlier attempt used frame numbers for both and silently produced a
+    wildly-wrong, clamped mapping instead of an error.
+
+    Dense, not just one keyframe per ramp breakpoint: a sparse 2-keyframe
+    linear map (start and end only) was verified by real render to
+    under-shoot the target - the render never reached the intended final
+    source position, landing roughly 75% of the way there despite
+    mathematically-correct endpoints. Root cause not fully understood,
+    but sampling every output frame (rather than relying on MLT's own
+    interpolation across a long gap) was verified reliable instead - see
+    ROADMAP.md."""
+    segment_start_source_s = [0.0]
+    for i in range(len(ramp) - 1):
+        at_frame, speed = ramp[i]
+        next_at_frame = ramp[i + 1][0]
+        segment_start_source_s.append(segment_start_source_s[-1] + (next_at_frame - at_frame) / fps * speed)
+
+    parts = []
+    seg = 0
+    for out_frame in range(out_frames):
+        while seg + 1 < len(ramp) and out_frame >= ramp[seg + 1][0]:
+            seg += 1
+        at_frame, speed = ramp[seg]
+        source_s = segment_start_source_s[seg] + (out_frame - at_frame) / fps * speed
+        parts.append(f"{out_frame}={source_s:.6f}")
+    return ";".join(parts)
+
+
+def _add_speed_ramp_link(
+    chain_el: ET.Element,
+    ramp: list[tuple[int, float]],
+    image_mode: str,
+    preserve_pitch: bool,
+    out_frames: int,
+    fps: float,
+) -> None:
+    """Attaches a `timeremap` **link** (not a filter) to a `<chain>` -
+    matches kdenlive's own construction exactly
+    (`~/dev/kdenlive/src/bin/projectclip.cpp`: `Mlt::Link
+    link("timeremap"); ... chain->attach(link);`), and its real XML
+    serialization shape (`id` attribute + nested `<property>` children,
+    confirmed against MLT's own XML writer,
+    `~/dev/mlt/src/modules/xml/consumer_xml.c`'s `serialise_link` -
+    *not* `mlt_service` as an XML attribute directly on `<link>`, which
+    also happens to parse, but doesn't match what kdenlive itself
+    writes)."""
+    link_el = ET.SubElement(chain_el, "link", {"id": "link0"})
+    _prop(link_el, "mlt_service", "timeremap")
+    _prop(link_el, "time_map", _speed_ramp_time_map(ramp, out_frames, fps))
+    _prop(link_el, "pitch", int(preserve_pitch))
+    _prop(link_el, "image_mode", image_mode)
 
 
 def _add_video_default_filter(ids: _IdCounters, entry: ET.Element, width: int, height: int, rect) -> None:
@@ -505,11 +574,17 @@ def _build_track(
         # instead of in_frame. With `speed`, "full range" means the
         # *warped* duration (schema.py already computed this the same
         # way when validating in/out/duration).
-        full_duration_frames = (
-            round(placement.bin_clip.duration_frames / abs(placement.speed))
-            if placement.speed
-            else placement.bin_clip.duration_frames
-        )
+        if placement.speed_ramp is not None:
+            # A ramp always starts at frame 0 (no separate `in:` trim -
+            # see schema.py) and its own full range *is* the placement's
+            # resolved duration, unlike flat `speed:` where "full range"
+            # is a separately-computed warped length that the entry then
+            # sub-trims via in_frame/out_frame.
+            full_duration_frames = placement.out_frame + 1
+        elif placement.speed:
+            full_duration_frames = round(placement.bin_clip.duration_frames / abs(placement.speed))
+        else:
+            full_duration_frames = placement.bin_clip.duration_frames
         el, xml_id = _build_media_element(
             ids,
             path=placement.bin_clip.path,
@@ -521,6 +596,9 @@ def _build_track(
             control_uuid=control_uuid_for[placement.bin_clip.id],
             speed=placement.speed,
             preserve_pitch=placement.preserve_pitch,
+            speed_ramp=placement.speed_ramp,
+            speed_ramp_image_mode=placement.speed_ramp_image_mode,
+            fps=project.fps.fps,
         )
         root.append(el)
         entry = ET.SubElement(

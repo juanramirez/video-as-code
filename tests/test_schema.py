@@ -520,6 +520,166 @@ timeline:
     assert "focus_blur" in str(exc.value)
 
 
+def test_speed_ramp_resolves(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 2.0
+          speed_ramp:
+            - {{at: 0, speed: 1.0}}
+            - {{at: 1, speed: 2.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    placement = resolved.tracks[0].placements[0]
+    assert placement.speed is None
+    assert placement.speed_ramp == [(0, 1.0), (25, 2.0)]
+    assert placement.out_frame - placement.in_frame + 1 == 50  # 2.0s @ 25fps
+
+
+def test_speed_ramp_conflicts_with_speed_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          speed: 2.0
+          speed_ramp:
+            - {{at: 0, speed: 1.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "speed_ramp" in str(exc.value)
+
+
+def test_speed_ramp_requires_duration_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          speed_ramp:
+            - {{at: 0, speed: 1.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "speed_ramp" in str(exc.value)
+
+
+def test_speed_ramp_must_start_at_zero_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 2.0
+          speed_ramp:
+            - {{at: 0.5, speed: 1.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "speed_ramp" in str(exc.value)
+
+
+def test_speed_ramp_not_sorted_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 2.0
+          speed_ramp:
+            - {{at: 0, speed: 1.0}}
+            - {{at: 1, speed: 2.0}}
+            - {{at: 0.5, speed: 3.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "speed_ramp" in str(exc.value)
+
+
+def test_speed_ramp_exceeds_source_rejected(tmp_path: Path, assets_dir: Path):
+    """clip.mp4 (assets_dir) is 3s - a flat 10x ramp over a 2s output
+    would need 20s of source material, far more than exists."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 2.0
+          speed_ramp:
+            - {{at: 0, speed: 10.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "speed_ramp" in str(exc.value)
+
+
+def test_speed_ramp_on_image_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 1.0
+          speed_ramp:
+            - {{at: 0, speed: 2.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "speed_ramp" in str(exc.value)
+
+
 def test_overlay_font_size_must_be_positive(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

@@ -709,47 +709,72 @@ scoping rounds as "needs one more verification pass," which this round
 delivered. Two quick wins alongside it, both small, well-understood
 lifts from BACKLOG.md.
 
-- **Speed ramps (`timeremap`)** — headline, **mechanism now fully
-  verified by real render, root cause of the earlier block found and
-  fixed**. MLT's `timeremap` **link** (not a plain producer property
-  like `timewarp`) attached to a `<chain>` - matches kdenlive's own
-  construction exactly (`~/dev/kdenlive/src/bin/projectclip.cpp`:
-  `Mlt::Link link("timeremap"); ... chain->attach(link);`), confirmed
-  present (`melt -query link=timeremap`, Meltytech, LGPLv2.1).
+- **Speed ramps (`timeremap`)** — headline, **implemented**. MLT's
+  `timeremap` **link** (not a plain producer property like `timewarp`)
+  attached to a `<chain>` - matches kdenlive's own construction exactly
+  (`~/dev/kdenlive/src/bin/projectclip.cpp`: `Mlt::Link
+  link("timeremap"); ... chain->attach(link);`), including the real
+  XML serialization shape (`id` attribute + nested `<property>`
+  children - not `mlt_service` as an XML attribute directly on
+  `<link>`, which also happens to parse but doesn't match what
+  kdenlive itself writes, confirmed against MLT's own XML writer,
+  `~/dev/mlt/src/modules/xml/consumer_xml.c`'s `serialise_link`).
 
-  **The actual blocker, found this session**: `time_map`'s keyframe
-  *keys* are frames, but its *values* are **seconds**, not frames -
-  confirmed directly in kdenlive's own source
+  **The actual blocker, found and fixed this session**: `time_map`'s
+  keyframe *keys* are frames, but its *values* are **seconds**, not
+  frames - confirmed directly in kdenlive's own source
   (`~/dev/kdenlive/src/utils/gentime.h`: `GenTime(double seconds)`,
   the exact constructor kdenlive wraps every `time_map` read/write
   through). The earlier attempt used frame numbers for both, which
   silently produced a wildly-wrong, clamped mapping instead of an
   error - exactly the kind of trap this project's verification
-  discipline exists to catch before it ships. Rebuilt and verified
-  with corrected units: a 4-clip red/green/blue/yellow test source
-  (1s each) remapped to 2x speed (`time_map` spanning `0=0` to
-  `49=3.96`) played all four colors in order within the expected 2s
-  output window, real render, not just a structural XML check.
+  discipline exists to catch before it ships.
 
   **Second finding**: a sparse, 2-keyframe linear map (start and end
   only) under-shot the target - the render never reached the final
   color, landing roughly 75% of the way through the intended range
   despite the endpoints being mathematically correct for a linear
-  interpolation. Root cause not fully understood (worth another look
-  during implementation), but a *dense* keyframe map (one keyframe
-  every ~10 output frames in the verification render) reliably hit the
-  correct position throughout, including the very end - the
-  implementation will emit dense keyframes as a documented, verified
-  workaround, not assume sparse ones are safe.
+  interpolation. Root cause not fully understood, but a *dense*
+  keyframe map (one keyframe per output frame, not just per ramp
+  breakpoint) reliably hit the correct position throughout - the
+  implementation (`xmlgen.py`'s `_speed_ramp_time_map`) emits dense
+  keyframes as a documented, verified workaround, not assuming sparse
+  ones are safe.
 
-  YAML field shape not yet finalized (a keyframe list is needed - e.g.
-  `{at: seconds, speed: multiplier}` pairs the ramp is defined between,
-  compiled into a dense `time_map` string internally - vs. exposing
-  `{at: seconds, source_time: seconds}` pairs directly) - to be decided
-  during implementation, same as Ken Burns' field shape was left open
-  at v0.6 scoping time. `pitch`/`image_mode` (nearest/blend) map
-  naturally onto the existing `preserve_pitch:` convention and a new
-  small enum respectively.
+  New `speed_ramp:` field on `timeline.tracks[].clips[]`: a list of
+  `{at: seconds, speed: multiplier}` keyframes, each marking where a
+  new *constant*-speed segment starts (speed holds flat until the next
+  keyframe, or the clip's own end for the last one) - several flat
+  segments in sequence, not a smoothly-eased curve; mutually exclusive
+  with `speed:`. Deliberately narrow scope: always starts at the
+  source's own beginning (`in:` isn't supported alongside it - a
+  dedicated validation error, not silently ignored), and needs an
+  explicit `out:`/`duration:` (no auto-inferred "use all available
+  source" default like flat `speed:` gets, since that would need
+  solving for where a multi-segment ramp runs out of source material
+  rather than a single division). Validated against the bin clip's
+  real source duration by walking the ramp's own segments and summing
+  consumed source time - a ramp that would need more material than
+  exists is rejected at validation time, not silently clamped.
+  `speed_ramp_image_mode:` (`nearest`/`blend`, default `nearest`
+  matching kdenlive) exposes `timeremap`'s own `image_mode`; pitch
+  compensation reuses the existing `preserve_pitch:` field.
+
+  Verified by real render through the generator's own output, not
+  just the standalone probe used to find the mechanism: a 4-second
+  red/green/blue/yellow test source (1s each) ramped at a flat 2x
+  played all four colors in order within the expected 2s output window
+  (`tests/test_melt_validation.py::test_melt_respects_speed_ramp`).
+  Recognized as unsupported on import (`reverse.py`) rather than
+  silently lost - reconstructing the original `{at, speed}` breakpoints
+  from a dense, per-frame `time_map` isn't attempted (same "never
+  guess" bar as anything else this generator can't cleanly invert), so
+  it falls to `x_kdenlive_raw` instead. This closes a real gap
+  `classify_producer` had: it only ever read a chain's own
+  `resource`/`mlt_service`, never a child `<link>`, so a ramped clip
+  would otherwise have silently come back as an ordinary unramped one
+  on re-import instead of being flagged
+  (`tests/test_reverse.py::test_speed_ramp_falls_to_raw_items_instead_of_silently_lost`).
 - **Crop** — quick win. No cropping capability exists anywhere in the
   schema today - `position:`/`size:` only scale/position the *whole*
   source frame via `qtblend`, they never clip source pixels. Needs a
