@@ -165,13 +165,21 @@ SCENE_TRACK_NAMES = (msg("scenes.track_a"), msg("scenes.track_b"))
 # needed. `wipe` has no audio equivalent (a luma map decides pixels, not
 # samples) - rejected instead, see compile_scenes.
 SCENE_TRACK_NAMES_AUDIO = (msg("scenes.track_a_audio"), msg("scenes.track_b_audio"))
-# `glitch` doesn't composite two clips at all (frei0r.glitch0r writes no
-# alpha - a two-track qtblend reveal, like iris/flip use, would just
-# have the fully-opaque "top" clip obscure the bottom one the whole
-# time, pointlessly). Clips stay on a single track, placed back-to-back
-# with no real time overlap; a brief glitch0r burst dresses each cut
-# instead - closer to a decorated hard cut than to dissolve/wipe.
-GLITCH_TRACK_NAME = msg("scenes.track_glitch")
+# `glitch` (frei0r.glitch0r), `delaygrab` (frei0r.delaygrab), and
+# `cairogradient` (frei0r.cairogradient) don't composite two clips at all
+# - none of the three write real alpha (confirmed by render for all
+# three: a colored background on the track below never shows through,
+# unlike iris/flip's alphaspot/3dflippo), so a two-track qtblend reveal
+# would just have the fully-opaque "top" clip obscure the bottom one the
+# whole time, pointlessly. Clips stay on a single shared track, placed
+# back-to-back with no real time overlap; a brief filter burst (glitch's
+# block-shifting, delaygrab's localized temporal ghosting, cairogradient's
+# color-wash) dresses each cut instead - closer to a decorated hard cut
+# than to dissolve/wipe. `delaygrab` exposes no adjustable parameters at
+# all (neither does kdenlive's own effect definition for it - it's used
+# with its frei0r defaults, not modeled by analogy).
+BURST_TRANSITIONS = ("glitch", "delaygrab", "cairogradient")
+BURST_TRACK_NAME = msg("scenes.track_burst")
 
 
 def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> ProjectDoc:
@@ -273,7 +281,7 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
 
     track_clips: tuple[list[ClipPlacementSpec], list[ClipPlacementSpec]] = ([], [])
     track_clips_audio: tuple[list[ClipPlacementSpec], list[ClipPlacementSpec]] = ([], [])
-    track_clips_glitch: list[ClipPlacementSpec] = []
+    track_clips_burst: list[ClipPlacementSpec] = []
     wipe_transitions: list[WipeTransitionSpec] = []
     affine_transitions: list[AffineTransitionSpec] = []
     cursor = 0.0  # global second at which the scenes block starts
@@ -290,19 +298,19 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             continue
 
         transition = scene.get("transition", "none")
-        if transition not in ("none", "dissolve", "wipe", "affine", "iris", "flip", "glitch"):
+        if transition not in ("none", "dissolve", "wipe", "affine", "iris", "flip", *BURST_TRANSITIONS):
             errors.append(msg("validation.scene_transition_invalid", ctx=ctx, transition=transition))
             continue
         overlap = (
             float(scene.get("transition_duration", DEFAULT_TRANSITION_DURATION))
-            if transition in ("dissolve", "wipe", "affine", "iris", "flip", "glitch")
+            if transition in ("dissolve", "wipe", "affine", "iris", "flip", *BURST_TRANSITIONS)
             else 0.0
         )
         # `glitch` doesn't actually overlap clips in time (see
         # GLITCH_TRACK_NAME) - `overlap` above still carries the burst
         # duration for the fade_in/fade_out windows, but cumulative
         # placement math must not subtract it like a real overlap would.
-        time_overlap = 0.0 if transition == "glitch" else overlap
+        time_overlap = 0.0 if transition in BURST_TRANSITIONS else overlap
 
         luma = scene.get("luma", DEFAULT_LUMA)
         if transition == "wipe" and luma not in AVAILABLE_LUMAS:
@@ -328,7 +336,7 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         clip_kinds = [bin_by_id[cid].type or probe.guess_type(bin_by_id[cid].path) for cid in clip_ids]
 
         is_audio_scene = all(k == "audio" for k in clip_kinds)
-        if transition in ("wipe", "affine", "iris", "flip", "glitch") and is_audio_scene:
+        if transition in ("wipe", "affine", "iris", "flip", *BURST_TRANSITIONS) and is_audio_scene:
             errors.append(msg("validation.scene_transition_needs_video", ctx=ctx, transition=transition))
             continue
         active_track_clips = track_clips_audio if is_audio_scene else track_clips
@@ -366,10 +374,10 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         start = cursor
         for i, (clip_id, length) in enumerate(zip(clip_ids, lengths)):
             is_top = False
-            if transition == "glitch":
+            if transition in BURST_TRANSITIONS:
                 # Every clip gets dressed at its own cut edges, not just
                 # an alternating "top" one - there's no real two-source
-                # reveal here at all (see GLITCH_TRACK_NAME).
+                # reveal here at all (see BURST_TRANSITIONS/BURST_TRACK_NAME).
                 fade_in = overlap if i > 0 else None
                 fade_out = overlap if i < n - 1 else None
             elif is_audio_scene and transition == "dissolve":
@@ -398,8 +406,8 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                 fade_out = overlap if (is_top and i < n - 1) else None
             extras = clip_extras[i]
             reveal_style = None
-            if transition == "glitch":
-                reveal_style = "glitch"
+            if transition in BURST_TRANSITIONS:
+                reveal_style = transition
             elif transition in ("iris", "flip") and is_top:
                 reveal_style = transition
             placement = ClipPlacementSpec(
@@ -418,8 +426,8 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                 chroma_key=extras.get("chroma_key"),
                 chroma_key_distance=extras.get("chroma_key_distance", 0.35),
             )
-            if transition == "glitch":
-                track_clips_glitch.append(placement)
+            if transition in BURST_TRANSITIONS:
+                track_clips_burst.append(placement)
             else:
                 active_track_clips[i % 2].append(placement)
             # Neither wipe nor affine touches either clip's alpha (both
@@ -460,8 +468,8 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
     for name, clips in zip(SCENE_TRACK_NAMES_AUDIO, track_clips_audio):
         if clips:
             tracks.append(TrackSpec(type="audio", name=name, clips=clips))
-    if track_clips_glitch:
-        tracks.append(TrackSpec(type="video", name=GLITCH_TRACK_NAME, clips=track_clips_glitch))
+    if track_clips_burst:
+        tracks.append(TrackSpec(type="video", name=BURST_TRACK_NAME, clips=track_clips_burst))
 
     return ProjectDoc(
         project=doc.project,

@@ -549,6 +549,36 @@ def _color_stddev(path: Path, timestamp: float) -> float:
     return variance**0.5
 
 
+def _rgb_stddev(path: Path, timestamp: float) -> float:
+    """Same idea as `_color_stddev`, but sums the per-channel variance
+    across R, G, *and* B instead of reading just one - `_color_stddev`
+    alone isn't a safe default for every color combination: a gradient
+    wash whose color choice happens to share one channel's value with
+    the base color (e.g. an orange #ff8800 wash on a pure-red base -
+    both ~255 in R) would look like ~zero variance on R alone even
+    though the wash is clearly, strongly visible in G. Summing all three
+    channels avoids having to know in advance which channel a given
+    color pair actually varies in."""
+    result = subprocess.run(
+        [
+            "ffmpeg", "-v", "error",
+            "-ss", str(timestamp), "-i", str(path),
+            "-frames:v", "1",
+            "-f", "rawvideo", "-pix_fmt", "rgb24",
+            "-",
+        ],
+        capture_output=True,
+        timeout=30,
+        check=True,
+    )
+    total = 0.0
+    for offset in (0, 1, 2):
+        channel = result.stdout[offset::3]
+        mean = sum(channel) / len(channel)
+        total += sum((b - mean) ** 2 for b in channel) / len(channel)
+    return total**0.5
+
+
 def _mean_rgb_at_x(path: Path, timestamp: float, frac_x: float, width: int = 320) -> tuple[float, float, float]:
     """Like `_mean_rgb`, but only a thin vertical strip at `frac_x` (0..1)
     of the frame width - lets a test tell a spatially-varying wipe apart
@@ -1121,6 +1151,116 @@ scenes:
     assert glitched > calm + 5, (
         f"expected clearly higher pixel variance during the glitch burst, "
         f"got calm={calm:.2f} glitched={glitched:.2f}"
+    )
+
+
+def test_scenes_cairogradient_produces_a_visible_color_wash(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `transition: cairogradient` (v0.6, another
+    single-clip filter burst dressing a plain cut, same BURST_TRANSITIONS
+    shape `glitch` uses - frei0r.cairogradient writes no alpha either,
+    confirmed by render before wiring this in: a green clip on top of a
+    blue background never lets any blue through). A solid-color photo
+    should render with much higher pixel variance during the burst window
+    (the diagonal orange gradient blended across an otherwise flat
+    color) than outside it - same detection technique
+    `test_scenes_glitch_produces_real_block_shifting` uses."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: cairogradient
+    transition_duration: 0.4
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    calm = _rgb_stddev(rendered, timestamp=1.0)
+    washed = _rgb_stddev(rendered, timestamp=1.85)
+    assert washed > calm + 5, (
+        f"expected clearly higher pixel variance during the cairogradient burst, "
+        f"got calm={calm:.2f} washed={washed:.2f}"
+    )
+
+
+def test_scenes_delaygrab_produces_visible_temporal_ghosting(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `transition: delaygrab` (v0.6, another
+    single-clip filter burst dressing a plain cut, same BURST_TRANSITIONS
+    shape `glitch` uses - frei0r.delaygrab writes no alpha either, and
+    exposes no adjustable parameters at all, confirmed via `melt -query
+    filter=frei0r.delaygrab` and kdenlive's own effect definition for it).
+
+    Unlike glitch/cairogradient, delaygrab's effect is motion-dependent
+    (it blits stale/delayed content from a fixed sample region, so a
+    static frame shows nothing) and localized rather than frame-wide, so
+    the whole-frame stddev technique the other two bursts use doesn't
+    apply here. Instead this compares the same scene at the same instant
+    with `transition: delaygrab` vs `transition: none` (a plain cut, no
+    burst dressing at all) - a real burst should render a visibly
+    different frame at that exact timestamp than a plain cut does,
+    confirmed by real render (not assumed from the standalone probe used
+    to first verify the mechanism, matching the ROADMAP's requirement
+    that the exact shape be confirmed against the generator's own
+    output)."""
+    def render(transition: str) -> Path:
+        yaml_path = tmp_path / f"project_{transition}.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: {transition}
+    transition_duration: 0.4
+    clips:
+      - {assets_dir / "clip.mp4"}
+      - {assets_dir / "clip.mp4"}
+    duration: 4.0
+""",
+            encoding="utf-8",
+        )
+        resolved = load_and_resolve(yaml_path)
+        kdenlive_path = tmp_path / f"project_{transition}.kdenlive"
+        xmlgen.write(resolved, kdenlive_path)
+        rendered = tmp_path / f"rendered_{transition}.mp4"
+        result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+        _assert_no_fatal_load_error(result)
+        assert rendered.exists() and rendered.stat().st_size > 0
+        return rendered
+
+    delaygrab_rendered = render("delaygrab")
+    baseline_rendered = render("none")
+
+    def frame_bytes(path: Path, timestamp: float) -> bytes:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(timestamp), "-i", str(path),
+             "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, timeout=30, check=True,
+        )
+        return result.stdout
+
+    # 2 clips, duration 4.0, no real overlap -> each clip spans 2.0s; the
+    # burst dresses [1.6, 2.0)s (outgoing) - same window the glitch test
+    # samples from.
+    a = frame_bytes(delaygrab_rendered, 1.85)
+    b = frame_bytes(baseline_rendered, 1.85)
+    n = min(len(a), len(b))
+    mean_abs_diff = sum(abs(x - y) for x, y in zip(a, b)) / n if n else 0.0
+    assert mean_abs_diff > 1.0, (
+        f"expected delaygrab's burst to render visibly differently from a "
+        f"plain cut at the same instant, got mean_abs_diff={mean_abs_diff:.3f}"
     )
 
 

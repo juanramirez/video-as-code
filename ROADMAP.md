@@ -594,23 +594,55 @@ implementation, same discipline that dropped `affine`'s `spin`/`cube`
   opacity-100/no-distort shape `_add_ken_burns_filter` always writes has
   to match exactly, since that structure isn't a settable field
   (`tests/test_reverse.py::test_round_trip_preserves_ken_burns`).
-- **New transition: `delaygrab`** — headline. `frei0r.delaygrab`
-  ("delayed frame blitting on a time bitmap") already verified by real
-  render: against a moving test source it produces a genuine circular
-  vignette mask plus a visible temporal ghosting/trailing streak behind
-  moving elements (a diagonal color bar left a clear smeared trail; an
-  on-screen timestamp overlay dragged a comet-like tail). Exact
-  transition shape (single-clip filter like `iris`/`flip`/`glitch`, or
-  a genuine two-source `<transition>` like `wipe`/`affine`) still to be
-  confirmed against the generator's own output during implementation,
-  not assumed from the standalone probe render.
-- **New transition: `cairogradient`** — headline. `frei0r.cairogradient`
-  already verified by real render: an orange-to-transparent linear
-  gradient (start/end color+opacity+position params) produces a genuine
-  diagonal color-wash tint across the frame, visibly warmer on one
-  side - a light-leak/gradient-overlay effect. Same caveat as
-  `delaygrab` on exact mechanism shape, to be confirmed during
-  implementation.
+- **New transitions: `delaygrab` and `cairogradient`** — headline,
+  **implemented**, **mechanism shape resolved: both are `glitch`-style
+  single-track filter bursts, not two-source `<transition>`s or
+  alpha-reveal filters like `iris`/`flip`**. Confirmed by real render
+  before wiring either in: a colored background on the track below
+  never shows through a `frei0r.delaygrab`- or `frei0r.cairogradient`-
+  filtered clip (unlike `alphaspot`/`3dflippo`, neither writes any
+  alpha at all), so `BURST_TRANSITIONS` (`scenes.py`) generalizes what
+  was `glitch`'s own dedicated single-track/no-overlap mechanism
+  (renamed `GLITCH_TRACK_NAME` -> `BURST_TRACK_NAME`, now shared by all
+  three) instead of introducing a new one.
+  - **`delaygrab`**: verified by real render - a moving element
+    crossing the filter's (fixed-position, default-sized) sample region
+    leaves a stale/delayed ghost there for a brief window before the
+    delay buffer catches back up to live content (diffed against an
+    unfiltered baseline: a strong, localized difference early in the
+    burst window, fading to near-zero once the moving element has
+    passed through). Exposes no adjustable parameters at all - neither
+    does kdenlive's own effect definition for it
+    (`data/effects/frei0r/frei0r_delaygrab.xml`), and `melt -query
+    filter=frei0r.delaygrab` doesn't list an introspectable parameter
+    set either - used with its plugin defaults, not modeled by analogy.
+  - **`cairogradient`**: verified by real render - a diagonal
+    orange-to-transparent gradient (start/end color+opacity+position
+    params) blended directly onto the clip's own pixels (checked with a
+    green clip over a blue background: the composited result never
+    shows any blue, confirming a tint on the top clip itself, not a
+    reveal).
+
+  Both verified through the generator's own output, not the standalone
+  probe renders alone: `delaygrab` by comparing the same scene rendered
+  with `transition: delaygrab` vs `transition: none` at the same
+  instant - a real burst renders visibly differently from a plain cut
+  (`tests/test_melt_validation.py::test_scenes_delaygrab_produces_visible_temporal_ghosting`);
+  `cairogradient` against a whole-frame pixel-variance check, same
+  technique `glitch`'s own test uses
+  (`tests/test_melt_validation.py::test_scenes_cairogradient_produces_a_visible_color_wash`)
+  - which surfaced a real test-methodology bug along the way: summing
+  variance across R, G, *and* B (not just R) is needed in general,
+  since a gradient color choice can happen to share one channel's value
+  with the base color (here, orange `#ff8800` on pure red - both ~255
+  in R, so the real variance was entirely in G) and look like zero
+  effect on a single channel alone.
+
+  Recognized on import too (`reverse.py`), same conservative
+  exact-parameter-match bar `glitch` recognition already holds to
+  (`_match_reveal_filter`) - `delaygrab` only needs to match the
+  service name (no parameters to check), `cairogradient` matches its
+  fixed gradient parameters exactly.
 - **`pillar_echo` focus-pull effect** — second block, **needs
   verification before implementation**. Kdenlive's own real effect
   (`~/dev/kdenlive/data/effects/pillar_echo.xml`, credited to

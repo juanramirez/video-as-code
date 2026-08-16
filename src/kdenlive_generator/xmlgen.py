@@ -220,34 +220,72 @@ def _add_reveal_style_filter(ids: _IdCounters, entry: ET.Element, placement: Res
     tell them apart (see ROADMAP.md's v0.4 entry for how this was
     checked).
 
-    `glitch` (frei0r.glitch0r) is a different case entirely - it writes
-    no alpha at all, so there's no "from/to" reveal direction the way
+    `glitch` (frei0r.glitch0r), `delaygrab` (frei0r.delaygrab), and
+    `cairogradient` (frei0r.cairogradient) are a different case entirely -
+    none writes any alpha at all (confirmed by real render for all
+    three: with a colored clip on the track below, it never shows
+    through - unlike iris/flip, these are opaque overwrites of the
+    clip's own pixels), so there's no "from/to" reveal direction the way
     iris/flip's size or rotation animate: just a constant-parameter burst
-    for whichever window (fade_in and/or fade_out) is set, verified by
-    real render to produce clearly visible block-shifting distortion
-    (`avfilter.rgbashift`, its would-be chromatic-aberration companion,
-    produced no visible effect in this build and isn't used - see
-    scenes.py's `SCENE_TRACK_NAMES` comment)."""
+    for whichever window (fade_in and/or fade_out) is set.
+    - `glitch`: verified by real render to produce clearly visible
+      block-shifting distortion (`avfilter.rgbashift`, its would-be
+      chromatic-aberration companion, produced no visible effect in this
+      build and isn't used - see scenes.py's `BURST_TRANSITIONS`
+      comment).
+    - `delaygrab`: verified by real render - a moving element crossing
+      the filter's (fixed-position, default-sized) sample region leaves
+      a stale/delayed ghost there for a brief window before the delay
+      buffer catches back up to live content (checked by diffing against
+      an unfiltered baseline: a strong, localized difference early,
+      fading to near-zero once the moving element has passed through).
+      Exposes no adjustable parameters at all - neither does kdenlive's
+      own effect definition for it (`frei0r_delaygrab.xml`), and
+      `melt -query filter=frei0r.delaygrab` doesn't list an
+      introspectable parameter set either - so this is used with its
+      plugin defaults, not modeled by analogy.
+    - `cairogradient`: verified by real render - a diagonal color-wash
+      gradient blended directly onto the clip's own pixels (checked with
+      a green clip on top of a blue background: the composited result
+      never shows any blue, confirming the gradient tints the top clip
+      itself rather than creating a reveal)."""
     p_in, p_out = placement.in_frame, placement.out_frame
     style = placement.reveal_style
 
-    if style == "glitch":
-        def glitch_props(f: ET.Element) -> None:
-            _prop(f, "mlt_service", "frei0r.glitch0r")
-            _prop(f, "0", 1)  # Glitch frequency: constant for the whole burst window
-            _prop(f, "1", 0.5)  # Block height
-            _prop(f, "2", 0.8)  # Shift intensity
-            _prop(f, "3", 0.5)  # Color glitching intensity
+    if style in ("glitch", "delaygrab", "cairogradient"):
+        def burst_props(f: ET.Element) -> None:
+            if style == "glitch":
+                _prop(f, "mlt_service", "frei0r.glitch0r")
+                _prop(f, "0", 1)  # Glitch frequency: constant for the whole burst window
+                _prop(f, "1", 0.5)  # Block height
+                _prop(f, "2", 0.8)  # Shift intensity
+                _prop(f, "3", 0.5)  # Color glitching intensity
+            elif style == "delaygrab":
+                _prop(f, "mlt_service", "frei0r.delaygrab")
+                # No properties beyond mlt_service: see the docstring
+                # above - this filter has no introspectable/adjustable
+                # parameters, used with its plugin defaults.
+            else:  # cairogradient
+                _prop(f, "mlt_service", "frei0r.cairogradient")
+                _prop(f, "0", "gradient_linear")  # Pattern
+                _prop(f, "1", "#ff8800")  # Start color: warm light-leak orange
+                _prop(f, "2", 1)  # Start opacity
+                _prop(f, "3", "#ff8800")  # End color
+                _prop(f, "4", 0)  # End opacity: fades to transparent -> a wash, not a flat tint
+                _prop(f, "5", 0)  # Start X
+                _prop(f, "6", 0)  # Start Y
+                _prop(f, "7", 1)  # End X
+                _prop(f, "8", 1)  # End Y: diagonal top-left -> bottom-right gradient
 
         if placement.fade_in_frames > 0:
             L = placement.fade_in_frames
             f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
-            glitch_props(f)
+            burst_props(f)
             _prop(f, "kdenlive:collapsed", 0)
         if placement.fade_out_frames > 0:
             L = placement.fade_out_frames
             f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "in": str(p_out - L + 1), "out": str(p_out)})
-            glitch_props(f)
+            burst_props(f)
             _prop(f, "kdenlive:collapsed", 0)
         return
 

@@ -56,7 +56,7 @@ class ClipPlacementSpec:
     preserve_pitch: bool = False
     position: Optional[tuple[float, float]] = None
     size: Optional[tuple[float, float]] = None
-    reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" - see ResolvedPlacement
+    reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" | "delaygrab" | "cairogradient" - see ResolvedPlacement
     chroma_key: Optional[str] = None  # color to key out (e.g. "#00ff00"), None = no chroma-key
     chroma_key_distance: float = 0.35  # frei0r.bluescreen0r "Distance" - only used when chroma_key is set
     # Burned-in text overlay (mlt_service "dynamictext") on an *existing*
@@ -183,10 +183,13 @@ class ResolvedPlacement:
     # from a single-clip filter composited via the qtblend this project
     # already emits per video track, same mechanism `dissolve` itself
     # uses (only the "top" clip needs the filter). "glitch"
-    # (frei0r.glitch0r) is different again - it writes no alpha at all,
-    # so it isn't a reveal/composite in any sense, just a brief distortion
-    # burst dressing a plain cut (see scenes.py's `GLITCH_TRACK_NAME`).
-    reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch"
+    # (frei0r.glitch0r), "delaygrab" (frei0r.delaygrab), and
+    # "cairogradient" (frei0r.cairogradient) are different again - none
+    # writes any alpha at all (confirmed by render for all three: a
+    # colored track below never shows through), so none is a reveal/
+    # composite in any sense, just a brief filter burst dressing a plain
+    # cut (see scenes.py's `BURST_TRANSITIONS`/`BURST_TRACK_NAME`).
+    reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" | "delaygrab" | "cairogradient"
     # Green/blue-screen compositing (frei0r.bluescreen0r) - unlike
     # reveal_style, this spans the clip's *whole* duration, not a brief
     # transition window, and composites through the same per-track
