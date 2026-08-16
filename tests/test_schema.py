@@ -388,6 +388,72 @@ timeline:
     assert placement.chroma_key_distance == 0.4
 
 
+def test_ken_burns_resolves(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 1
+          ken_burns_from: [0, 0, 100, 100]
+          ken_burns_to: [-25, -25, 150, 150]
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    placement = resolved.tracks[0].placements[0]
+    assert placement.ken_burns_from == (0.0, 0.0, 100.0, 100.0)
+    assert placement.ken_burns_to == (-25.0, -25.0, 150.0, 150.0)
+
+
+def test_ken_burns_requires_both_from_and_to(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 1
+          ken_burns_from: [0, 0, 100, 100]
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "ken_burns" in str(exc.value)
+
+
+def test_ken_burns_zero_size_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 1
+          ken_burns_from: [0, 0, 100, 100]
+          ken_burns_to: [0, 0, 0, 100]
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "ken_burns" in str(exc.value)
+
+
 def test_overlay_font_size_must_be_positive(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

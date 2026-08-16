@@ -68,6 +68,13 @@ class ClipPlacementSpec:
     overlay_font_size: int = 48
     overlay_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     overlay_background: tuple[int, int, int, int] = (0, 0, 0, 0)
+    # Ken Burns pan+zoom (mlt_service "affine" as a single-clip filter,
+    # same mechanism kdenlive's own "Position and Zoom" effect uses -
+    # see xmlgen.py's _add_ken_burns_filter). Each is (x%, y%, w%, h%) of
+    # the frame - the filter animates from `ken_burns_from` at the clip's
+    # start to `ken_burns_to` at its end. Both or neither, never just one.
+    ken_burns_from: Optional[tuple[float, float, float, float]] = None
+    ken_burns_to: Optional[tuple[float, float, float, float]] = None
 
 
 @dataclass
@@ -194,6 +201,9 @@ class ResolvedPlacement:
     overlay_font_size: int = 48
     overlay_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     overlay_background: tuple[int, int, int, int] = (0, 0, 0, 0)
+    # Ken Burns pan+zoom - see ClipPlacementSpec.
+    ken_burns_from: Optional[tuple[float, float, float, float]] = None
+    ken_burns_to: Optional[tuple[float, float, float, float]] = None
 
     @property
     def length_frames(self) -> int:

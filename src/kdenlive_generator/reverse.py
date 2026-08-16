@@ -18,6 +18,7 @@ using the original .kdenlive for that part).
 from __future__ import annotations
 
 import json
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,6 +29,15 @@ from .i18n import msg
 from .timecode import FrameRate, resolve_fps
 
 DEFAULT_TRACK_FILTER_IDS = {"qtblend"}  # default filter the generator itself adds
+
+# Matches xmlgen.py's `_add_ken_burns_filter` `transition.rect` shape: two
+# keyframes only, at frame 0 and the entry's own last frame, percent units
+# on every field, opacity fixed at 100 - the structural shape only this
+# generator's own writer produces (see `_match_ken_burns_filter`).
+_KEN_BURNS_RECT_RE = re.compile(
+    r"^0=(-?[\d.]+)%/(-?[\d.]+)%:(-?[\d.]+)%x(-?[\d.]+)%:100;"
+    r"(\d+)=(-?[\d.]+)%/(-?[\d.]+)%:(-?[\d.]+)%x(-?[\d.]+)%:100$"
+)
 
 
 @dataclass
@@ -369,6 +379,29 @@ class Importer:
             return {"style": "glitch", "kind": "in" if filter_el.get("in") is None else "out"}
         return None
 
+    def _match_ken_burns_filter(self, props: dict[str, str], f_in: int, f_out: int) -> Optional[dict]:
+        """Recognizes a Ken Burns pan+zoom filter this generator itself
+        could have produced (xmlgen.py's `_add_ken_burns_filter`): exactly
+        two keyframes, at frame 0 and the entry's own last frame, percent
+        units throughout, opacity fixed at 100, `transition.distort` off -
+        the structural shape only this generator's own writer produces
+        (same "not a settable field" bar `dynamictext`'s geometry/halign/
+        valign hold to, see `convert_clip_filter`). The from/to rect
+        *values* themselves are plain user-facing numbers and round-trip
+        freely, same as `chroma_key`'s color/distance."""
+        if props.get("transition.distort", "0") != "0":
+            return None
+        rect = props.get("transition.rect", "")
+        length = f_out - f_in + 1
+        m = _KEN_BURNS_RECT_RE.match(rect)
+        if not m or int(m.group(5)) != length - 1:
+            return None
+        x0, y0, w0, h0, x1, y1, w1, h1 = (float(m.group(i)) for i in (1, 2, 3, 4, 6, 7, 8, 9))
+        return {
+            "ken_burns_from": [round(x0, 3), round(y0, 3), round(w0, 3), round(h0, 3)],
+            "ken_burns_to": [round(x1, 3), round(y1, 3), round(w1, 3), round(h1, 3)],
+        }
+
     def convert_clip_filter(self, filter_el: ET.Element, entry_in: int, entry_out: int, ctx: str) -> dict:
         """Returns partial keys (fade_in/fade_out/position/size) to merge into
         the placement, or {} if it doesn't add anything recognized (and has
@@ -447,6 +480,14 @@ class Importer:
             if bg is not None and bg != (0, 0, 0, 0):
                 result["overlay_background"] = list(bg)
             return result
+        if service == "affine":
+            matched = self._match_ken_burns_filter(props, f_in, f_out)
+            if matched is not None:
+                return matched
+            self.raw_items.append(
+                RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
+            )
+            return {}
         if service in ("frei0r.alphaspot", "frei0r.3dflippo", "frei0r.glitch0r"):
             matched = self._match_reveal_filter(filter_el, props, f_in, f_out)
             if matched is not None:

@@ -77,6 +77,9 @@ _EN: dict[str, str] = {
     "validation.reveal_invalid": "{ctx}: 'reveal' must be 'iris', 'flip', or 'glitch', got {reveal!r}",
     "validation.chroma_key_distance_invalid": "{ctx}: 'chroma_key_distance' must be between 0.0 and 1.0, got {chroma_key_distance}",
     "validation.overlay_font_size_invalid": "{ctx}: 'overlay_font_size' must be greater than 0, got {overlay_font_size}",
+    "validation.quad_invalid": "{ctx}.{key} must be a list of 4 numbers [x, y, w, h]",
+    "validation.ken_burns_incomplete": "{ctx}: 'ken_burns_from' and 'ken_burns_to' must both be set, or neither",
+    "validation.ken_burns_size_invalid": "{ctx}: 'ken_burns_from'/'ken_burns_to' widths and heights must be greater than 0",
     "validation.speed_zero": "{ctx}: 'speed' cannot be 0 (use a positive value for forward, negative for reverse)",
     "validation.speed_on_image": "{ctx}: 'speed' has no effect on an image or title clip ('{clip}')",
     "validation.clip_overlap": (
@@ -241,6 +244,9 @@ _ES: dict[str, str] = {
     "validation.reveal_invalid": "{ctx}: 'reveal' debe ser 'iris', 'flip' o 'glitch', se recibió {reveal!r}",
     "validation.chroma_key_distance_invalid": "{ctx}: 'chroma_key_distance' debe estar entre 0.0 y 1.0, se recibió {chroma_key_distance}",
     "validation.overlay_font_size_invalid": "{ctx}: 'overlay_font_size' debe ser mayor que 0, se recibió {overlay_font_size}",
+    "validation.quad_invalid": "{ctx}.{key} debe ser una lista [x, y, w, h] de 4 números",
+    "validation.ken_burns_incomplete": "{ctx}: 'ken_burns_from' y 'ken_burns_to' deben indicarse ambos, o ninguno",
+    "validation.ken_burns_size_invalid": "{ctx}: los anchos/altos de 'ken_burns_from'/'ken_burns_to' deben ser mayores que 0",
     "validation.speed_zero": "{ctx}: 'speed' no puede ser 0 (usa un valor positivo para avance, negativo para reversa)",
     "validation.speed_on_image": "{ctx}: 'speed' no tiene efecto en un clip de imagen o título ('{clip}')",
     "validation.clip_overlap": (

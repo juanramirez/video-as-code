@@ -343,6 +343,43 @@ def _add_chroma_key_filter(ids: _IdCounters, entry: ET.Element, placement: Resol
     _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_ken_burns_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """Pan+zoom over a clip's whole duration via a single-clip `affine`
+    filter with a keyframed `transition.rect` - the "transition." prefix
+    is how a bare `affine` *filter* forwards properties to the `affine`
+    *transition* it wraps internally (confirmed via `melt -query
+    filter=affine`: its own parameter schema lists `transition.*` as "the
+    primary means to use this filter"), and matches kdenlive's own
+    "Position and Zoom" effect exactly - `~/dev/kdenlive/data/effects/
+    pan_zoom.xml` uses the identical `transition.rect` animatedrect
+    parameter, not modeled by analogy. Verified by real render: a 39px
+    test square grew to 59px (1.51x, matching a 150% end rect) while
+    staying centered on itself, over the keyframe window - an unprefixed
+    `rect` property (like the affine *transition* used by scenes.py's
+    `zoom`/`slide` uses directly) produces no animation at all when set
+    on the *filter* instead.
+
+    Two keyframes only - frame 0 (`ken_burns_from`) and the entry's own
+    last frame (`ken_burns_to`), 0-relative to the entry's own `in`, same
+    convention `_AFFINE_STYLE_RECT` above relies on. All-percentage
+    units throughout (mixing absolute and percentage fields in the same
+    rect silently misbehaves, same trap documented on
+    `_AFFINE_STYLE_RECT`)."""
+    length = placement.length_frames
+    x0, y0, w0, h0 = placement.ken_burns_from
+    x1, y1, w1, h1 = placement.ken_burns_to
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "affine")
+    _prop(f, "kdenlive_id", "pan_zoom")
+    _prop(
+        f,
+        "transition.rect",
+        f"0={x0:g}%/{y0:g}%:{w0:g}%x{h0:g}%:100;{length - 1}={x1:g}%/{y1:g}%:{w1:g}%x{h1:g}%:100",
+    )
+    _prop(f, "transition.distort", 0)
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _hex_color(c: tuple[int, int, int, int]) -> str:
     r, g, b, a = c
     return f"0x{r:02x}{g:02x}{b:02x}{a:02x}"
@@ -448,6 +485,8 @@ def _build_track(
                 _add_chroma_key_filter(ids, entry, placement)
             if placement.overlay_text:
                 _add_overlay_text_filter(ids, entry, placement)
+            if placement.ken_burns_from is not None:
+                _add_ken_burns_filter(ids, entry, placement)
         if placement.mute:
             _add_mute_filter(ids, entry)
         cursor = placement.start_frame + placement.length_frames

@@ -1239,6 +1239,78 @@ timeline:
     assert brightness > 5, f"expected visible white text on a black background, got near-black frame (brightness={brightness:.2f})"
 
 
+def test_ken_burns_produces_a_real_pan_zoom(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """Empirical check for `ken_burns_from:`/`ken_burns_to:` (v0.6's
+    headline feature): a single-clip `affine` filter with a keyframed
+    `transition.rect` (the "transition." prefix is how a bare `affine`
+    *filter* forwards properties to the transition it wraps internally -
+    an unprefixed `rect`, like scenes.py's `zoom`/`slide` use directly on
+    the affine *transition*, produces no animation at all when set on
+    the filter instead - confirmed empirically before wiring this in).
+    A centered blue square on a red background, zoomed from 100% to 150%
+    centered (`[0,0,100,100]` -> `[-25,-25,150,150]`), should still show
+    red just outside the square's original edge near the start, but blue
+    there by the end, as the square visibly grows - matches kdenlive's
+    own "Position and Zoom" effect mechanism exactly
+    (`~/dev/kdenlive/data/effects/pan_zoom.xml`, same `transition.rect`
+    parameter, not modeled by analogy)."""
+    square = tmp_path / "square.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=red:size=320x240",
+            "-vf", "drawbox=x=140:y=100:w=40:h=40:color=blue:t=fill",
+            "-frames:v", "1", str(square),
+        ],
+        check=True,
+    )
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: sq
+    path: {square}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: sq
+          start: 0
+          duration: 2
+          ken_burns_from: [0, 0, 100, 100]
+          ken_burns_to: [-25, -25, 150, 150]
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def blue_fraction(x: int, y: int, t: float) -> float:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(t), "-i", str(rendered), "-frames:v", "1",
+             "-vf", f"crop=4:4:{x}:{y}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, timeout=30, check=True,
+        )
+        data = result.stdout
+        n = len(data) // 3
+        r = sum(data[0::3]) / n
+        b = sum(data[2::3]) / n
+        return b / (r + b + 1e-6)
+
+    # The square spans x:140..180 at 100%, growing to x:130..190 at 150%
+    # (centered zoom) - x=185 is just outside the square at the start but
+    # inside it by the end.
+    assert blue_fraction(185, 120, 0.04) < 0.05, "expected pure red just outside the square before the zoom"
+    assert blue_fraction(185, 120, 1.9) > 0.9, "expected the square to have visibly grown to cover this point by the end"
+
+
 def test_melt_respects_video_speed_change(tmp_path: Path, assets_dir: Path, melt):
     """Empirical check for `speed:` (timewarp) on a video clip: at 2x, the
     3s testsrc clip (assets_dir) should occupy 1.5s on the timeline - not

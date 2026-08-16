@@ -564,20 +564,36 @@ implementation, same discipline that dropped `affine`'s `spin`/`cube`
 (v0.3), `broken-tv` (v0.5), and `avfilter.chromakey`/`rgbashift`
 (v0.5) after they failed it.
 
-- **Ken Burns pan+zoom, single-clip filter** — headline. `affine` used
-  as a lone filter (not a transition, unlike `zoom`/`slide`) with `rect`
-  keyframed from a full-frame rect to a smaller/offset one, animating a
-  smooth pan+zoom over the clip's duration. Already verified by real
-  render and cross-checked directly against kdenlive's own effect
-  definition (`~/dev/kdenlive/data/effects/pan_zoom.xml`): kdenlive's
-  real "Position and Zoom" effect is literally the same `tag="affine"`
-  mechanism with an `animatedrect` parameter, not modeled by analogy.
-  New per-clip field(s) on `timeline.tracks[].clips[]` (and as a
-  `scenes:`-clip extra) to specify start/end rect - shape still to be
-  decided during implementation (e.g. `ken_burns: {from: ..., to: ...}`
-  vs. reusing `position:`/`size:` with a second keyframe), since this
-  is the first filter in the schema that's genuinely two keyframes of
-  the same property rather than one static value.
+- **Ken Burns pan+zoom, single-clip filter** — headline,
+  **implemented**: `affine` used as a lone filter (not a transition,
+  unlike `zoom`/`slide`) with a keyframed `transition.rect`, animating a
+  smooth pan+zoom over the clip's duration. Cross-checked directly
+  against kdenlive's own effect definition (`~/dev/kdenlive/data/
+  effects/pan_zoom.xml`): kdenlive's real "Position and Zoom" effect is
+  literally the same `tag="affine"` mechanism with a `transition.rect`
+  animatedrect parameter, not modeled by analogy. **One correction from
+  the backlog note**: the property has to be prefixed `transition.rect`,
+  not the bare `rect` the affine *transition* (`zoom`/`slide`) uses
+  directly - confirmed via `melt -query filter=affine` (its own
+  parameter schema lists `transition.*` as "the primary means to use
+  this filter") and by render: a bare `rect` on the filter produced no
+  animation at all, while `transition.rect` did.
+
+  New `ken_burns_from:`/`ken_burns_to:` fields on `timeline.tracks[].
+  clips[]`, each `[x%, y%, w%, h%]` - flat paired fields, matching this
+  schema's existing `position:`/`size:` convention rather than a nested
+  dict, since that's the established shape for a paired rect in this
+  project. Not exposed as a `scenes:`-clip extra (same narrower-scope
+  call v0.5's `overlay_text:` made, rather than chroma_key's wider one).
+  Verified by real render through the generator's own output: a 39px
+  test square (100%-rect start) grew to 59px (150%-rect end, 1.51x)
+  while staying centered
+  (`tests/test_melt_validation.py::test_ken_burns_produces_a_real_pan_zoom`).
+  `reverse.py` recognizes it on import too, same "plain values round-trip
+  freely" bar `chroma_key:` uses - except the two-keyframe/percent-units/
+  opacity-100/no-distort shape `_add_ken_burns_filter` always writes has
+  to match exactly, since that structure isn't a settable field
+  (`tests/test_reverse.py::test_round_trip_preserves_ken_burns`).
 - **New transition: `delaygrab`** — headline. `frei0r.delaygrab`
   ("delayed frame blitting on a time bitmap") already verified by real
   render: against a moving test source it produces a genuine circular

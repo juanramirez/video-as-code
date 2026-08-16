@@ -307,6 +307,25 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         errors.append(msg("validation.overlay_font_size_invalid", ctx=ctx, overlay_font_size=overlay_font_size))
         overlay_font_size = 48
 
+    def _quad(key: str) -> tuple[float, float, float, float] | None:
+        val = item.get(key)
+        if val is None:
+            return None
+        if not (isinstance(val, (list, tuple)) and len(val) == 4):
+            errors.append(msg("validation.quad_invalid", ctx=ctx, key=key))
+            return None
+        return (float(val[0]), float(val[1]), float(val[2]), float(val[3]))
+
+    ken_burns_from = _quad("ken_burns_from")
+    ken_burns_to = _quad("ken_burns_to")
+    if (ken_burns_from is None) != (ken_burns_to is None):
+        errors.append(msg("validation.ken_burns_incomplete", ctx=ctx))
+        ken_burns_from = ken_burns_to = None
+    elif ken_burns_from is not None and ken_burns_to is not None:
+        if ken_burns_from[2] <= 0 or ken_burns_from[3] <= 0 or ken_burns_to[2] <= 0 or ken_burns_to[3] <= 0:
+            errors.append(msg("validation.ken_burns_size_invalid", ctx=ctx))
+            ken_burns_from = ken_burns_to = None
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -328,6 +347,8 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         overlay_font_size=overlay_font_size,
         overlay_color=tuple(item.get("overlay_color", (255, 255, 255, 255))),
         overlay_background=tuple(item.get("overlay_background", (0, 0, 0, 0))),
+        ken_burns_from=ken_burns_from,
+        ken_burns_to=ken_burns_to,
     )
 
 
@@ -566,6 +587,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     overlay_font_size=placement.overlay_font_size,
                     overlay_color=placement.overlay_color,
                     overlay_background=placement.overlay_background,
+                    ken_burns_from=placement.ken_burns_from,
+                    ken_burns_to=placement.ken_burns_to,
                 )
             )
 

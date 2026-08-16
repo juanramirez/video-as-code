@@ -572,6 +572,45 @@ timeline:
     assert "overlay_font" not in clip  # default "Sans" stays sparse
 
 
+def test_round_trip_preserves_ken_burns(tmp_path: Path, assets_dir: Path):
+    """`ken_burns_from:`/`ken_burns_to:` (new this cycle, v0.6's headline
+    feature) round-trip through a real generated .kdenlive - like
+    `chroma_key:`, the rect *values* are plain user-facing numbers and
+    round-trip freely; only the two-keyframe/percent-units/opacity-100/
+    no-distort shape `_add_ken_burns_filter` always writes has to match
+    exactly, since that structure isn't a settable field in this
+    schema."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 1
+          ken_burns_from: [0, 0, 100, 100]
+          ken_burns_to: [-25, -25, 150, 150]
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["ken_burns_from"] == [0.0, 0.0, 100.0, 100.0]
+    assert clip["ken_burns_to"] == [-25.0, -25.0, 150.0, 150.0]
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -
