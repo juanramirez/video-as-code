@@ -326,6 +326,16 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
             errors.append(msg("validation.ken_burns_size_invalid", ctx=ctx))
             ken_burns_from = ken_burns_to = None
 
+    focus_rect = _quad("focus_rect")
+    focus_blur = float(item.get("focus_blur", 4.0))
+    if focus_rect is not None:
+        if focus_rect[2] <= 0 or focus_rect[3] <= 0:
+            errors.append(msg("validation.focus_rect_size_invalid", ctx=ctx))
+            focus_rect = None
+        elif not (0.0 <= focus_blur <= 50.0):
+            errors.append(msg("validation.numeric_range_invalid", ctx=ctx, field="focus_blur", min=0, max=50, value=focus_blur))
+            focus_blur = 4.0
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -349,6 +359,8 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         overlay_background=tuple(item.get("overlay_background", (0, 0, 0, 0))),
         ken_burns_from=ken_burns_from,
         ken_burns_to=ken_burns_to,
+        focus_rect=focus_rect,
+        focus_blur=focus_blur,
     )
 
 
@@ -589,6 +601,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     overlay_background=placement.overlay_background,
                     ken_burns_from=placement.ken_burns_from,
                     ken_burns_to=placement.ken_burns_to,
+                    focus_rect=placement.focus_rect,
+                    focus_blur=placement.focus_blur,
                 )
             )
 

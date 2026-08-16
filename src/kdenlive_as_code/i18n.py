@@ -80,6 +80,8 @@ _EN: dict[str, str] = {
     "validation.quad_invalid": "{ctx}.{key} must be a list of 4 numbers [x, y, w, h]",
     "validation.ken_burns_incomplete": "{ctx}: 'ken_burns_from' and 'ken_burns_to' must both be set, or neither",
     "validation.ken_burns_size_invalid": "{ctx}: 'ken_burns_from'/'ken_burns_to' widths and heights must be greater than 0",
+    "validation.focus_rect_size_invalid": "{ctx}: 'focus_rect' width and height must be greater than 0",
+    "validation.numeric_range_invalid": "{ctx}: '{field}' must be between {min} and {max}, got {value}",
     "validation.speed_zero": "{ctx}: 'speed' cannot be 0 (use a positive value for forward, negative for reverse)",
     "validation.speed_on_image": "{ctx}: 'speed' has no effect on an image or title clip ('{clip}')",
     "validation.clip_overlap": (
@@ -262,6 +264,8 @@ _ES: dict[str, str] = {
     "validation.quad_invalid": "{ctx}.{key} debe ser una lista [x, y, w, h] de 4 números",
     "validation.ken_burns_incomplete": "{ctx}: 'ken_burns_from' y 'ken_burns_to' deben indicarse ambos, o ninguno",
     "validation.ken_burns_size_invalid": "{ctx}: los anchos/altos de 'ken_burns_from'/'ken_burns_to' deben ser mayores que 0",
+    "validation.focus_rect_size_invalid": "{ctx}: el ancho y alto de 'focus_rect' deben ser mayores que 0",
+    "validation.numeric_range_invalid": "{ctx}: '{field}' debe estar entre {min} y {max}, se recibió {value}",
     "validation.speed_zero": "{ctx}: 'speed' no puede ser 0 (usa un valor positivo para avance, negativo para reversa)",
     "validation.speed_on_image": "{ctx}: 'speed' no tiene efecto en un clip de imagen o título ('{clip}')",
     "validation.clip_overlap": (

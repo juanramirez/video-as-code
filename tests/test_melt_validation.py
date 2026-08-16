@@ -1451,6 +1451,76 @@ timeline:
     assert blue_fraction(185, 120, 1.9) > 0.9, "expected the square to have visibly grown to cover this point by the end"
 
 
+def test_focus_rect_produces_a_real_blur_outside_the_rect(tmp_path: Path, assets_dir: Path, melt):
+    """Empirical check for `focus_rect:`/`focus_blur:` (v0.6, MLT's own
+    `pillar_echo` filter - kdenlive-native, Meltytech, not frei0r): keeps
+    the rect sharp, blurs everything outside it. A fine checkerboard test
+    pattern (high spatial-frequency detail everywhere) should render with
+    a much higher pixel-value stddev inside the rect than just outside
+    it - verified against the generator's own output, not just the
+    standalone probe used to first confirm the mechanism (same rigor
+    `dance`'s ROADMAP entry documents failing under, and why that one was
+    dropped instead of shipped)."""
+    checker = tmp_path / "checker.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=black:size=320x240",
+            "-vf", "geq=lum='if(mod(floor(X/8)+floor(Y/8)\\,2)\\,255\\,0)':cb=128:cr=128",
+            "-frames:v", "1", str(checker),
+        ],
+        check=True,
+    )
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: checker
+    path: {checker}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: checker
+          start: 0
+          duration: 1
+          focus_rect: [35, 35, 30, 30]
+          focus_blur: 20
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def local_stddev(y0: int, y1: int, x0: int, x1: int, t: float) -> float:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(t), "-i", str(rendered), "-frames:v", "1",
+             "-vf", f"crop={x1 - x0}:{y1 - y0}:{x0}:{y0}", "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+            capture_output=True, timeout=30, check=True,
+        )
+        data = result.stdout
+        n = len(data)
+        mean = sum(data) / n
+        variance = sum((b - mean) ** 2 for b in data) / n
+        return variance**0.5
+
+    # focus_rect covers x:35-65%, y:35-65% (i.e. roughly x:112-208, y:84-156
+    # of a 320x240 frame) - (120,140) sits inside it, (10,10) is well outside.
+    inside = local_stddev(120, 150, 140, 170, 0.5)
+    outside = local_stddev(10, 40, 10, 40, 0.5)
+    assert inside > outside + 50, (
+        f"expected the checkerboard detail to stay sharp inside focus_rect and blur outside it, "
+        f"got inside={inside:.1f} outside={outside:.1f}"
+    )
+
+
 def test_melt_respects_video_speed_change(tmp_path: Path, assets_dir: Path, melt):
     """Empirical check for `speed:` (timewarp) on a video clip: at 2x, the
     3s testsrc clip (assets_dir) should occupy 1.5s on the timeline - not

@@ -658,6 +658,42 @@ timeline:
     assert clip["ken_burns_to"] == [-25.0, -25.0, 150.0, 150.0]
 
 
+def test_round_trip_preserves_focus_rect(tmp_path: Path, assets_dir: Path):
+    """`focus_rect:`/`focus_blur:` (v0.6, MLT's own `pillar_echo` filter)
+    round-trip through a real generated .kdenlive - like `chroma_key:`,
+    plain user-facing values round-trip freely (no keyframed animation
+    this generator itself constructs)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 1
+          focus_rect: [35, 35, 30, 30]
+          focus_blur: 20
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["focus_rect"] == [35.0, 35.0, 30.0, 30.0]
+    assert clip["focus_blur"] == 20.0
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -

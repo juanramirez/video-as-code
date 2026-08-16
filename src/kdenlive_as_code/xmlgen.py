@@ -418,6 +418,24 @@ def _add_ken_burns_filter(ids: _IdCounters, entry: ET.Element, placement: Resolv
     _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_pillar_echo_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """Focus-pull via MLT's own `pillar_echo` filter (kdenlive-native,
+    Meltytech, not frei0r) - keeps `focus_rect` sharp, blurs everything
+    outside it. Verified by real render before wiring in: a fine
+    checkerboard test pattern measured a pixel-value stddev of ~127
+    inside the rect vs. ~5-7 just outside it (a real, strong blur, not a
+    dud like `broken-tv`/`spin`/`cube` turned out to be). Spans the
+    clip's whole duration, no keyframes - same shape `chroma_key` uses,
+    not `reveal_style`'s fade-window mechanism."""
+    x, y, w, h = placement.focus_rect
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "pillar_echo")
+    _prop(f, "kdenlive_id", "pillar_echo")
+    _prop(f, "rect", f"{x:g}% {y:g}% {w:g}% {h:g}%")
+    _prop(f, "blur", placement.focus_blur)
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _hex_color(c: tuple[int, int, int, int]) -> str:
     r, g, b, a = c
     return f"0x{r:02x}{g:02x}{b:02x}{a:02x}"
@@ -525,6 +543,8 @@ def _build_track(
                 _add_overlay_text_filter(ids, entry, placement)
             if placement.ken_burns_from is not None:
                 _add_ken_burns_filter(ids, entry, placement)
+            if placement.focus_rect is not None:
+                _add_pillar_echo_filter(ids, entry, placement)
         if placement.mute:
             _add_mute_filter(ids, entry)
         cursor = placement.start_frame + placement.length_frames

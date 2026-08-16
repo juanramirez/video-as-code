@@ -39,6 +39,12 @@ _KEN_BURNS_RECT_RE = re.compile(
     r"(\d+)=(-?[\d.]+)%/(-?[\d.]+)%:(-?[\d.]+)%x(-?[\d.]+)%:100$"
 )
 
+# Matches xmlgen.py's `_add_pillar_echo_filter` `rect` shape: a single,
+# static, all-percent "X% Y% W% H%" value (no keyframes, no mixed units).
+_PILLAR_ECHO_RECT_RE = re.compile(
+    r"^(-?[\d.]+)%\s+(-?[\d.]+)%\s+(-?[\d.]+)%\s+(-?[\d.]+)%$"
+)
+
 
 @dataclass
 class RawItem:
@@ -503,6 +509,29 @@ class Importer:
                 RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
             )
             return {}
+        if service == "pillar_echo":
+            # Same "plain user-facing values round-trip freely" bar as
+            # chroma_key - rect/blur are directly representable, not a
+            # keyframed animation this generator itself constructs. Only
+            # the single-value, all-percent shape `_add_pillar_echo_filter`
+            # itself writes is recognized (a keyframed/animated rect, or
+            # one mixing pixel and percent units, isn't something this
+            # schema can represent) - anything else falls to raw_items.
+            m = _PILLAR_ECHO_RECT_RE.match(props.get("rect", ""))
+            if m is None:
+                self.raw_items.append(
+                    RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
+                )
+                return {}
+            x, y, w, h = (round(float(m.group(i)), 3) for i in (1, 2, 3, 4))
+            result = {"focus_rect": [x, y, w, h]}
+            try:
+                blur = float(props.get("blur", "4.0"))
+            except ValueError:
+                blur = None
+            if blur is not None and abs(blur - 4.0) > 1e-6:
+                result["focus_blur"] = round(blur, 3)
+            return result
         if service in (
             "frei0r.alphaspot", "frei0r.3dflippo", "frei0r.glitch0r",
             "frei0r.delaygrab", "frei0r.cairogradient",

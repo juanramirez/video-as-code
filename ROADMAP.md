@@ -553,7 +553,7 @@ more small filter capability.
   the fixed centered/full-frame layout this generator always writes has
   to match exactly, since `geometry:` itself isn't a settable field.
 
-## v0.6 — scoped (2026-08-16)
+## v0.6 — shipped (2026-08-16)
 
 Two blocks: a headline of three mechanisms already verified by real
 render during backlog research (moved here from BACKLOG.md, not
@@ -643,24 +643,50 @@ implementation, same discipline that dropped `affine`'s `spin`/`cube`
   (`_match_reveal_filter`) - `delaygrab` only needs to match the
   service name (no parameters to check), `cairogradient` matches its
   fixed gradient parameters exactly.
-- **`pillar_echo` focus-pull effect** — second block, **needs
-  verification before implementation**. Kdenlive's own real effect
-  (`~/dev/kdenlive/data/effects/pillar_echo.xml`, credited to
-  Meltytech itself - MLT-native, not frei0r), confirmed present via
-  `melt -query filters` but not yet rendered: keeps a rectangular area
-  of interest sharp while blurring everything outside it. If it doesn't
-  hold up under a real render (no visible effect, or the effect doesn't
-  match its documented behavior), drop it the same way `broken-tv`/
-  `spin`/`cube` were dropped, and note that honestly here rather than
-  shipping it unverified.
-- **`dance` audio-reactive visualizer** — second block, **needs
-  verification before implementation**. Kdenlive's own real effect
-  (`~/dev/kdenlive/data/effects/dance.xml`), confirmed present via
-  `melt -query filters` but not yet rendered: moves/zooms the image
-  proportional to the audio spectrum's magnitude (params: frequency
-  band, level threshold, oscillation rate, initial zoom). Same
-  verify-first bar as `pillar_echo` above - drop and document if it
-  doesn't hold up.
+- **`pillar_echo` focus-pull effect** — second block, **implemented**.
+  Kdenlive's own real effect (`~/dev/kdenlive/data/effects/
+  pillar_echo.xml`, credited to Meltytech itself - MLT-native, not
+  frei0r): keeps a rectangular area of interest sharp while blurring
+  everything outside it. Verified by real render, through the
+  generator's own output, not just the standalone probe: a fine
+  checkerboard test pattern measured a pixel-value stddev of ~127
+  inside the rect vs. ~5-7 just outside it - a real, strong blur
+  (`tests/test_melt_validation.py::test_focus_rect_produces_a_real_blur_outside_the_rect`).
+
+  New `focus_rect:`/`focus_blur:` fields on `timeline.tracks[].clips[]`
+  (`focus_rect` is `[x%, y%, w%, h%]`, `focus_blur` percent of image
+  width, default 4.0 matching kdenlive's own default) - spans the
+  clip's whole duration, no keyframes (kdenlive's own `rect` param
+  supports keyframing but that's not exposed here, same narrower-scope
+  call `overlay_text:`'s fixed layout made). Recognized on import too,
+  same "plain values round-trip freely" bar `chroma_key:` uses.
+- **`dance` audio-reactive visualizer — investigated and dropped**,
+  same discipline that dropped `broken-tv`/`spin`/`cube`/
+  `avfilter.chromakey`/`rgbashift`, but a different *kind* of failure
+  than any of those: `dance` itself works, verified by a real render
+  in complete isolation (a static marker visibly shifted position only
+  during a loud in-band tone, snapping back the instant the audio went
+  silent) - but it doesn't work *through this generator's own output*,
+  and the reason is structural, not a parameter mistake. Every video
+  track this generator (and real kdenlive - confirmed against actual
+  `.kdenlive` projects on this machine, not just this project's own
+  output) emits sets `hide="audio"` on that track's own inner
+  sub-tracks; tracing MLT's own tractor source
+  (`src/framework/mlt_tractor.c`) confirmed that flag doesn't just
+  reorder audio processing, it excludes the track from ever being
+  picked as an audio contributor at all - the frame `dance`'s filter
+  receives has no live audio connection whatsoever to hook into,
+  hence its own "Audio not preprocessed. Unable to dance." warning.
+  This is exactly *why* the video-track `mute:` independent-fades
+  trick from v0.2 works and is necessary in the first place - video
+  tracks never carry their own audio through to render at all,
+  matching real kdenlive's actual per-clip AV-split editing model,
+  confirmed by checking a real, separately-edited `.kdenlive` project
+  on this machine. Making `dance` work would need reaching audio from
+  the *project-level* mix instead of a per-clip filter - a
+  fundamentally different mechanism shape (a project-wide effect, not
+  a `timeline.tracks[].clips[]` field like everything else in this
+  schema), out of scope for this cycle.
 
 **Explicitly deferred, not in v0.6**: speed ramps/`timeremap` (mechanism
 confirmed real in BACKLOG.md but the exact working XML recipe isn't

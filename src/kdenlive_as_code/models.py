@@ -75,6 +75,21 @@ class ClipPlacementSpec:
     # start to `ken_burns_to` at its end. Both or neither, never just one.
     ken_burns_from: Optional[tuple[float, float, float, float]] = None
     ken_burns_to: Optional[tuple[float, float, float, float]] = None
+    # Focus-pull (mlt_service "pillar_echo", kdenlive-native, Meltytech):
+    # keeps focus_rect sharp, blurs everything outside it. (x%, y%, w%, h%);
+    # None = no filter. Static for the clip's whole duration - kdenlive's
+    # own `rect` param supports keyframing but that's not exposed here
+    # (same narrower-scope call overlay_text's fixed layout made).
+    focus_rect: Optional[tuple[float, float, float, float]] = None
+    focus_blur: float = 4.0  # blur radius, percent of image width (kdenlive default)
+    # `dance` (audio-reactive auto-zoom) was investigated and dropped -
+    # see ROADMAP.md: real kdenlive's own per-track dual-playlist
+    # architecture sets hide="audio" on every video track's inner
+    # sub-tracks (confirmed both in this generator's output and in real
+    # user .kdenlive projects), which structurally cuts off audio from
+    # that track's own clip-level filters - dance needs audio+video on
+    # the same frame to react to, so it can never work on a video-track
+    # clip here, not a "no visible effect" case like broken-tv.
 
 
 @dataclass
@@ -207,6 +222,9 @@ class ResolvedPlacement:
     # Ken Burns pan+zoom - see ClipPlacementSpec.
     ken_burns_from: Optional[tuple[float, float, float, float]] = None
     ken_burns_to: Optional[tuple[float, float, float, float]] = None
+    # Focus-pull - see ClipPlacementSpec.
+    focus_rect: Optional[tuple[float, float, float, float]] = None
+    focus_blur: float = 4.0
 
     @property
     def length_frames(self) -> int:
