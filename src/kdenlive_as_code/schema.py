@@ -433,7 +433,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         raise ValidationErrors(errors)
 
     # --- probing: source type and duration ----------------------------------
-    titles_dir = doc.source_path.parent / ".kdgen_titles"
+    titles_dir = doc.source_path.parent / ".titles"
     resolved_bin: dict[str, ResolvedBinClip] = {}
     for numeric_id, (clip_id, clip) in enumerate(bin_by_id.items(), start=1):
         kind = clip.type or probe.guess_type(clip.path)

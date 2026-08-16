@@ -96,7 +96,7 @@ backlog.
   kind, `type: title`, with `text:` (required) and optional `font:`
   (default `Sans`), `font_size:` (default 48), `color:`/`background:`
   (RGBA lists). Generates a standalone `.kdenlivetitle` file (`titles.py`,
-  written to `.kdgen_titles/<clip_id>.kdenlivetitle` next to the project
+  written to `.titles/<clip_id>.kdenlivetitle` next to the project
   YAML) and a `<producer mlt_service="kdenlivetitle">` referencing it -
   modeled directly on a real title clip found in a local kdenlive backup,
   not built by analogy (the producer tag is `<producer>`, not `<chain>`;
