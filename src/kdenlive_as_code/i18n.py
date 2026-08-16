@@ -48,6 +48,15 @@ _EN: dict[str, str] = {
         "{ctx}: position/size ([{x:g}, {y:g}] {w:g}x{h:g}) falls outside "
         "the project canvas ({width}x{height})"
     ),
+    "validation.position_keyframes_conflicts": "{ctx}: 'position_keyframes' cannot be combined with 'position'/'size' - use one or the other",
+    "validation.position_keyframes_invalid": "{ctx}: 'position_keyframes' must be a non-empty list of {{at, position, size}} keyframes",
+    "validation.position_keyframes_keyframe_invalid": "{ctx}: 'position_keyframes[{idx}]' must be a mapping with 'at', 'position' [x, y], and 'size' [w, h]",
+    "validation.position_keyframes_must_start_at_zero": "{ctx}: 'position_keyframes''s first keyframe must have 'at: 0'",
+    "validation.position_keyframes_not_sorted": "{ctx}: 'position_keyframes' keyframes must have strictly increasing 'at' values",
+    "validation.position_keyframes_out_of_bounds": (
+        "{ctx}: 'position_keyframes[{idx}]' ([{x:g}, {y:g}] {w:g}x{h:g}) falls outside "
+        "the project canvas ({width}x{height})"
+    ),
     "validation.track_missing_type": "timeline.tracks[{idx}] is invalid (missing 'type'): {item!r}",
     "validation.track_type_invalid": "timeline.tracks[{idx}].type={type!r} must be one of {valid}",
     "validation.pan_on_video_track": "timeline.tracks[{idx}]: 'pan' only applies to audio tracks",
@@ -74,6 +83,9 @@ _EN: dict[str, str] = {
         "duration on the timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
+    "validation.source_in_out_incomplete": "{ctx}: 'source_in' and 'source_out' must both be set, or neither",
+    "validation.source_in_out_conflicts": "{ctx}: 'source_in'/'source_out' cannot be combined with 'in'/'out'/'duration' - use one or the other",
+    "validation.source_in_out_invalid": "{ctx}: 'source_out' ({source_out}) must be greater than 'source_in' ({source_in}), and 'source_in' must not be negative",
     "validation.reveal_invalid": "{ctx}: 'reveal' must be 'iris', 'flip', 'glitch', 'delaygrab', or 'cairogradient', got {reveal!r}",
     "validation.chroma_key_distance_invalid": "{ctx}: 'chroma_key_distance' must be between 0.0 and 1.0, got {chroma_key_distance}",
     "validation.overlay_font_size_invalid": "{ctx}: 'overlay_font_size' must be greater than 0, got {overlay_font_size}",
@@ -245,6 +257,15 @@ _ES: dict[str, str] = {
         "{ctx}: position/size ([{x:g}, {y:g}] {w:g}x{h:g}) queda fuera "
         "del lienzo del proyecto ({width}x{height})"
     ),
+    "validation.position_keyframes_conflicts": "{ctx}: 'position_keyframes' no se puede combinar con 'position'/'size' - usa uno u otro",
+    "validation.position_keyframes_invalid": "{ctx}: 'position_keyframes' debe ser una lista no vacía de keyframes {{at, position, size}}",
+    "validation.position_keyframes_keyframe_invalid": "{ctx}: 'position_keyframes[{idx}]' debe ser un mapeo con 'at', 'position' [x, y] y 'size' [w, h]",
+    "validation.position_keyframes_must_start_at_zero": "{ctx}: el primer keyframe de 'position_keyframes' debe tener 'at: 0'",
+    "validation.position_keyframes_not_sorted": "{ctx}: los keyframes de 'position_keyframes' deben tener valores 'at' estrictamente crecientes",
+    "validation.position_keyframes_out_of_bounds": (
+        "{ctx}: 'position_keyframes[{idx}]' ([{x:g}, {y:g}] {w:g}x{h:g}) queda fuera "
+        "del lienzo del proyecto ({width}x{height})"
+    ),
     "validation.track_missing_type": "timeline.tracks[{idx}] inválida (falta 'type'): {item!r}",
     "validation.track_type_invalid": "timeline.tracks[{idx}].type={type!r} debe ser uno de {valid}",
     "validation.pan_on_video_track": "timeline.tracks[{idx}]: 'pan' sólo se aplica a pistas de audio",
@@ -271,6 +292,9 @@ _ES: dict[str, str] = {
         "duración del clip en el timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
+    "validation.source_in_out_incomplete": "{ctx}: 'source_in' y 'source_out' deben indicarse ambos, o ninguno",
+    "validation.source_in_out_conflicts": "{ctx}: 'source_in'/'source_out' no se pueden combinar con 'in'/'out'/'duration' - usa uno u otro",
+    "validation.source_in_out_invalid": "{ctx}: 'source_out' ({source_out}) debe ser mayor que 'source_in' ({source_in}), y 'source_in' no puede ser negativo",
     "validation.reveal_invalid": "{ctx}: 'reveal' debe ser 'iris', 'flip', 'glitch', 'delaygrab' o 'cairogradient', se recibió {reveal!r}",
     "validation.chroma_key_distance_invalid": "{ctx}: 'chroma_key_distance' debe estar entre 0.0 y 1.0, se recibió {chroma_key_distance}",
     "validation.overlay_font_size_invalid": "{ctx}: 'overlay_font_size' debe ser mayor que 0, se recibió {overlay_font_size}",

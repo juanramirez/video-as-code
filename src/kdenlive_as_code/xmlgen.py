@@ -222,16 +222,35 @@ def _add_speed_ramp_link(
     _prop(link_el, "image_mode", image_mode)
 
 
-def _add_video_default_filter(ids: _IdCounters, entry: ET.Element, width: int, height: int, rect) -> None:
+def _add_video_default_filter(
+    ids: _IdCounters,
+    entry: ET.Element,
+    width: int,
+    height: int,
+    rect,
+    position_keyframes: Optional[list[tuple[int, float, float, float, float]]] = None,
+) -> None:
+    """Animated PiP (`position_keyframes`) reuses this same per-track
+    `qtblend` filter every video track already gets, just with more than
+    one `rect` keyframe - verified by real render before wiring in: a
+    PiP box moved cleanly from one corner to the other over a clip's
+    duration with a real multi-keyframe `rect` string (`"0=... ;
+    N=..."`), the same pixel-absolute "X Y W H opacity" format the
+    static single-keyframe case already uses, just repeated per
+    keyframe - not assumed to "just work" from the static case alone."""
     f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
-    if rect is not None:
-        x, y, w, h = rect
-    else:
-        x, y, w, h = 0, 0, width, height
     _prop(f, "rotate_center", 1)
     _prop(f, "mlt_service", "qtblend")
     _prop(f, "kdenlive_id", "qtblend")
-    _prop(f, "rect", f"0={x:g} {y:g} {w:g} {h:g} 1")
+    if position_keyframes is not None:
+        rect_str = ";".join(f"{at_frame}={x:g} {y:g} {w:g} {h:g} 1" for at_frame, x, y, w, h in position_keyframes)
+    else:
+        if rect is not None:
+            x, y, w, h = rect
+        else:
+            x, y, w, h = 0, 0, width, height
+        rect_str = f"0={x:g} {y:g} {w:g} {h:g} 1"
+    _prop(f, "rect", rect_str)
     _prop(f, "rotation", "0=0")
     _prop(f, "compositing", 0)
     _prop(f, "distort", 1)
@@ -614,7 +633,9 @@ def _build_track(
                 _add_reveal_style_filter(ids, entry, placement)
             else:
                 _add_video_fade_filters(ids, entry, placement)
-            _add_video_default_filter(ids, entry, project.width, project.height, placement.rect)
+            _add_video_default_filter(
+                ids, entry, project.width, project.height, placement.rect, placement.position_keyframes
+            )
             if placement.chroma_key:
                 _add_chroma_key_filter(ids, entry, placement)
             if placement.overlay_text:

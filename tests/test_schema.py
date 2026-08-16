@@ -658,6 +658,202 @@ timeline:
     assert "speed_ramp" in str(exc.value)
 
 
+def test_source_in_out_resolves(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          speed: 2.0
+          source_in: 1.0
+          source_out: 3.0
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    placement = resolved.tracks[0].placements[0]
+    # in_s = 1.0/2.0 = 0.5s = 12.5 frames -> round-half-up 13; out_s = 3.0/2.0 = 1.5s = 37.5 -> 38, last frame 37
+    assert placement.in_frame == 13
+    assert placement.out_frame == 37
+
+
+def test_source_in_out_incomplete_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, source_in: 1.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "source_in" in str(exc.value)
+
+
+def test_source_in_out_conflicts_with_in_out_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, source_in: 1.0, source_out: 2.0, in: 0.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "source_in" in str(exc.value)
+
+
+def test_source_in_out_invalid_range_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, source_in: 2.0, source_out: 1.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "source_in" in str(exc.value) or "source_out" in str(exc.value)
+
+
+def test_source_in_out_conflicts_with_speed_ramp_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 1.0
+          source_in: 0.5
+          source_out: 1.0
+          speed_ramp:
+            - {{at: 0, speed: 2.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    # Rejected via the source_in/source_out-vs-duration conflict check -
+    # speed_ramp itself requires an explicit duration/out, and
+    # source_in/source_out reject being combined with one, so the two
+    # are mutually exclusive by construction (see schema.py).
+    assert "source_in" in str(exc.value)
+
+
+def test_position_keyframes_resolves(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 2.0
+          position_keyframes:
+            - {{at: 0, position: [0, 0], size: [60, 60]}}
+            - {{at: 1, position: [260, 180], size: [60, 60]}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    placement = resolved.tracks[0].placements[0]
+    assert placement.position_keyframes == [(0, 0.0, 0.0, 60.0, 60.0), (25, 260.0, 180.0, 60.0, 60.0)]
+
+
+def test_position_keyframes_conflicts_with_position_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 1.0
+          position: [0, 0]
+          position_keyframes:
+            - {{at: 0, position: [0, 0], size: [60, 60]}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "position_keyframes" in str(exc.value)
+
+
+def test_position_keyframes_must_start_at_zero_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 1.0
+          position_keyframes:
+            - {{at: 0.5, position: [0, 0], size: [60, 60]}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "position_keyframes" in str(exc.value)
+
+
+def test_position_keyframes_out_of_bounds_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 1.0
+          position_keyframes:
+            - {{at: 0, position: [300, 0], size: [100, 100]}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "position_keyframes" in str(exc.value)
+
+
 def test_speed_ramp_on_image_rejected(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

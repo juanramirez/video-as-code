@@ -1379,6 +1379,87 @@ timeline:
     assert brightness > 5, f"expected visible white text on a black background, got near-black frame (brightness={brightness:.2f})"
 
 
+def test_position_keyframes_produces_a_real_animated_pip(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """Empirical check for `position_keyframes:` (v0.7, animated PiP): a
+    multi-keyframe `qtblend` `rect` - the same per-track filter every
+    video track already gets for the static `position:`/`size:` case,
+    just with more than one keyframe. Verified before wiring in that
+    qtblend's `rect` genuinely animates across more than the two
+    keyframes Ken Burns uses (that used `affine`'s `transition.rect`,
+    a different property on a different service - not assumed to carry
+    over). A small blue PiP box on a red background should move from
+    the top-left corner to the bottom-right corner over the clip's
+    duration."""
+    bg = tmp_path / "bg.png"
+    fg = tmp_path / "fg.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=red:size=320x240", "-frames:v", "1", str(bg)],
+        check=True,
+    )
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=blue:size=100x100", "-frames:v", "1", str(fg)],
+        check=True,
+    )
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: bg
+    path: {bg}
+  - id: fg
+    path: {fg}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: bg, start: 0, duration: 2}}
+    - type: video
+      clips:
+        - clip: fg
+          start: 0
+          duration: 2
+          position_keyframes:
+            - {{at: 0, position: [0, 0], size: [60, 60]}}
+            - {{at: 1.96, position: [260, 180], size: [60, 60]}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def blue_bbox(t: float) -> Optional[tuple[int, int, int, int]]:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(t), "-i", str(rendered), "-frames:v", "1",
+             "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, timeout=30, check=True,
+        )
+        data = result.stdout
+        w, h = 320, 240
+        xs, ys = [], []
+        for i in range(0, len(data), 3):
+            r, g, b = data[i], data[i + 1], data[i + 2]
+            if b > 150 and r < 100:
+                pixel = i // 3
+                xs.append(pixel % w)
+                ys.append(pixel // w)
+        if not xs:
+            return None
+        return min(xs), min(ys), max(xs), max(ys)
+
+    early = blue_bbox(0.02)
+    late = blue_bbox(1.9)
+    assert early is not None and late is not None, "expected the blue PiP box to be visible at both ends"
+    assert early[0] < 70 and early[1] < 70, f"expected the PiP box near the top-left early on, got {early}"
+    assert late[2] > 250 and late[3] > 170, f"expected the PiP box near the bottom-right near the end, got {late}"
+
+
 def test_ken_burns_produces_a_real_pan_zoom(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
     """Empirical check for `ken_burns_from:`/`ken_burns_to:` (v0.6's
     headline feature): a single-clip `affine` filter with a keyframed
@@ -1519,6 +1600,88 @@ timeline:
         f"expected the checkerboard detail to stay sharp inside focus_rect and blur outside it, "
         f"got inside={inside:.1f} outside={outside:.1f}"
     )
+
+
+def test_source_in_out_combines_correctly_with_speed(tmp_path: Path, melt):
+    """Empirical check for `source_in:`/`source_out:` (v0.7): unlike
+    `in:`/`out:` (relative to the already-warped timeline when `speed:`
+    is set), these are always real source seconds - dividing by `speed`
+    internally so the caller doesn't have to. A 4s red/green/blue/yellow
+    source (1s each) with `source_in: 1.0, source_out: 3.0, speed: 2.0`
+    should extract exactly the green+blue middle section (source 1s-3s)
+    and play it back at double speed, landing on a 1s output that starts
+    green and ends blue - not the whole clip, and not misaligned by the
+    speed conversion.
+
+    Uses a *fast* (2.0), not slow, speed deliberately: verifying this
+    surfaced a real, separate bug in the from-source dev `melt` build
+    (7.41.0-dev) this project's own test suite prefers - a sub-1.0
+    (slow-motion) `speed:` on video plays through the source at roughly
+    1:1 real time and then freezes on the last frame for the remainder,
+    instead of actually stretching it, while a real-time content check
+    on the *system's* stable melt (7.32.0) confirms slow motion works
+    correctly there. Not a bug in `source_in:`/`source_out:` itself
+    (the same math verified cleanly at 2x here); a pre-existing gap in
+    `speed:`'s own coverage - every existing speed test only ever
+    checked *duration*, never *content*, for the sub-1.0 video case, so
+    nothing had caught it before. See BACKLOG.md."""
+    source = tmp_path / "source.mp4"
+    segments = []
+    for i, color in enumerate(["red", "green", "blue", "yellow"]):
+        seg = tmp_path / f"seg_{i}.mp4"
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+             "-i", f"color=c={color}:size=160x120:rate=25:duration=1", "-pix_fmt", "yuv420p", str(seg)],
+            check=True,
+        )
+        segments.append(seg)
+    concat_list = tmp_path / "concat.txt"
+    concat_list.write_text("".join(f"file '{seg}'\n" for seg in segments), encoding="utf-8")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(concat_list),
+         "-pix_fmt", "yuv420p", str(source)],
+        check=True,
+    )
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 160, height: 120}}
+bin:
+  - id: clip
+    path: {source}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          speed: 2.0
+          source_in: 1.0
+          source_out: 3.0
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    probed = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(rendered)],
+        capture_output=True, text=True, timeout=30, check=True,
+    )
+    assert abs(float(probed.stdout.strip()) - 1.0) <= 0.1, f"expected a 1s output, got {probed.stdout.strip()}s"
+
+    early_r, early_g, early_b = _mean_rgb(rendered, timestamp=0.05)
+    late_r, late_g, late_b = _mean_rgb(rendered, timestamp=0.9)
+    assert early_g > early_r + 20 and early_g > early_b + 20, f"expected green near the start, got {(early_r, early_g, early_b)}"
+    assert late_b > late_r + 20 and late_b > late_g + 20, f"expected blue near the end, got {(late_r, late_g, late_b)}"
 
 
 def test_melt_respects_video_speed_change(tmp_path: Path, assets_dir: Path, melt):

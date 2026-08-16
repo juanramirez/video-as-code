@@ -23,6 +23,29 @@ code itself already marks the boundary.
   flagged inline in `reconstruct.py` as real and out of scope —
   background audio commonly doesn't segment cleanly to match video cuts;
   a harder, separate problem this doesn't attempt to solve.
+- **Slow-motion (`speed:` between 0 and 1) video content is silently
+  wrong on the from-source dev `melt` build this project's own test
+  suite prefers**: found while verifying `source_in:`/`source_out:`
+  (v0.7) - a real render at `speed: 0.5` plays the source through at
+  roughly 1:1 real time and then *freezes on the last frame* for the
+  remainder of the (correctly-computed) stretched duration, instead of
+  actually stretching it. Confirmed genuinely build-specific, not a
+  bug in this project's own code: the exact same generated
+  `.kdenlive`, rendered with the system's stable `melt` (7.32.0)
+  instead of the from-source dev build (7.41.0-dev,
+  `tests/conftest.py`'s `melt` fixture), plays the correct,
+  smoothly-stretched red/green/blue/yellow progression. Fast (`speed`
+  > 1) speeds are unaffected on either build - only confirmed broken
+  for sub-1.0 magnitudes. Not previously caught because every existing
+  speed test (`test_melt_respects_video_speed_change` et al.) only
+  ever checked rendered *duration*, never *content*, for the video
+  case - duration alone doesn't distinguish "stretched correctly" from
+  "played once, then frozen for the same total length." Worth
+  revisiting once a newer stable MLT release is available (same
+  category of finding as `crop`'s segfault on this build), and
+  possibly worth adding a content-checking test for the existing
+  `speed:` feature itself, not just new features that happen to
+  exercise it.
 
 ## Capabilities not yet touched at all
 

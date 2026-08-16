@@ -49,6 +49,17 @@ class ClipPlacementSpec:
     in_: float = 0.0
     out: Optional[float] = None
     duration: Optional[float] = None
+    # Trim by *source* seconds regardless of `speed:` - unlike `in:`/
+    # `out:` (relative to the already-warped timeline when `speed:` is
+    # set, matching kdenlive itself), these always mean "seconds into
+    # the real source file," dividing by `speed` internally so the
+    # resulting warped duration comes out right without the caller
+    # doing that math by hand. Both or neither; mutually exclusive with
+    # `in:`/`out:`/`duration:` and with `speed_ramp:` (which has its
+    # own, different "always starts at the source's own beginning"
+    # convention - see `speed_ramp`).
+    source_in: Optional[float] = None
+    source_out: Optional[float] = None
     fade_in: Optional[float] = None
     fade_out: Optional[float] = None
     mute: bool = False
@@ -72,6 +83,14 @@ class ClipPlacementSpec:
     speed_ramp_image_mode: str = "nearest"  # timeremap's own "nearest" | "blend"
     position: Optional[tuple[float, float]] = None
     size: Optional[tuple[float, float]] = None
+    # Animated picture-in-picture (multi-keyframe qtblend `rect`, the
+    # same per-track filter the static position:/size: pair already
+    # drives - see xmlgen.py's _add_video_default_filter). Mutually
+    # exclusive with the static position:/size: pair (a keyframe list
+    # fully replaces them, no partial mixing). `[(at_seconds, x, y, w,
+    # h), ...]`, pixels (same convention as static position:/size:, not
+    # Ken Burns' percentages), sorted, first at 0.
+    position_keyframes: Optional[list[tuple[float, float, float, float, float]]] = None
     reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" | "delaygrab" | "cairogradient" - see ResolvedPlacement
     chroma_key: Optional[str] = None  # color to key out (e.g. "#00ff00"), None = no chroma-key
     chroma_key_distance: float = 0.35  # frei0r.bluescreen0r "Distance" - only used when chroma_key is set
@@ -212,6 +231,8 @@ class ResolvedPlacement:
     speed_ramp: Optional[list[tuple[int, float]]] = None
     speed_ramp_image_mode: str = "nearest"
     rect: Optional[tuple[float, float, float, float]] = None  # x y w h in pixels
+    # Animated PiP - see ClipPlacementSpec. `[(at_frame, x, y, w, h), ...]`.
+    position_keyframes: Optional[list[tuple[int, float, float, float, float]]] = None
     # which filter `fade_in_frames`/`fade_out_frames` should drive instead
     # of the plain brightness alpha fade. "iris" (frei0r.alphaspot) and
     # "flip" (frei0r.3dflippo) are real two-source-*looking* reveals built

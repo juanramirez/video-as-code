@@ -694,6 +694,46 @@ timeline:
     assert clip["focus_blur"] == 20.0
 
 
+def test_round_trip_preserves_position_keyframes(tmp_path: Path, assets_dir: Path):
+    """`position_keyframes:` (v0.7, animated PiP) round-trips through a
+    real generated .kdenlive - a multi-keyframe `qtblend` `rect` is a
+    plain, free-form user-facing value (no fixed generator-constructed
+    shape to match exactly, unlike `ken_burns_from:`/`ken_burns_to:`),
+    so any valid multi-keyframe rect recovers cleanly."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 2.0
+          position_keyframes:
+            - {{at: 0, position: [0, 0], size: [60, 60]}}
+            - {{at: 1, position: [260, 180], size: [60, 60]}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["position_keyframes"] == [
+        {"at": 0.0, "position": [0.0, 0.0], "size": [60.0, 60.0]},
+        {"at": 1.0, "position": [260.0, 180.0], "size": [60.0, 60.0]},
+    ]
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -

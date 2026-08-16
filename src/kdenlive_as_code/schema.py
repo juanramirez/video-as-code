@@ -280,6 +280,19 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         errors.append(msg("validation.mute_invalid", ctx=ctx, mute=mute))
         mute = False
 
+    source_in = float(item["source_in"]) if item.get("source_in") is not None else None
+    source_out = float(item["source_out"]) if item.get("source_out") is not None else None
+    if (source_in is None) != (source_out is None):
+        errors.append(msg("validation.source_in_out_incomplete", ctx=ctx))
+        source_in = source_out = None
+    elif source_in is not None:
+        if item.get("in") is not None or item.get("out") is not None or item.get("duration") is not None:
+            errors.append(msg("validation.source_in_out_conflicts", ctx=ctx))
+            source_in = source_out = None
+        elif source_out <= source_in or source_in < 0:
+            errors.append(msg("validation.source_in_out_invalid", ctx=ctx, source_in=source_in, source_out=source_out))
+            source_in = source_out = None
+
     speed = float(item["speed"]) if item.get("speed") is not None else None
     if speed == 0:
         errors.append(msg("validation.speed_zero", ctx=ctx))
@@ -375,12 +388,57 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
             errors.append(msg("validation.numeric_range_invalid", ctx=ctx, field="focus_blur", min=0, max=50, value=focus_blur))
             focus_blur = 4.0
 
+    position = _pair("position")
+    size = _pair("size")
+
+    position_keyframes_raw = item.get("position_keyframes")
+    position_keyframes: list[tuple[float, float, float, float, float]] | None = None
+    if position_keyframes_raw is not None:
+        if position is not None or size is not None:
+            errors.append(msg("validation.position_keyframes_conflicts", ctx=ctx))
+        elif not isinstance(position_keyframes_raw, list) or not position_keyframes_raw:
+            errors.append(msg("validation.position_keyframes_invalid", ctx=ctx))
+        else:
+            parsed_pk: list[tuple[float, float, float, float, float]] = []
+            valid = True
+            for i, kf in enumerate(position_keyframes_raw):
+                pos = kf.get("position") if isinstance(kf, dict) else None
+                sz = kf.get("size") if isinstance(kf, dict) else None
+                if (
+                    not isinstance(kf, dict) or "at" not in kf
+                    or not (isinstance(pos, (list, tuple)) and len(pos) == 2)
+                    or not (isinstance(sz, (list, tuple)) and len(sz) == 2)
+                ):
+                    errors.append(msg("validation.position_keyframes_keyframe_invalid", ctx=ctx, idx=i))
+                    valid = False
+                    continue
+                at = float(kf["at"])
+                x, y = float(pos[0]), float(pos[1])
+                w, h = float(sz[0]), float(sz[1])
+                if w <= 0 or h <= 0:
+                    errors.append(msg("validation.pip_size_invalid", ctx=ctx, w=w, h=h))
+                    valid = False
+                parsed_pk.append((at, x, y, w, h))
+            if valid and parsed_pk[0][0] != 0:
+                errors.append(msg("validation.position_keyframes_must_start_at_zero", ctx=ctx))
+                valid = False
+            if valid:
+                for j in range(1, len(parsed_pk)):
+                    if parsed_pk[j][0] <= parsed_pk[j - 1][0]:
+                        errors.append(msg("validation.position_keyframes_not_sorted", ctx=ctx))
+                        valid = False
+                        break
+            if valid:
+                position_keyframes = parsed_pk
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
         in_=float(item.get("in", 0.0)),
         out=float(item["out"]) if "out" in item and item["out"] is not None else None,
         duration=float(item["duration"]) if "duration" in item and item["duration"] is not None else None,
+        source_in=source_in,
+        source_out=source_out,
         fade_in=float(item["fade_in"]) if item.get("fade_in") is not None else None,
         fade_out=float(item["fade_out"]) if item.get("fade_out") is not None else None,
         mute=mute,
@@ -388,8 +446,9 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         preserve_pitch=bool(item.get("preserve_pitch", False)),
         speed_ramp=speed_ramp,
         speed_ramp_image_mode=speed_ramp_image_mode,
-        position=_pair("position"),
-        size=_pair("size"),
+        position=position,
+        size=size,
+        position_keyframes=position_keyframes,
         reveal_style=reveal,
         chroma_key=chroma_key,
         chroma_key_distance=chroma_key_distance,
@@ -551,6 +610,13 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 speed_ramp = None
 
             if speed_ramp is not None:
+                # Note: `source_in`/`source_out` combined with `speed_ramp`
+                # is already rejected earlier - speed_ramp requires an
+                # explicit out:/duration: (below), and source_in/
+                # source_out reject being combined with in:/out:/
+                # duration: (see the source_in_out_conflicts check), so
+                # the two are mutually exclusive by construction, no
+                # separate check needed here.
                 # Deliberately narrow v0.7 scope (see
                 # ClipPlacementSpec.speed_ramp): always starts at the
                 # source's own beginning (in_s forced to 0 - already
@@ -606,13 +672,25 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     round(bin_clip.duration_frames / abs(speed)) if speed else bin_clip.duration_frames
                 )
                 source_duration_s = fps.frames_to_seconds(effective_duration_frames)
-                in_s = placement.in_
-                if placement.out is not None:
-                    out_s = placement.out
-                elif placement.duration is not None:
-                    out_s = in_s + placement.duration
+                if placement.source_in is not None:
+                    # Always real source seconds regardless of `speed:` -
+                    # divide by it here so the caller doesn't have to.
+                    # The usual in_s<0/out_s>source_duration_s checks
+                    # below still apply to the *converted* (warped)
+                    # values, so an out-of-range source_out is still
+                    # caught, just against the warped bound like any
+                    # other out_s would be.
+                    divisor = abs(speed) if speed else 1.0
+                    in_s = placement.source_in / divisor
+                    out_s = placement.source_out / divisor
                 else:
-                    out_s = source_duration_s
+                    in_s = placement.in_
+                    if placement.out is not None:
+                        out_s = placement.out
+                    elif placement.duration is not None:
+                        out_s = in_s + placement.duration
+                    else:
+                        out_s = source_duration_s
 
             if in_s < 0:
                 errors.append(msg("validation.in_negative", ctx=ctx, in_s=in_s))
@@ -664,6 +742,20 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     )
                 rect = (x, y, w, h)
 
+            position_keyframes = placement.position_keyframes
+            if position_keyframes is not None:
+                for i, (_at, x, y, w, h) in enumerate(position_keyframes):
+                    if x < 0 or y < 0 or x + w > doc.project.width + 1e-6 or y + h > doc.project.height + 1e-6:
+                        errors.append(
+                            msg(
+                                "validation.position_keyframes_out_of_bounds",
+                                ctx=ctx,
+                                idx=i,
+                                x=x, y=y, w=w, h=h,
+                                width=doc.project.width, height=doc.project.height,
+                            )
+                        )
+
             if errors:
                 continue
 
@@ -673,6 +765,11 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             speed_ramp_frames = (
                 [(fps.seconds_to_frames(at), kf_speed) for at, kf_speed in speed_ramp]
                 if speed_ramp is not None
+                else None
+            )
+            position_keyframes_frames = (
+                [(fps.seconds_to_frames(at), x, y, w, h) for at, x, y, w, h in position_keyframes]
+                if position_keyframes is not None
                 else None
             )
 
@@ -690,6 +787,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     speed_ramp=speed_ramp_frames,
                     speed_ramp_image_mode=placement.speed_ramp_image_mode,
                     rect=rect,
+                    position_keyframes=position_keyframes_frames,
                     reveal_style=placement.reveal_style,
                     chroma_key=placement.chroma_key,
                     chroma_key_distance=placement.chroma_key_distance,

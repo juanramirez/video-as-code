@@ -775,23 +775,88 @@ lifts from BACKLOG.md.
   would otherwise have silently come back as an ordinary unramped one
   on re-import instead of being flagged
   (`tests/test_reverse.py::test_speed_ramp_falls_to_raw_items_instead_of_silently_lost`).
-- **Crop** — quick win. No cropping capability exists anywhere in the
-  schema today - `position:`/`size:` only scale/position the *whole*
-  source frame via `qtblend`, they never clip source pixels. Needs a
-  new filter (MLT's own `crop`, or `affine`'s distort/crop behavior -
-  to be confirmed which one actually clips vs. scales during
-  implementation, not assumed). Same shape as `mute:` was originally
-  (one new filter, one new field), but genuinely new vocabulary (no
-  existing field to extend).
-- **Animated/keyframed picture-in-picture position** — quick win.
-  `ClipPlacementSpec.position`/`size` and the `qtblend` `rect` property
-  are already plumbed, but only as one static rectangle per clip
-  (`0=...`, no second keyframe) - extending to a `{at, position, size}`
-  keyframe list reuses the exact same filter, no new MLT service,
-  directly reuses the keyframed-`rect`-string infrastructure Ken Burns
-  already built in v0.6 (`_add_ken_burns_filter`'s approach generalizes
-  here almost directly, modulo `transition.rect` vs. a plain `rect`
-  property).
+- **Crop — investigated and dropped**, a different kind of failure than
+  any other drop this project has made: the mechanism itself is real
+  and correct (MLT's own `crop` filter, matching kdenlive's own "Edge
+  Crop" effect exactly), but it needs **two** filter instances on the
+  same clip - one with `left`/`right`/`top`/`bottom` and `active`
+  left at its default `0` (this one only *computes* the crop and
+  stores it as `crop.left`/`crop.right`/`crop.top`/`crop.bottom`
+  properties on the frame - confirmed by reading MLT's own filter
+  source, `~/dev/mlt/src/modules/core/filter_crop.c`, after a
+  single-instance `active=1` attempt produced a real render with zero
+  measurable difference from an uncropped baseline), and a second
+  bare instance with only `active: 1` (which reads those frame
+  properties and performs the actual pixel crop - unscaled, top/left
+  anchored, matching what MLT's own filter documentation implies).
+  Verified working with that two-filter shape on the system's stable
+  `melt` (7.32.0: a cyan test frame cropped top+bottom cleanly, exact
+  pixel count, no scaling). **But it reliably segfaults** (exit 139,
+  reproduced with vertical-only and horizontal-only margins
+  separately) **on the from-source `melt` build (7.41.0-dev) this
+  project's own test suite prefers by default** for real `qtblend`
+  compositing support (`tests/conftest.py`'s `melt` fixture) - a real,
+  practical blocker for verifying this project's own output, not a
+  theoretical concern. Dropped for this cycle rather than shipped
+  unverifiable against the build actually used to verify everything
+  else; worth revisiting once a newer stable MLT release is available
+  to check whether the regression has already been fixed upstream.
+- **Animated/keyframed picture-in-picture position** — quick win,
+  **implemented**. `ClipPlacementSpec.position`/`size` and the
+  `qtblend` `rect` property were already plumbed, but only as one
+  static rectangle per clip (`0=...`, no second keyframe) - new
+  `position_keyframes:` field on `timeline.tracks[].clips[]` (a
+  `[{at, position: [x,y], size: [w,h]}, ...]` list, pixels, mutually
+  exclusive with the static `position:`/`size:` pair) extends the
+  *exact same* per-track `qtblend` filter every video track already
+  gets to a multi-keyframe `rect` string, no new MLT service needed.
+  Verified by real render before wiring in (a bare-metal probe, not
+  assumed from Ken Burns' precedent - Ken Burns keyframes a *different*
+  property, `affine`'s `transition.rect`, not `qtblend`'s plain
+  `rect`): a small PiP box moved cleanly from one corner to the other
+  over a clip's duration with a genuine multi-keyframe `rect`
+  (`tests/test_melt_validation.py::test_position_keyframes_produces_a_real_animated_pip`).
+  Recognized on import too - unlike `ken_burns_from:`/`ken_burns_to:`
+  (an exact two-keyframe shape this generator itself constructs),
+  any valid multi-keyframe `qtblend` rect is a free, plain user-facing
+  value and round-trips directly (same bar the *static* `position:`/
+  `size:` case already held to) - this actually *closes* a
+  pre-existing gap: `reverse.py` used to flag *any* multi-keyframe
+  qtblend rect as unsupported (`reverse.qtblend_animated_position`),
+  since nothing this generator produced before v0.7 could have written
+  one.
+- **`source_in:`/`source_out:`** — added mid-cycle, outside the
+  original v0.7 scoping, in response to a direct question about
+  whether a video clip's speed-adjusted trim window could be expressed
+  in real source seconds instead of the already-warped timeline `in:`/
+  `out:` use. New fields on `timeline.tracks[].clips[]`: unlike `in:`/
+  `out:` (relative to the *warped* timeline once `speed:` is set,
+  matching kdenlive itself), `source_in:`/`source_out:` always mean
+  real seconds into the source file regardless of `speed:` - dividing
+  by `speed` internally (`in_s = source_in / speed`) so the caller
+  doesn't do that math by hand. Both-or-neither; mutually exclusive
+  with `in:`/`out:`/`duration:` and with `speed_ramp:` (already
+  mutually exclusive by construction, since `speed_ramp` requires an
+  explicit `out:`/`duration:` and `source_in:`/`source_out:` reject
+  being combined with one). Verified by real render through the
+  generator's own output: `source_in: 1.0, source_out: 3.0, speed: 2.0`
+  on a 4s red/green/blue/yellow test source correctly extracted just
+  the green+blue middle section and played it back at 2x, landing on a
+  1s output starting green and ending blue
+  (`tests/test_melt_validation.py::test_source_in_out_combines_correctly_with_speed`).
+
+  **Verifying this surfaced a real, separate bug**, unrelated to
+  `source_in:`/`source_out:` itself (which verified cleanly at 2x): a
+  sub-1.0 (slow-motion) `speed:` on video plays the source through at
+  roughly 1:1 real time and then *freezes on the last frame* for the
+  remainder of the correctly-computed stretched duration, instead of
+  actually stretching it - but **only on the from-source dev `melt`
+  build (7.41.0-dev)** this project's test suite prefers; the exact
+  same generated `.kdenlive` plays the correct, smoothly-stretched
+  progression on the system's stable `melt` (7.32.0). Not previously
+  caught because every existing `speed:` test only ever checked
+  rendered *duration*, never *content*, for the sub-1.0 video case -
+  see BACKLOG.md.
 - **Freeze-frame / hold** — quick win, **needs verification before
   implementation** (same discipline `pillar_echo`/`dance` got in
   v0.6 - confirmed present, not yet rendered). MLT ships a `freeze`
@@ -800,6 +865,23 @@ lifts from BACKLOG.md.
   (`melt -query filter=freeze` / `-query producer=hold` to confirm
   again at implementation time, and a real render to confirm the
   frozen frame actually holds rather than continuing to play).
+
+**Verified and ready to scope next, found via backlog research this
+cycle (not yet assigned to a version)**: an "old film" look family -
+`oldfilm` (Y-jitter + brightness flicker + patchy "uneven develop",
+the strongest match for a "random black burned patches" look),
+`dust` (scattered specks), `lines` (scratch lines), and `grain` (film
+grain), all kdenlive-native (not frei0r), all confirmed present and
+producing real, measurable, stable effects via real render on both the
+from-source dev `melt` build and the system's stable one (no `crop`-
+style build-specific issue). Their `requires_in_out="1"`/`unique="1"`
+XML attributes turned out to be UI-only concerns (kdenlive's own
+`assetparametermodel.cpp` uses `requires_in_out` purely to decide
+whether to show an in/out zone-trim widget in the GUI; `unique` has no
+engine-side reference anywhere in kdenlive's C++ source beyond the XML
+attribute itself) - confirmed empirically too: rendered identically
+with or without an explicit `in`/`out` on the `<filter>`, and two
+stacked instances of the same filter didn't crash or misbehave.
 
 **Explicitly deferred, not in v0.7**: `mask_apply`/`mask_start` family
 and the `heart`/`bowtie` luma shapes (leads/sketches only, unverified);

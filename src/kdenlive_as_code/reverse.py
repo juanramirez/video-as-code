@@ -569,8 +569,29 @@ class Importer:
                 if is_default:
                     return {}
                 return {"position": [x, y], "size": [w, h]}
-            self.raw_items.append(RawItem(msg("reverse.qtblend_animated_position", ctx=ctx), _pretty(filter_el)))
-            return {}
+            # `position_keyframes:` (v0.7, animated PiP) - unlike
+            # `ken_burns_from:`/`ken_burns_to:` (a fixed, generator-
+            # constructed two-keyframe shape needing an exact match),
+            # any valid multi-keyframe rect round-trips freely, same
+            # "plain user-facing values" bar the single-keyframe
+            # position:/size: case above already holds to - only a
+            # malformed keyframe or a non-1 opacity (not something this
+            # generator itself would ever write) still falls to
+            # raw_items.
+            parsed_pk = []
+            for kf in keyframes:
+                try:
+                    frame_str, vals = kf.split("=", 1)
+                    x, y, w, h, o = (float(v) for v in vals.split())
+                except (ValueError, IndexError):
+                    self.raw_items.append(RawItem(msg("reverse.qtblend_rect_unreadable", ctx=ctx), _pretty(filter_el)))
+                    return {}
+                if o != 1:
+                    self.raw_items.append(RawItem(msg("reverse.qtblend_animated_position", ctx=ctx), _pretty(filter_el)))
+                    return {}
+                at_s = round(self.fps.frames_to_seconds(int(frame_str)), 3)
+                parsed_pk.append({"at": at_s, "position": [x, y], "size": [w, h]})
+            return {"position_keyframes": parsed_pk}
 
         self.raw_items.append(RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service or "?", kid=kid or "?"), _pretty(filter_el)))
         return {}
