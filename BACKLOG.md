@@ -30,33 +30,10 @@ Not documented gaps — real kdenlive project capabilities this generator's
 schema/model has never addressed, found by reading what's already
 plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
 
-- **Animated/keyframed picture-in-picture position**:
-  `ClipPlacementSpec.position`/`size` and the `qtblend` `rect` property
-  are already plumbed, but only as one static rectangle per clip
-  (`0=...`, no second keyframe). Extending to multiple keyframes for
-  pan/zoom/move reuses the same filter — no new MLT service, just a
-  richer `rect` property string.
-- **Crop**: no cropping capability exists anywhere in the schema —
-  `rect`/`position`/`size` only scale/position via `qtblend`, they don't
-  clip source pixels. Would need a new filter (MLT's `crop` or `affine`),
-  same shape as mute (one new filter) but genuinely new vocabulary.
 - **Color correction/grading**: nothing touches pixel color beyond the
   `brightness` filter used for fades. A real grading filter (e.g.
   `lift_gamma_gain`) would be a new filter category with no existing
   analog to copy from.
-- **Speed ramps (non-flat timewarp)**: `speed:` is a single flat
-  multiplier for the whole clip. **Update**: kdenlive's real mechanism
-  is confirmed - MLT's `timeremap` **link** (not a plain producer
-  property like `timewarp`), found via kdenlive's own source
-  (`~/dev/kdenlive/src/dialogs/timeremap.cpp`,
-  `mlt_service() == "timeremap"`) and confirmed present on this
-  machine's melt (`melt -query link=timeremap`, Meltytech, LGPLv2.1) -
-  keyframed `time_map`/`speed_map` params, structurally a `<link>`
-  child inside a `<chain>`, a different XML shape from `timewarp`
-  entirely. A first render attempt didn't clearly show the expected
-  duration stretch (likely needs explicit `length`/`out` on the chain
-  to work) - mechanism confirmed real, but the exact working XML recipe
-  still needs one more verification pass before this is ready to scope.
 - **Subtitles**: completely absent from schema/models/xmlgen; kdenlive
   subtitles are a separate track type/file format with no relationship
   to anything currently emitted. Large lift, new mechanism end-to-end.
@@ -113,9 +90,6 @@ still real gaps for this project, since none of them are in the schema.
 All confirmed against `melt -query filter=`/`producer=` on this machine's
 melt 7.32.0, not assumed.
 
-- **Freeze-frame / hold**: MLT ships a `freeze` filter and a `hold`
-  producer (`type: producer`, `title: Still`), both already used by
-  kdenlive's own "Freeze" effect. Absent from this project's schema.
 - **Video stabilization**: `vidstab`/`deshake` filters present — what
   kdenlive's own "Stabilize" effect uses. Absent from this project.
 - **Motion tracking**: `opencv.tracker` present, credited to kdenlive's
@@ -137,4 +111,7 @@ melt 7.32.0, not assumed.
   filter list — only `avfilter.tblend` (cruder temporal frame blending)
   exists as a fallback. A genuine, verified ceiling: this build of MLT
   can't do real optical-flow retiming, only a blend-based approximation,
-  relevant if "speed ramps" (already listed above) is ever scoped.
+  relevant to speed ramps (`timeremap`, scoped into v0.7 - see
+  ROADMAP.md) if a future extreme-slow-motion case ever needs smoother
+  interpolation than `timeremap`'s own `image_mode: nearest`/`blend`
+  choice provides.

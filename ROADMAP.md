@@ -700,3 +700,86 @@ motion tracking, LUT-based grading (`avfilter.lut3d`), audio ducking
 (reserved for a later "kdenlive-native/competitor-parity effects"
 theme, together with whichever of `pillar_echo`/`dance` doesn't ship
 here).
+
+## v0.7 — scoped (2026-08-16)
+
+Headline: speed ramps, a genuinely blocked feature finally unblocked
+this session - deferred at both the v0.6 and (implicitly) earlier
+scoping rounds as "needs one more verification pass," which this round
+delivered. Two quick wins alongside it, both small, well-understood
+lifts from BACKLOG.md.
+
+- **Speed ramps (`timeremap`)** — headline, **mechanism now fully
+  verified by real render, root cause of the earlier block found and
+  fixed**. MLT's `timeremap` **link** (not a plain producer property
+  like `timewarp`) attached to a `<chain>` - matches kdenlive's own
+  construction exactly (`~/dev/kdenlive/src/bin/projectclip.cpp`:
+  `Mlt::Link link("timeremap"); ... chain->attach(link);`), confirmed
+  present (`melt -query link=timeremap`, Meltytech, LGPLv2.1).
+
+  **The actual blocker, found this session**: `time_map`'s keyframe
+  *keys* are frames, but its *values* are **seconds**, not frames -
+  confirmed directly in kdenlive's own source
+  (`~/dev/kdenlive/src/utils/gentime.h`: `GenTime(double seconds)`,
+  the exact constructor kdenlive wraps every `time_map` read/write
+  through). The earlier attempt used frame numbers for both, which
+  silently produced a wildly-wrong, clamped mapping instead of an
+  error - exactly the kind of trap this project's verification
+  discipline exists to catch before it ships. Rebuilt and verified
+  with corrected units: a 4-clip red/green/blue/yellow test source
+  (1s each) remapped to 2x speed (`time_map` spanning `0=0` to
+  `49=3.96`) played all four colors in order within the expected 2s
+  output window, real render, not just a structural XML check.
+
+  **Second finding**: a sparse, 2-keyframe linear map (start and end
+  only) under-shot the target - the render never reached the final
+  color, landing roughly 75% of the way through the intended range
+  despite the endpoints being mathematically correct for a linear
+  interpolation. Root cause not fully understood (worth another look
+  during implementation), but a *dense* keyframe map (one keyframe
+  every ~10 output frames in the verification render) reliably hit the
+  correct position throughout, including the very end - the
+  implementation will emit dense keyframes as a documented, verified
+  workaround, not assume sparse ones are safe.
+
+  YAML field shape not yet finalized (a keyframe list is needed - e.g.
+  `{at: seconds, speed: multiplier}` pairs the ramp is defined between,
+  compiled into a dense `time_map` string internally - vs. exposing
+  `{at: seconds, source_time: seconds}` pairs directly) - to be decided
+  during implementation, same as Ken Burns' field shape was left open
+  at v0.6 scoping time. `pitch`/`image_mode` (nearest/blend) map
+  naturally onto the existing `preserve_pitch:` convention and a new
+  small enum respectively.
+- **Crop** — quick win. No cropping capability exists anywhere in the
+  schema today - `position:`/`size:` only scale/position the *whole*
+  source frame via `qtblend`, they never clip source pixels. Needs a
+  new filter (MLT's own `crop`, or `affine`'s distort/crop behavior -
+  to be confirmed which one actually clips vs. scales during
+  implementation, not assumed). Same shape as `mute:` was originally
+  (one new filter, one new field), but genuinely new vocabulary (no
+  existing field to extend).
+- **Animated/keyframed picture-in-picture position** — quick win.
+  `ClipPlacementSpec.position`/`size` and the `qtblend` `rect` property
+  are already plumbed, but only as one static rectangle per clip
+  (`0=...`, no second keyframe) - extending to a `{at, position, size}`
+  keyframe list reuses the exact same filter, no new MLT service,
+  directly reuses the keyframed-`rect`-string infrastructure Ken Burns
+  already built in v0.6 (`_add_ken_burns_filter`'s approach generalizes
+  here almost directly, modulo `transition.rect` vs. a plain `rect`
+  property).
+- **Freeze-frame / hold** — quick win, **needs verification before
+  implementation** (same discipline `pillar_echo`/`dance` got in
+  v0.6 - confirmed present, not yet rendered). MLT ships a `freeze`
+  filter and a `hold` producer (`type: producer`, `title: Still`), both
+  already used by kdenlive's own "Freeze" effect
+  (`melt -query filter=freeze` / `-query producer=hold` to confirm
+  again at implementation time, and a real render to confirm the
+  frozen frame actually holds rather than continuing to play).
+
+**Explicitly deferred, not in v0.7**: `mask_apply`/`mask_start` family
+and the `heart`/`bowtie` luma shapes (leads/sketches only, unverified);
+subtitles, proxy generation, generic color grading (`lift_gamma_gain`),
+richer title clips (large standalone lifts); video stabilization,
+motion tracking, LUT-based grading (`avfilter.lut3d`), audio ducking
+(reserved for a later "kdenlive-native/competitor-parity effects"
+theme).
