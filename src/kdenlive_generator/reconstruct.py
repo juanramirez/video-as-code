@@ -34,7 +34,7 @@ import tempfile
 import wave
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import numpy as np
 from PIL import Image
@@ -69,13 +69,24 @@ class ReconstructError(RuntimeError):
 # -- low-level media extraction ----------------------------------------------
 
 
-def _run_ffmpeg(args: list[str], timeout: int = 60) -> None:
-    result = subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", *args],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+def _run_ffmpeg(args: list[str], timeout: int = 1800) -> None:
+    """`timeout` defaults to 30 minutes, not a few seconds: this runs
+    full-video decodes (frame extraction, waveform extraction) on
+    whatever real footage the user points it at, which can legitimately
+    take minutes for a long render - a short timeout meant to catch a
+    genuinely hung ffmpeg process was instead tripping on ordinary large
+    inputs and crashing with a raw, uncaught `TimeoutExpired` traceback
+    (see cmd_reconstruct's docstring reference in cli.py) instead of a
+    clean error."""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", *args],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ReconstructError(msg("reconstruct.ffmpeg_timeout", timeout=timeout)) from exc
     if result.returncode != 0:
         raise ReconstructError(msg("reconstruct.ffmpeg_failed", stderr=result.stderr.strip()))
 
@@ -116,19 +127,24 @@ def extract_frame_signatures(
 
 def probe_video_info(path: Path) -> dict:
     """width/height/fps of a video's first stream, via ffprobe."""
-    result = subprocess.run(
-        [
-            "ffprobe", "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,r_frame_rate",
-            "-of", "json",
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=True,
-    )
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height,r_frame_rate",
+                "-of", "json",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise ReconstructError(msg("reconstruct.ffprobe_failed", path=path, stderr=exc.stderr.strip())) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ReconstructError(msg("reconstruct.ffprobe_timeout", path=path)) from exc
     streams = json.loads(result.stdout).get("streams", [])
     if not streams:
         raise ReconstructError(msg("reconstruct.no_video_stream", path=path))
@@ -191,24 +207,42 @@ class AudioAsset:
     duration_s: float
 
 
-def build_visual_bank(assets_dir: Path, tmp_dir: Path, *, fps: float = 1 / COARSE_SAMPLE_INTERVAL) -> dict[str, VisualAsset]:
+def build_visual_bank(
+    assets_dir: Path,
+    tmp_dir: Path,
+    *,
+    fps: float = 1 / COARSE_SAMPLE_INTERVAL,
+    on_progress: Optional[Callable[[str], None]] = None,
+) -> dict[str, VisualAsset]:
     bank: dict[str, VisualAsset] = {}
     for path in asset_files(assets_dir):
         kind = guess_kind(path)
         if kind == "image":
+            if on_progress:
+                on_progress(msg("reconstruct.progress.visual_asset_image", name=path.name))
             bank[path.name] = VisualAsset(path=path, kind=kind, signatures=[extract_image_signature(path)], duration_s=0.0)
         elif kind == "video":
+            if on_progress:
+                on_progress(msg("reconstruct.progress.visual_asset_video", name=path.name))
             duration = probe.probe_duration_seconds(str(path))
             signatures = extract_frame_signatures(path, tmp_dir, fps=fps)
             bank[path.name] = VisualAsset(path=path, kind=kind, signatures=signatures, duration_s=duration)
     return bank
 
 
-def build_audio_bank(assets_dir: Path, tmp_dir: Path, *, sample_rate: int = AUDIO_SAMPLE_RATE) -> dict[str, AudioAsset]:
+def build_audio_bank(
+    assets_dir: Path,
+    tmp_dir: Path,
+    *,
+    sample_rate: int = AUDIO_SAMPLE_RATE,
+    on_progress: Optional[Callable[[str], None]] = None,
+) -> dict[str, AudioAsset]:
     bank: dict[str, AudioAsset] = {}
     for path in asset_files(assets_dir):
         if guess_kind(path) not in ("audio", "video"):
             continue
+        if on_progress:
+            on_progress(msg("reconstruct.progress.audio_asset", name=path.name))
         try:
             waveform = extract_audio_waveform(path, tmp_dir, sample_rate=sample_rate)
         except ReconstructError:
@@ -541,7 +575,11 @@ def _quantized_duration(seconds: float, fps: float) -> float:
     return frame_rate.frames_to_seconds(frame_rate.seconds_to_frames(seconds))
 
 
-def reconstruct(video_path: Path, assets_dir: Path) -> ReconstructResult:
+def reconstruct(
+    video_path: Path,
+    assets_dir: Path,
+    on_progress: Optional[Callable[[str], None]] = None,
+) -> ReconstructResult:
     """Top-level entry point: given an already-rendered video and a folder
     of candidate source assets, produces a kdgen-compatible YAML dict by
     content-based matching (see the module docstring - there's no
@@ -554,7 +592,19 @@ def reconstruct(video_path: Path, assets_dir: Path) -> ReconstructResult:
     segmented to match the video cuts: background audio commonly doesn't
     align with visual cuts at all, and segmenting audio by *its own*
     content changes is a real, much harder, separate problem this doesn't
-    attempt."""
+    attempt.
+
+    `on_progress`, if given, is called with a short human-readable status
+    string at each real stage (probing, per-asset bank building, signature
+    extraction, per-segment matching...) - this is a genuinely slow,
+    multi-minute pipeline on real footage (several full-video ffmpeg
+    decodes), and it used to run completely silent until it finished or
+    crashed, which read as a hang either way. `cli.py` wires this to
+    stderr."""
+    def _report(text: str) -> None:
+        if on_progress:
+            on_progress(text)
+
     if not (probe.ffmpeg_available() and probe.ffprobe_available()):
         raise ReconstructError(msg("reconstruct.ffmpeg_or_ffprobe_missing"))
 
@@ -565,20 +615,37 @@ def reconstruct(video_path: Path, assets_dir: Path) -> ReconstructResult:
 
     with tempfile.TemporaryDirectory(prefix="kdgen-reconstruct-") as tmp:
         tmp_dir = Path(tmp)
+        _report(msg("reconstruct.progress.probing", name=video_path.name))
         info = probe_video_info(video_path)
         fps, width, height = info["fps"], info["width"], info["height"]
 
-        visual_bank = build_visual_bank(assets_dir, tmp_dir)
-        audio_bank = build_audio_bank(assets_dir, tmp_dir)
+        try:
+            _report(msg("reconstruct.progress.building_visual_bank"))
+            visual_bank = build_visual_bank(assets_dir, tmp_dir, on_progress=_report)
+            _report(msg("reconstruct.progress.building_audio_bank"))
+            audio_bank = build_audio_bank(assets_dir, tmp_dir, on_progress=_report)
+        except probe.ProbeError as exc:
+            raise ReconstructError(str(exc)) from exc
         asset_ids = _make_asset_ids(set(visual_bank) | set(audio_bank))
 
+        _report(msg("reconstruct.progress.extracting_render_signatures", name=video_path.name))
         coarse_signatures = extract_frame_signatures(video_path, tmp_dir, fps=1 / COARSE_SAMPLE_INTERVAL)
         segments = segment_by_scene_cuts(coarse_signatures)
+        _report(msg("reconstruct.progress.segments_found", n=len(segments)))
 
         video_clips: list[dict] = []
         fine_asset_cache: dict[str, list[np.ndarray]] = {}
 
-        for segment in segments:
+        for seg_idx, segment in enumerate(segments):
+            _report(
+                msg(
+                    "reconstruct.progress.matching_segment",
+                    i=seg_idx + 1,
+                    n=len(segments),
+                    start=round(segment.start_s, 2),
+                    end=round(segment.end_s, 2),
+                )
+            )
             start_idx = round(segment.start_s / COARSE_SAMPLE_INTERVAL)
             end_idx = round(segment.end_s / COARSE_SAMPLE_INTERVAL)
             duration_s = segment.end_s - segment.start_s
@@ -626,6 +693,7 @@ def reconstruct(video_path: Path, assets_dir: Path) -> ReconstructResult:
             video_clips.append(clip)
 
         audio_clips: list[dict] = []
+        _report(msg("reconstruct.progress.matching_audio"))
         full_waveform = extract_audio_waveform(video_path, tmp_dir)
         if full_waveform.size > 0 and audio_bank:
             audio_match = identify_audio_asset(full_waveform, audio_bank)

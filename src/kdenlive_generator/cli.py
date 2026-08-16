@@ -129,8 +129,11 @@ def cmd_reconstruct(args: argparse.Namespace) -> int:
         print(msg("cli.reconstruct_missing_extra"), file=sys.stderr)
         return 1
 
+    def _progress(text: str) -> None:
+        print(text, file=sys.stderr)
+
     try:
-        result = reconstruct.reconstruct(video_path, assets_dir)
+        result = reconstruct.reconstruct(video_path, assets_dir, on_progress=_progress)
     except reconstruct.ReconstructError as exc:
         print(msg("cli.reconstruct_error", path=video_path, exc=exc), file=sys.stderr)
         return 1

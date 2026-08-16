@@ -401,6 +401,51 @@ timeline:
     load_and_resolve(reconstructed_yaml)  # must not raise
 
 
+def test_reconstruct_reports_progress(tmp_path: Path, assets_dir: Path, melt):
+    """`on_progress` (new: reconstruct used to run completely silent until
+    it finished or crashed, indistinguishable from a hang on real,
+    multi-minute footage) gets called repeatedly across the real stages of
+    the pipeline, not just once at the start or end."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1.5}}
+"""
+    rendered = _render(tmp_path, yaml_text, melt)
+
+    messages: list[str] = []
+    reconstruct.reconstruct(rendered, assets_dir, on_progress=messages.append)
+
+    assert len(messages) >= 4, f"expected several progress updates, got: {messages}"
+    joined = " ".join(messages)
+    assert "photo.png" in joined or "rendered.mp4" in joined, (
+        f"expected at least one progress message naming a real file, got: {messages}"
+    )
+
+
+def test_run_ffmpeg_timeout_raises_reconstruct_error(monkeypatch):
+    """A hung/slow ffmpeg call used to crash with a raw, uncaught
+    `subprocess.TimeoutExpired` traceback instead of the clean
+    `ReconstructError` every other real failure mode in this module
+    raises - caught in the wild on real footage (a full-length render's
+    coarse frame extraction legitimately took longer than the old,
+    too-short 60s default)."""
+    import subprocess
+
+    def _fake_run(*args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd="ffmpeg", timeout=kwargs.get("timeout", 0))
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    with pytest.raises(reconstruct.ReconstructError):
+        reconstruct._run_ffmpeg(["-i", "whatever"], timeout=1)
+
+
 def test_matches_real_photographic_and_film_content(tmp_path: Path, assets_dir: Path, melt):
     """Everything else in this file uses synthetic content (solid colors,
     ffmpeg testsrc, mandelbrot zooms). This is the one real-world check:
