@@ -55,6 +55,9 @@ and a title clip): `kdenlive-as-code build examples/simple/project.yaml`. See
 `dissolve`, and a `wipe`, all from the same two tiny images):
 `kdenlive-as-code build examples/scenes/project.yaml`.
 
+See `docs/making-a-video.md` for a short step-by-step howto of this
+whole flow.
+
 ### `kdenlive-as-code reconstruct`: recovering a YAML from a rendered video
 
 ```bash
@@ -74,6 +77,9 @@ review by hand, the same way `kdenlive-as-code import` handles `x_kdenlive_raw:`
 
 Treat its output as a rough first draft to check against the real
 project, not a finished YAML.
+
+See `docs/reconstructing.md` for a short step-by-step howto of this
+whole flow.
 
 ### Language
 
