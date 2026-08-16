@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 from . import i18n, probe, reverse, xmlgen
-from .errors import KdgenError
+from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve
 
@@ -31,7 +31,7 @@ def cmd_build(args: argparse.Namespace) -> int:
     output = Path(args.output) if args.output else yaml_path.with_suffix(".kdenlive")
     try:
         resolved = load_and_resolve(yaml_path)
-    except KdgenError as exc:
+    except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     try:
@@ -46,7 +46,7 @@ def cmd_build(args: argparse.Namespace) -> int:
 def cmd_validate(args: argparse.Namespace) -> int:
     try:
         resolved = load_and_resolve(Path(args.project))
-    except KdgenError as exc:
+    except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
     n_clips = sum(len(t.placements) for t in resolved.tracks)
@@ -59,7 +59,7 @@ def cmd_import(args: argparse.Namespace) -> int:
     output = Path(args.output) if args.output else kdenlive_path.with_suffix(".yaml")
     try:
         result = reverse.import_kdenlive(kdenlive_path)
-    except (KdgenError, ValueError) as exc:
+    except (KdenliveAsCodeError, ValueError) as exc:
         print(msg("cli.import_error", path=kdenlive_path, exc=exc), file=sys.stderr)
         return 1
 
@@ -82,7 +82,7 @@ def cmd_render(args: argparse.Namespace) -> int:
 
     try:
         resolved = load_and_resolve(yaml_path)
-    except KdgenError as exc:
+    except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
@@ -153,7 +153,7 @@ def cmd_reconstruct(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="kdgen", description=msg("cli.help.description"))
+    parser = argparse.ArgumentParser(prog="kdenlive-as-code", description=msg("cli.help.description"))
     parser.add_argument(
         "--lang",
         choices=sorted(i18n.CATALOGS),

@@ -6,7 +6,7 @@ truth, the same way `tests/test_melt_validation.py` does.
 
 Skipped entirely if the `reconstruct` extra (numpy, Pillow) isn't
 installed — this is optional functionality, not part of the base
-`kdgen build`/`validate`/`import` path.
+`kdenlive-as-code build`/`validate`/`import` path.
 """
 from __future__ import annotations
 
@@ -18,8 +18,8 @@ import pytest
 np = pytest.importorskip("numpy")
 pytest.importorskip("PIL")
 
-from kdenlive_generator import reconstruct, xmlgen  # noqa: E402
-from kdenlive_generator.schema import load_and_resolve  # noqa: E402
+from kdenlive_as_code import reconstruct, xmlgen  # noqa: E402
+from kdenlive_as_code.schema import load_and_resolve  # noqa: E402
 
 from test_melt_validation import _assert_no_fatal_load_error, _run_melt  # noqa: E402
 

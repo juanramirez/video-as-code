@@ -9,7 +9,7 @@ dist/
 # Local Claude Code settings (permissions etc.): per-machine, not project config.
 .claude/settings.local.json
 
-# Build artifacts: regenerated deterministically with `kdgen build`.
+# Build artifacts: regenerated deterministically with `kdenlive-as-code build`.
 # Don't version these unless you want to freeze a specific copy.
 *.kdenlive
 !examples/**/*.kdenlive.expected

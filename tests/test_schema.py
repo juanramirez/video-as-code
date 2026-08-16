@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from kdenlive_generator.errors import ValidationErrors
-from kdenlive_generator.schema import load_and_resolve
+from kdenlive_as_code.errors import ValidationErrors
+from kdenlive_as_code.schema import load_and_resolve
 
 
 def _write_yaml(tmp_path: Path, content: str) -> Path:

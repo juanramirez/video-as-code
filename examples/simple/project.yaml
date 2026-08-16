@@ -14,7 +14,7 @@ bin:
     path: assets/tone.mp3
   - id: caption
     type: title
-    text: "kdenlive-generator"
+    text: "kdenlive-as-code"
 
 timeline:
   tracks:

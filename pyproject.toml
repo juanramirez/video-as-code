@@ -1,5 +1,5 @@
 [project]
-name = "kdenlive-generator"
+name = "kdenlive-as-code"
 version = "0.5.0"
 description = "Programmatic kdenlive project generator from a declarative YAML description, meant for versioning videos with a VCS (like Git)."
 readme = "README.md"
@@ -18,7 +18,7 @@ reconstruct = [
 ]
 
 [project.scripts]
-kdgen = "kdenlive_generator.cli:main"
+kdenlive-as-code = "kdenlive_as_code.cli:main"
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -28,7 +28,7 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-kdenlive_generator = ["lumas_data/*.pgm"]
+kdenlive_as_code = ["lumas_data/*.pgm"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

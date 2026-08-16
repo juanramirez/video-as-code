@@ -18,9 +18,9 @@ from pathlib import Path
 
 import pytest
 
-from kdenlive_generator import probe, xmlgen
-from kdenlive_generator.models import ResolvedProject
-from kdenlive_generator.schema import load_and_resolve
+from kdenlive_as_code import probe, xmlgen
+from kdenlive_as_code.models import ResolvedProject
+from kdenlive_as_code.schema import load_and_resolve
 
 
 def _project_yaml(assets_dir: Path) -> str:
@@ -262,7 +262,7 @@ guides:
 def test_melt_can_render_generated_project(tmp_path: Path, assets_dir: Path, melt):
     """Stronger than the structural check above: actually decodes and
     re-encodes every frame instead of just dumping the parsed structure, and
-    confirms the rendered output's duration matches what kdgen computed —
+    confirms the rendered output's duration matches what kdenlive-as-code computed —
     catching cases where melt loads a project fine but silently misreads a
     property (wrong duration, dropped clip) that a structural dump alone
     wouldn't reveal."""
@@ -295,7 +295,7 @@ def test_melt_can_render_generated_project(tmp_path: Path, assets_dir: Path, mel
     frame = 1 / resolved.fps.fps
     assert abs(rendered_duration - expected_duration) <= frame, (
         f"rendered duration {rendered_duration}s doesn't match the "
-        f"{expected_duration}s kdgen computed ({resolved.total_frames} frames @ {resolved.fps.fps}fps)"
+        f"{expected_duration}s kdenlive-as-code computed ({resolved.total_frames} frames @ {resolved.fps.fps}fps)"
     )
 
 
@@ -1503,7 +1503,7 @@ timeline:
     frame = 1 / resolved.fps.fps
     assert abs(rendered_duration - expected_duration) <= frame, (
         f"rendered duration {rendered_duration}s doesn't match the "
-        f"{expected_duration}s kdgen computed at 2x speed "
+        f"{expected_duration}s kdenlive-as-code computed at 2x speed "
         f"({resolved.total_frames} frames @ {resolved.fps.fps}fps)"
     )
     assert expected_duration < 2.0, f"sanity check: 2x of a 3s clip should be ~1.5s, got {expected_duration}s"
@@ -1560,7 +1560,7 @@ timeline:
     frame = 1 / resolved.fps.fps
     assert abs(rendered_duration - expected_duration) <= frame, (
         f"rendered duration {rendered_duration}s doesn't match the "
-        f"{expected_duration}s kdgen computed at 0.5x speed "
+        f"{expected_duration}s kdenlive-as-code computed at 0.5x speed "
         f"({resolved.total_frames} frames @ {resolved.fps.fps}fps)"
     )
     assert expected_duration > 9.0, f"sanity check: 0.5x of a 5s tone should be ~10s, got {expected_duration}s"

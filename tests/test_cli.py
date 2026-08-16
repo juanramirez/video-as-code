@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kdenlive_generator import cli, i18n, probe
+from kdenlive_as_code import cli, i18n, probe
 
 
 def _write_simple_project(tmp_path: Path, assets_dir: Path) -> Path:

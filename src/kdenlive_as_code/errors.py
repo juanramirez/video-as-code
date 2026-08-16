@@ -3,11 +3,11 @@ from __future__ import annotations
 from .i18n import msg
 
 
-class KdgenError(Exception):
-    """Base error for kdenlive-generator."""
+class KdenliveAsCodeError(Exception):
+    """Base error for kdenlive-as-code."""
 
 
-class ValidationErrors(KdgenError):
+class ValidationErrors(KdenliveAsCodeError):
     """Collects every problem found while validating a project instead of
     aborting on the first one: the user fixes them all in one pass."""
 

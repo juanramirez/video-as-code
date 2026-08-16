@@ -1,9 +1,9 @@
-# kdenlive-generator
+# kdenlive-as-code
 
 Programmatic generator for [kdenlive](https://kdenlive.org) projects from a
 declarative YAML description, meant for versioning videos with a VCS (like
 Git): the `.yaml` is what you check in; the `.kdenlive` (XML/MLT) is
-regenerated deterministically with `kdgen build` and doesn't need to live
+regenerated deterministically with `kdenlive-as-code build` and doesn't need to live
 in the repo.
 
 ## Install
@@ -12,33 +12,33 @@ in the repo.
 pip install -e ".[dev]"
 ```
 
-`kdgen reconstruct` (see below) needs the optional `reconstruct` extra
+`kdenlive-as-code reconstruct` (see below) needs the optional `reconstruct` extra
 (`numpy`, `Pillow`) on top of that:
 
 ```bash
 pip install -e ".[dev,reconstruct]"
 ```
 
-The rest of `kdgen` (`build`/`validate`/`import`) only ever needs PyYAML —
+The rest of `kdenlive-as-code` (`build`/`validate`/`import`) only ever needs PyYAML —
 `reconstruct.py` is imported lazily, so skipping this extra doesn't affect
 anything else.
 
 ## Usage
 
 ```bash
-kdgen build project.yaml [-o output.kdenlive]   # generate the .kdenlive
-kdgen validate project.yaml                     # validate without building
-kdgen import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
-kdgen render project.yaml [-o output.mp4]       # build + render straight to video via melt
+kdenlive-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
+kdenlive-as-code validate project.yaml                     # validate without building
+kdenlive-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
+kdenlive-as-code render project.yaml [-o output.mp4]       # build + render straight to video via melt
 ```
 
-`kdgen render` needs `melt` (the MLT engine kdenlive itself renders with) on
-PATH — it's not bundled with `kdgen`. It's equivalent to running
-`kdgen build` and then `melt output.kdenlive -consumer avformat:output.mp4`
+`kdenlive-as-code render` needs `melt` (the MLT engine kdenlive itself renders with) on
+PATH — it's not bundled with `kdenlive-as-code`. It's equivalent to running
+`kdenlive-as-code build` and then `melt output.kdenlive -consumer avformat:output.mp4`
 yourself, minus the intermediate `.kdenlive` file (built to a temp
 directory and discarded).
 
-`kdgen import` recognizes everything this generator knows how to produce
+`kdenlive-as-code import` recognizes everything this generator knows how to produce
 (video/audio tracks, trimmed clips, fade to/from black, volume fades,
 per-clip mute, speed changes (forward or reverse), title clips, guides/
 markers, track names/hidden/locked state, bin folders, project notes,
@@ -50,18 +50,18 @@ do with it.
 
 See `examples/simple/` for a minimal working project (tiny generated
 assets, one audio + one video track, fades, trims, a speed change, mute,
-and a title clip): `kdgen build examples/simple/project.yaml`. See
+and a title clip): `kdenlive-as-code build examples/simple/project.yaml`. See
 `examples/scenes/` for the high-level `scenes:` compiler (a cut, a
 `dissolve`, and a `wipe`, all from the same two tiny images):
-`kdgen build examples/scenes/project.yaml`.
+`kdenlive-as-code build examples/scenes/project.yaml`.
 
-### `kdgen reconstruct`: recovering a YAML from a rendered video
+### `kdenlive-as-code reconstruct`: recovering a YAML from a rendered video
 
 ```bash
-kdgen reconstruct rendered.mp4 assets/ [-o output.yaml]
+kdenlive-as-code reconstruct rendered.mp4 assets/ [-o output.yaml]
 ```
 
-Unlike `kdgen import`, this doesn't start from a `.kdenlive` project — it
+Unlike `kdenlive-as-code import`, this doesn't start from a `.kdenlive` project — it
 starts from an already-**rendered** video (a flat `.mp4`, no edit
 metadata) plus a folder of the source assets that presumably went into
 it, and tries to recover which asset appears where, trimmed how, and with
@@ -70,7 +70,7 @@ structured XML. There is no guaranteed correct answer here (see
 `ROADMAP.md` for how the matching works and its known limitations) —
 segments it isn't confident about are never silently guessed; they're
 kept under `x_reconstruct_unmatched:` in the output YAML for you to
-review by hand, the same way `kdgen import` handles `x_kdenlive_raw:`.
+review by hand, the same way `kdenlive-as-code import` handles `x_kdenlive_raw:`.
 
 Treat its output as a rough first draft to check against the real
 project, not a finished YAML.
@@ -80,18 +80,18 @@ project, not a finished YAML.
 All user-facing text (validation errors, CLI output, import warnings) goes
 through a small message catalog (`i18n.py`), keyed by token and looked up at
 call time. English is the source of truth and the fallback for any locale
-or key that isn't translated. Set `KDGEN_LANG=es` to get the Spanish
+or key that isn't translated. Set `KDENLIVE_AS_CODE_LANG=es` to get the Spanish
 catalog:
 
 ```bash
-KDGEN_LANG=es kdgen validate project.yaml
+KDENLIVE_AS_CODE_LANG=es kdenlive-as-code validate project.yaml
 ```
 
 We deliberately don't read the system `LANG`/`LC_ALL`: locale selection is
 opt-in and explicit, so behavior doesn't silently change across machines
 and test runs stay deterministic. Code comments, docstrings, and this
-README are always in English regardless of `KDGEN_LANG` — that setting only
-affects what a `kdgen` *user* sees at runtime.
+README are always in English regardless of `KDENLIVE_AS_CODE_LANG` — that setting only
+affects what a `kdenlive-as-code` *user* sees at runtime.
 
 ## Current status
 
@@ -115,7 +115,7 @@ Verified by the test suite (`pytest`, 102 tests, all passing):
   recomputes on open anyway).
 - **Reverse importer** (`reverse.py`): `.kdenlive` -> YAML, with a clean
   split between what's recognized and what isn't (`x_kdenlive_raw`).
-- **`kdgen reconstruct`** (`reconstruct.py`, optional `reconstruct` extra):
+- **`kdenlive-as-code reconstruct`** (`reconstruct.py`, optional `reconstruct` extra):
   rendered video + assets folder -> YAML, by content-based matching
   instead of XML parsing. See the *Usage* section above and `ROADMAP.md`
   for how it works and its known limitations.
