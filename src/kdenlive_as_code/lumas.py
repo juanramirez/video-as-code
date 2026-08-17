@@ -37,6 +37,8 @@ AVAILABLE_LUMAS = (
     "bars_horizontal",
     "bars_vertical",
     "checkerboard",
+    "heart",
+    "bowtie",
 )
 
 

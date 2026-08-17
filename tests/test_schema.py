@@ -320,6 +320,38 @@ transitions:
     assert "track" in str(exc.value)
 
 
+@pytest.mark.parametrize("luma", ["heart", "bowtie"])
+def test_transition_wipe_accepts_new_luma_shapes(tmp_path: Path, assets_dir: Path, luma: str):
+    """`heart`/`bowtie` (v0.8's new procedural luma shapes, lumas.py) are
+    plain additions to `AVAILABLE_LUMAS` - no new validation code path,
+    just confirms the low-level `transitions:` `wipe` shape accepts them
+    the same way it already accepts every other named luma."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: red
+    path: {assets_dir / "photo.png"}
+  - id: blue
+    path: {assets_dir / "photo2.png"}
+timeline:
+  tracks:
+    - type: video
+      name: A
+      clips:
+        - {{clip: red, start: 0, duration: 2.5}}
+    - type: video
+      name: B
+      clips:
+        - {{clip: blue, start: 1.5, duration: 2.5}}
+transitions:
+  - {{type: wipe, track_a: A, track_b: B, start: 1.5, end: 2.5, luma: {luma}}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    assert len(resolved.wipe_transitions) == 1
+    assert resolved.wipe_transitions[0].luma == luma
+
+
 def test_transition_resolves_to_frames(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

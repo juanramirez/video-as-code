@@ -768,6 +768,106 @@ scenes:
     )
 
 
+def _mean_rgb_at_xy(
+    path: Path, timestamp: float, frac_x: float, frac_y: float, width: int = 320, height: int = 240
+) -> tuple[float, float, float]:
+    """Like `_mean_rgb_at_x`, but a small box at (`frac_x`, `frac_y`) - lets
+    a test tell apart wipes whose reveal order depends on *both* axes
+    (`heart`/`bowtie`), not just a left-to-right sweep."""
+    x = max(0, min(width - 8, int(width * frac_x) - 4))
+    y = max(0, min(height - 8, int(height * frac_y) - 4))
+    result = subprocess.run(
+        [
+            "ffmpeg", "-v", "error",
+            "-ss", str(timestamp), "-i", str(path),
+            "-frames:v", "1",
+            "-vf", f"crop=8:8:{x}:{y}",
+            "-f", "rawvideo", "-pix_fmt", "rgb24",
+            "-",
+        ],
+        capture_output=True,
+        timeout=30,
+        check=True,
+    )
+    data = result.stdout
+    n = len(data) // 3
+    return (sum(data[0::3]) / n, sum(data[1::3]) / n, sum(data[2::3]) / n)
+
+
+def test_scenes_wipe_heart_and_bowtie_produce_real_spatial_wipes(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """Empirical check for the `heart`/`bowtie` luma maps (v0.8 quick win,
+    lumas.py): both are procedurally generated (a per-pixel implicit heart
+    curve `(x^2+y^2-1)^3 - x^2*y^3`, stretched to the full 0-255 range;
+    `255*(|x|-|y|+0.5)` for bowtie) and rendered once as PNG previews
+    during development to confirm they look like the intended shapes, but
+    that alone doesn't prove MLT's `luma` transition actually reveals
+    space-then-space rather than doing an instant cut or uniform fade for
+    them - same `linear_x` regression the neighboring
+    `test_scenes_wipe_produces_a_real_spatial_wipe` guards against, and
+    the same bar every luma map in this project has had to clear before
+    shipping.
+
+    `heart`: dark (reveals first) at the frame center, brightest (reveals
+    last) at the corners - confirmed by sampling the center point against
+    a near-corner point mid-transition.
+
+    `bowtie`: unlike the original backlog sketch's "opposing wedges
+    meeting at a *vertical* center band" description, the actual formula
+    (`|x| - |y| + 0.5`, x/y both centered fractions of width/height) is
+    darkest at top-center/bottom-center and brightest at the left/right
+    mid-edges - so it reveals first from a *horizontal* center band
+    outward, not the vertical band originally sketched. Still a genuine,
+    smooth, four-way spatial gradient (verified visually and here via
+    render), just oriented 90 degrees from what was guessed before
+    anyone had actually computed it - the sketch's plain-English
+    description wasn't binding, the formula was."""
+    for luma, early_xy, late_xy in (
+        ("heart", (0.5, 0.5), (0.05, 0.05)),
+        ("bowtie", (0.5, 0.05), (0.95, 0.5)),
+    ):
+        yaml_path = tmp_path / f"project_{luma}.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: wipe
+    transition_duration: 1.0
+    luma: {luma}
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+            encoding="utf-8",
+        )
+        resolved = load_and_resolve(yaml_path)
+        kdenlive_path = tmp_path / f"project_{luma}.kdenlive"
+        xmlgen.write(resolved, kdenlive_path)
+
+        rendered = tmp_path / f"rendered_{luma}.mp4"
+        result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+        _assert_no_fatal_load_error(result)
+        assert rendered.exists() and rendered.stat().st_size > 0
+
+        def red_fraction_at(t: float, xy: tuple[float, float]) -> float:
+            r, _g, b = _mean_rgb_at_xy(rendered, timestamp=t, frac_x=xy[0], frac_y=xy[1])
+            return r / (r + b + 1e-6)
+
+        # photo.png is red, photo2.png is blue; the transition spans
+        # [1.5, 2.5)s.
+        assert red_fraction_at(1.3, early_xy) > 0.95, f"[{luma}] expected pure red before the transition"
+
+        early = red_fraction_at(1.85, early_xy)
+        late = red_fraction_at(1.85, late_xy)
+        assert early < 0.5 < late, (
+            f"[{luma}] expected the early-revealing point to have already turned blue while the "
+            f"late-revealing point is still red, got {early=:.2f} {late=:.2f}"
+        )
+
+        assert red_fraction_at(2.7, late_xy) < 0.05, f"[{luma}] expected pure blue after the transition"
+
+
 def test_scenes_wipe_produces_a_real_spatial_wipe(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
     """Empirical check for `transition: wipe` (scenes.py, new this cycle):
     renders a two-clip scene (red -> blue, `luma: linear_x`) and confirms

@@ -93,15 +93,9 @@ mechanisms competitors' editors don't expose either.
   approach (same shape as the project's own non-copied luma set) -
   `circleopen`/`CircleCrop` and `cube`/`BookFlip` turned out to already
   be covered by the `iris`/`flip` transitions now scoped into v0.4 (see
-  ROADMAP.md, found independently during the same research round); two
-  more are still open, sketched but **not yet rendered/verified**:
-  - **heart**: per-pixel implicit heart curve
-    `(x²+y²-1)³ - x²y³` (x, y centered/normalized to the frame), mapped
-    to a 0-255 gradient around the zero-crossing - a heart-silhouette
-    reveal growing from/into center.
-  - **bowtie**: `luma = clamp(255 * (|x/w| - |y/h| + 0.5), 0, 255)` -
-    two opposing triangular reveal wedges meeting at a vertical center
-    band.
+  ROADMAP.md, found independently during the same research round).
+  `heart`/`bowtie` (also found in this round) shipped in v0.8 - see
+  ROADMAP.md. Still nothing further queued from this catalog.
 - **Leads for the next research round**: `~/dev/kdenlive/data/effects/`
   has ~80 more effect definitions not yet surveyed - the `mask_apply`/
   `mask_start_*` family looked worth a follow-up pass (real masking/
