@@ -772,6 +772,45 @@ timeline:
     assert clip["crop"] == {"top": 10.0, "right": 20.0, "bottom": 0.0, "left": 5.0}
 
 
+def test_round_trip_preserves_freeze_at(tmp_path: Path, assets_dir: Path):
+    """`freeze_at:`/`freeze_before:`/`freeze_after:` (v0.8, MLT's own
+    `freeze` filter) round-trips through a real generated .kdenlive:
+    `frame`/`freeze_before`/`freeze_after` are plain user-facing values,
+    same "any value round-trips freely" bar as `chroma_key`/`focus_rect`,
+    not a generator-constructed keyframe shape that needs an exact
+    match."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 2.0
+          freeze_at: 0.5
+          freeze_after: true
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["freeze_at"] == 0.52  # 0.5s @ 25fps rounds to frame 13, back to 0.52s
+    assert clip["freeze_after"] is True
+    assert "freeze_before" not in clip
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -

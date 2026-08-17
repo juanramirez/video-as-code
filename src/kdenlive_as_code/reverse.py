@@ -542,6 +542,24 @@ class Importer:
             if blur is not None and abs(blur - 4.0) > 1e-6:
                 result["focus_blur"] = round(blur, 3)
             return result
+        if service == "freeze":
+            # `frame` is a plain user-facing value (0-based from this
+            # clip's own first visible frame, same as `_add_freeze_filter`
+            # writes it) - any value round-trips, same bar `chroma_key`/
+            # `focus_rect` already hold to.
+            try:
+                frame = _parse_frame_value(props.get("frame", "0"), self.fps)
+            except ValueError:
+                self.raw_items.append(
+                    RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
+                )
+                return {}
+            result = {"freeze_at": round(self.fps.frames_to_seconds(frame), 3)}
+            if props.get("freeze_before", "0") not in ("0", "", None):
+                result["freeze_before"] = True
+            if props.get("freeze_after", "0") not in ("0", "", None):
+                result["freeze_after"] = True
+            return result
         if service in (
             "frei0r.alphaspot", "frei0r.3dflippo", "frei0r.glitch0r",
             "frei0r.delaygrab", "frei0r.cairogradient",
