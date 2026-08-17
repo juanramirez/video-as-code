@@ -2470,3 +2470,71 @@ timeline:
     r, g, b = _mean_rgb(rendered, timestamp=1.0)
     brightness = (r + g + b) / 3
     assert brightness > 5, f"expected visible white text on a black background, got near-black frame (brightness={brightness:.2f})"
+
+
+def test_melt_renders_multiline_title_as_separate_lines(tmp_path: Path, melt):
+    """Empirical check for multi-line title text (v0.10): MLT's own
+    `kdenlivetitle` renderer (`PlainTextItem::updateText` in
+    `kdenlivetitle_wrapper.cpp`) splits the raw `<content>` text on a
+    literal `\n` and lays out each line independently using the real
+    font's own line spacing - titles.py just needs to hand it a `\n`
+    and get the box-width/height estimate roughly right (see titles.py's
+    module docstring). Proven here by scanning full-width horizontal
+    strips down the rendered frame: two bright bands (the two lines'
+    white-on-black glyph coverage) with a measurably darker gap between
+    them - not one merged blob, and not silently collapsed to one line."""
+    if not probe.ffprobe_available():
+        pytest.skip("ffprobe not available: can't inspect the rendered output")
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        """
+project: {id: p1, title: T, fps: 25, width: 320, height: 240}
+bin:
+  - id: title1
+    type: title
+    text: "LINE ONE\\nLINE TWO"
+    font_size: 50
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {clip: title1, start: 0, duration: 2}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def row_brightness(y: int) -> float:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", "1.0", "-i", str(rendered), "-frames:v", "1",
+             "-vf", f"crop=320:2:0:{y}", "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+            capture_output=True, timeout=30, check=True,
+        )
+        data = result.stdout
+        return sum(data) / len(data) if data else 0.0
+
+    rows = {y: row_brightness(y) for y in range(0, 240, 4)}
+    sorted_rows = sorted(rows.items(), key=lambda kv: -kv[1])
+    brightest_y, brightest_val = sorted_rows[0]
+    second = next(((y, v) for y, v in sorted_rows[1:] if abs(y - brightest_y) > 15), None)
+    assert second is not None, (
+        f"expected two separated bright bands (two lines) somewhere in the "
+        f"frame, only found one - rows: {sorted(rows.items())}"
+    )
+    second_y, second_val = second
+
+    mid_y = (brightest_y + second_y) // 2
+    mid_val = row_brightness(mid_y)
+    assert mid_val < min(brightest_val, second_val) - 5, (
+        f"expected a measurably darker gap between the two lines, got "
+        f"line1={brightest_val:.1f} gap={mid_val:.1f} line2={second_val:.1f} "
+        f"(y={brightest_y}/{mid_y}/{second_y})"
+    )

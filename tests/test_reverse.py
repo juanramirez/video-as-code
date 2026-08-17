@@ -1045,6 +1045,41 @@ timeline:
     assert title_bin_entry["font_size"] == 36
 
 
+def test_round_trip_preserves_multiline_title_text(tmp_path: Path):
+    """Multi-line title text (v0.10, literal `\\n` in `text:`) round-trips
+    through a real generated .kdenlive: `titles.parse_title_xml` already
+    reads the `<content>` element's raw text node value directly, which
+    preserves an embedded `\\n` with no special handling needed on the
+    import side - this is a regression test confirming that stays true,
+    not just that the render side (verified separately by real render in
+    test_melt_validation.py) writes it correctly."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        """
+project: {id: p1, title: T, fps: 25, width: 320, height: 240}
+bin:
+  - id: title1
+    type: title
+    text: "Line One\\nLine Two"
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {clip: title1, start: 0, duration: 2}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    title_bin_entry = result.data["bin"][0]
+    assert title_bin_entry["text"] == "Line One\nLine Two"
+
+
 def test_reimported_yaml_is_re_buildable(tmp_path: Path, assets_dir: Path):
     """The result of `kdenlive-as-code import` must be re-buildable: this validates that
     the produced YAML respects our own schema, not just that it 'looks
