@@ -7,9 +7,11 @@ Modeled directly on a real title file from an actual kdenlive project
 (not built by analogy): a single `QGraphicsTextItem`, a `startviewport`/
 `endviewport` pair (identical here - no position/size animation, which
 this generator doesn't support), and a `background`. Scope is
-deliberately narrow: one line of text, one font/color/background, no
+deliberately narrow: one text item, one font/color/background, no
 multiple items, no image/rect items, no animation - a title card or
-caption, not a replacement for kdenlive's title editor.
+caption, not a replacement for kdenlive's title editor. Multi-line text
+(literal `\n` in the string) IS supported within that single item - see
+below - just not multiple independently-styled/positioned items.
 
 Text centering and sizing are an approximation, not exact metrics:
 without a font rendering library as a dependency, there's no way to
@@ -21,6 +23,22 @@ unclamped box let long text run off the edge, unreadable, with the
 earlier version of this function). Looks right for normal caption-length
 text; unusual fonts or many short lines can still drift - a known,
 documented limitation, not a bug.
+
+Multi-line text: a literal `\n` in `text` renders as multiple visually
+separated lines - confirmed against the real rendering path, not
+assumed. MLT's `kdenlivetitle` producer (`~/dev/mlt/src/modules/qt/
+kdenlivetitle_wrapper.cpp`, `PlainTextItem::updateText`) splits the raw
+`<content>` text node on `\n` itself (`text.split('\n')`) and lays out
+each line independently using the *real* font's own `QFontMetrics` line
+spacing - not this module's rough per-line-height estimate. That
+estimate only drives `box-width`/`box-height`/the item's `<position>`
+(so the block starts out reasonably centered); MLT's own renderer
+auto-expands its internal bounding rect if the actual text needs more
+room than the estimate gave it (`m_lineSpacing * lines.size()`), so an
+imprecise height estimate can't garble or overlap lines - at worst it
+leaves the block slightly off-center vertically, same class of
+imprecision the width/centering heuristic already accepts for single
+lines.
 """
 from __future__ import annotations
 
@@ -64,12 +82,19 @@ def render_title_xml(
     item = ET.SubElement(root, "item", {"type": "QGraphicsTextItem", "z-index": "0"})
     margin = round(width * 0.05)
     max_text_width = max(width - 2 * margin, 1)
-    estimated_width = len(text) * font_size * _AVG_CHAR_WIDTH_FACTOR
+    lines = text.split("\n")
+    longest_line = max(lines, key=len)
+    estimated_width = len(longest_line) * font_size * _AVG_CHAR_WIDTH_FACTOR
     if estimated_width > max_text_width:
         font_size = max(1, round(font_size * max_text_width / estimated_width))
         estimated_width = max_text_width
     box_width = min(width, round(estimated_width))
-    box_height = font_size * 2
+    # font_size * 2 for a single line (generous ascent/descent padding,
+    # unchanged from before multi-line support existed) plus one more
+    # font_size per additional line - a rough estimate only, see the
+    # module docstring for why MLT's own renderer doesn't actually need
+    # this to be exact.
+    box_height = font_size * (1 + len(lines))
     x = (width - box_width) // 2
     y = (height - box_height) // 2
     position = ET.SubElement(item, "position", {"x": str(x), "y": str(y)})
