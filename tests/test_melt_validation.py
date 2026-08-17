@@ -1851,6 +1851,87 @@ timeline:
     )
 
 
+def test_color_grade_produces_a_real_render_shift(tmp_path: Path, melt):
+    """Empirical check for `color_grade:` (v0.9 headline): MLT's own
+    `lift_gamma_gain` filter (Meltytech, LGPLv2.1 - not an avfilter
+    bridge, so none of `avfilter.chromakey`/`avfilter.rgbashift`/
+    `avfilter.lut3d`'s "Cannot set src colorspace" no-op failure on this
+    project's preferred melt build - see the ROADMAP's "investigated
+    and dropped" entry for `lut:`, which hit exactly that). A flat
+    mid-gray source rendered with `gain: [2.0, 1.0, 1.0]` should measure
+    a clearly boosted red channel average relative to green/blue and
+    relative to the unfiltered baseline - proof of a real per-channel
+    shift, not just "didn't crash"."""
+    gray = tmp_path / "gray.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=0x808080:size=320x240",
+            "-frames:v", "1", str(gray),
+        ],
+        check=True,
+    )
+
+    def build_and_render(name: str, extra_yaml: str) -> Path:
+        yaml_path = tmp_path / f"{name}.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: gray
+    path: {gray}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: gray
+          start: 0
+          duration: 1
+{extra_yaml}
+""",
+            encoding="utf-8",
+        )
+        resolved = load_and_resolve(yaml_path)
+        kdenlive_path = tmp_path / f"{name}.kdenlive"
+        xmlgen.write(resolved, kdenlive_path)
+        rendered = tmp_path / f"{name}.mp4"
+        result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+        _assert_no_fatal_load_error(result)
+        assert rendered.exists() and rendered.stat().st_size > 0
+        return rendered
+
+    def avg_rgb(path: Path, timestamp: float) -> tuple[float, float, float]:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(timestamp), "-i", str(path), "-frames:v", "1",
+             "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, timeout=30, check=True,
+        )
+        data = result.stdout
+        n = len(data) // 3
+        r = sum(data[0::3]) / n
+        g = sum(data[1::3]) / n
+        b = sum(data[2::3]) / n
+        return r, g, b
+
+    baseline = build_and_render("baseline", "")
+    graded = build_and_render("graded", "          color_grade: {gain: [2.0, 1.0, 1.0]}")
+
+    base_r, base_g, base_b = avg_rgb(baseline, 0.2)
+    graded_r, graded_g, graded_b = avg_rgb(graded, 0.2)
+
+    assert abs(base_r - base_g) < 3 and abs(base_r - base_b) < 3, (
+        f"expected a neutral gray baseline, got r={base_r:.1f} g={base_g:.1f} b={base_b:.1f}"
+    )
+    assert graded_r > base_r + 30, (
+        f"expected gain:[2.0,1.0,1.0] to clearly boost the red channel, "
+        f"got baseline_r={base_r:.1f} graded_r={graded_r:.1f}"
+    )
+    assert abs(graded_g - base_g) < 5 and abs(graded_b - base_b) < 5, (
+        f"expected green/blue to stay close to baseline (gain left at default 1.0 for both), "
+        f"got g: {base_g:.1f}->{graded_g:.1f} b: {base_b:.1f}->{graded_b:.1f}"
+    )
+
+
 def test_source_in_out_combines_correctly_with_speed(tmp_path: Path, melt):
     """Empirical check for `source_in:`/`source_out:` (v0.7): unlike
     `in:`/`out:` (relative to the already-warped timeline when `speed:`

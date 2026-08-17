@@ -671,6 +671,40 @@ def _add_old_film_filters(ids: _IdCounters, entry: ET.Element, placement: Resolv
         _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_color_grade_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """Professional color grading (v0.9 headline) via MLT's own
+    `lift_gamma_gain` filter (Meltytech, LGPLv2.1 - "lift=shadows,
+    gamma=midtones, gain=highlights", not an avfilter bridge, so no
+    colorspace-bridging risk like the LUT-based alternative
+    (`avfilter.lut3d`) hit - see the ROADMAP's "investigated and
+    dropped" entry for that one, confirmed by a real render on this
+    project's preferred melt build: an identity and an inverting `.cube`
+    LUT both produced pixel-identical output to an unfiltered render,
+    the same "Cannot set src colorspace" failure `avfilter.chromakey`/
+    `avfilter.rgbashift` already ran into). Only the groups actually
+    present in `color_grade` are written; an omitted group is left off
+    the filter entirely so MLT's own neutral default for it applies
+    (lift 0,0,0 / gamma 1,1,1 / gain 1,1,1 - together a no-op)."""
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "lift_gamma_gain")
+    lift = placement.color_grade.get("lift")
+    if lift is not None:
+        _prop(f, "lift_r", lift[0])
+        _prop(f, "lift_g", lift[1])
+        _prop(f, "lift_b", lift[2])
+    gamma = placement.color_grade.get("gamma")
+    if gamma is not None:
+        _prop(f, "gamma_r", gamma[0])
+        _prop(f, "gamma_g", gamma[1])
+        _prop(f, "gamma_b", gamma[2])
+    gain = placement.color_grade.get("gain")
+    if gain is not None:
+        _prop(f, "gain_r", gain[0])
+        _prop(f, "gain_g", gain[1])
+        _prop(f, "gain_b", gain[2])
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _hex_color(c: tuple[int, int, int, int]) -> str:
     r, g, b, a = c
     return f"0x{r:02x}{g:02x}{b:02x}{a:02x}"
@@ -796,6 +830,8 @@ def _build_track(
             if placement.freeze_at_frame is not None:
                 _add_freeze_filter(ids, entry, placement)
             _add_old_film_filters(ids, entry, placement)
+            if placement.color_grade is not None:
+                _add_color_grade_filter(ids, entry, placement)
         if placement.mute:
             _add_mute_filter(ids, entry)
         cursor = placement.start_frame + placement.length_frames

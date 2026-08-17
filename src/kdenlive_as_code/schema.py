@@ -469,6 +469,32 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         else:
             old_film_flags[field_name] = raw
 
+    color_grade_raw = item.get("color_grade")
+    color_grade: dict[str, tuple[float, float, float]] | None = None
+    if color_grade_raw is not None:
+        if not isinstance(color_grade_raw, dict) or not color_grade_raw:
+            errors.append(msg("validation.color_grade_invalid", ctx=ctx))
+        else:
+            valid = True
+            parsed_cg: dict[str, tuple[float, float, float]] = {}
+            for key, val in color_grade_raw.items():
+                if key not in ("lift", "gamma", "gain"):
+                    errors.append(msg("validation.color_grade_unknown_group", ctx=ctx, group=key))
+                    valid = False
+                    continue
+                if not (isinstance(val, (list, tuple)) and len(val) == 3):
+                    errors.append(msg("validation.color_grade_triple_invalid", ctx=ctx, group=key))
+                    valid = False
+                    continue
+                r, g, b = float(val[0]), float(val[1]), float(val[2])
+                if r < 0 or g < 0 or b < 0:
+                    errors.append(msg("validation.color_grade_negative", ctx=ctx, group=key))
+                    valid = False
+                    continue
+                parsed_cg[key] = (r, g, b)
+            if valid:
+                color_grade = parsed_cg
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -507,6 +533,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         film_dust=old_film_flags["film_dust"],
         film_scratches=old_film_flags["film_scratches"],
         film_grain=old_film_flags["film_grain"],
+        color_grade=color_grade,
     )
 
 
@@ -863,6 +890,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     ken_burns_to=placement.ken_burns_to,
                     focus_rect=placement.focus_rect,
                     focus_blur=placement.focus_blur,
+                    color_grade=placement.color_grade,
                     old_film=placement.old_film,
                     film_dust=placement.film_dust,
                     film_scratches=placement.film_scratches,

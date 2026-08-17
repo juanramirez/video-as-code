@@ -855,6 +855,45 @@ timeline:
     assert clip["film_grain"] is True
 
 
+def test_round_trip_preserves_color_grade(tmp_path: Path, assets_dir: Path):
+    """`color_grade:` (v0.9 headline) round-trips through a real
+    generated .kdenlive: `lift_gamma_gain`'s nine parameters are plain
+    user-facing numbers (any value round-trips freely, same bar
+    `freeze_at`/`chroma_key` hold to, not an exact-match-only shape like
+    `old_film`'s toggles) - only the groups that actually differ from
+    MLT's own neutral default (lift 0,0,0 / gamma 1,1,1 / gain 1,1,1)
+    are reconstructed, mirroring which groups `_add_color_grade_filter`
+    itself writes."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 2.0
+          color_grade:
+            gain: [1.2, 1.0, 0.9]
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["color_grade"] == {"gain": [1.2, 1.0, 0.9]}
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -

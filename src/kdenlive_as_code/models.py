@@ -165,6 +165,24 @@ class ClipPlacementSpec:
     film_dust: Optional[bool] = None
     film_scratches: Optional[bool] = None
     film_grain: Optional[bool] = None
+    # Professional color grading (mlt_service "lift_gamma_gain",
+    # Meltytech, LGPLv2.1) - "lift=shadows, gamma=midtones,
+    # gain=highlights", the classic three-way grading formula. Any
+    # subset of the three groups may be present; an omitted group keeps
+    # MLT's own neutral default for it (lift 0,0,0; gamma 1,1,1; gain
+    # 1,1,1 - together a no-op), so at least one group is required (no
+    # dead no-op filter emitted, same discipline `old_film`'s
+    # false-means-no-filter toggles hold to).
+    color_grade: Optional[dict[str, tuple[float, float, float]]] = None
+    # LUT-based grading (`avfilter.lut3d`) was investigated and dropped -
+    # see ROADMAP.md: on this project's own preferred from-source melt
+    # build it hits the exact same "Cannot set src colorspace" bug
+    # `avfilter.chromakey`/`avfilter.rgbashift` already ran into (real
+    # render proved zero visible effect - an identity and an inverting
+    # `.cube` LUT produced pixel-identical output), even though it
+    # works correctly on the system's stable melt. No native MLT
+    # equivalent exists (`rgblut` is a per-channel 1D lookup table, not
+    # a real 3D cube LUT, so it can't stand in for it).
 
 
 @dataclass
@@ -319,6 +337,8 @@ class ResolvedPlacement:
     film_dust: Optional[bool] = None
     film_scratches: Optional[bool] = None
     film_grain: Optional[bool] = None
+    # Color grading - see ClipPlacementSpec.
+    color_grade: Optional[dict[str, tuple[float, float, float]]] = None
 
     @property
     def length_frames(self) -> int:

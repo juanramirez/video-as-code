@@ -579,6 +579,45 @@ class Importer:
             if props.get("freeze_after", "0") not in ("0", "", None):
                 result["freeze_after"] = True
             return result
+        if service == "lift_gamma_gain":
+            # Plain user-facing numbers, same "any value round-trips
+            # freely" bar `freeze_at`/`chroma_key` hold to (not an
+            # exact-match-only shape like `old_film`'s toggles) - only
+            # a group that actually differs from MLT's own neutral
+            # default (lift 0,0,0 / gamma 1,1,1 / gain 1,1,1) is
+            # reconstructed, mirroring how `_add_color_grade_filter`
+            # only ever writes the groups present in `color_grade`.
+            def _group(prefix: str, default: float) -> Optional[list[float]]:
+                try:
+                    r = float(props.get(f"{prefix}_r", default))
+                    g = float(props.get(f"{prefix}_g", default))
+                    b = float(props.get(f"{prefix}_b", default))
+                except ValueError:
+                    return None
+                if (r, g, b) == (default, default, default):
+                    return None
+                return [round(r, 3), round(g, 3), round(b, 3)]
+
+            color_grade: dict[str, list[float]] = {}
+            lift = _group("lift", 0.0)
+            if lift is not None:
+                color_grade["lift"] = lift
+            gamma = _group("gamma", 1.0)
+            if gamma is not None:
+                color_grade["gamma"] = gamma
+            gain = _group("gain", 1.0)
+            if gain is not None:
+                color_grade["gain"] = gain
+            if not color_grade:
+                # All nine at their defaults - a no-op filter this
+                # generator itself would never emit (color_grade
+                # requires at least one non-empty group), but a
+                # hand-built project could still have one.
+                self.raw_items.append(
+                    RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
+                )
+                return {}
+            return {"color_grade": color_grade}
         if service in _OLD_FILM_DEFAULTS:
             # Same "exact match" bar as Ken Burns/reveal filters, not
             # chroma_key's "any value round-trips" one: v0.8 only ever
