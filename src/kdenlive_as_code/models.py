@@ -135,6 +135,21 @@ class ClipPlacementSpec:
     # that track's own clip-level filters - dance needs audio+video on
     # the same frame to react to, so it can never work on a video-track
     # clip here, not a "no visible effect" case like broken-tv.
+    # "Old film" look family (v0.8) - four independent, freely
+    # combinable kdenlive-native filters (Marco Gittler, GPL), each a
+    # plain on/off toggle using kdenlive's own filter defaults (no
+    # per-parameter overrides in this first cut, same narrow-scope call
+    # overlay_text's fixed layout made). `old_film` is `oldfilm`
+    # (Y-jitter + brightness flicker + patchy "uneven develop" - the
+    # strongest match for a classic "random black burned patches"
+    # look); `film_dust`/`film_scratches`/`film_grain` are the `dust`/
+    # `lines`/`grain` filters respectively (named "scratches" not
+    # "lines" here since the latter is a confusing, over-generic word
+    # for a user-facing YAML field).
+    old_film: Optional[bool] = None
+    film_dust: Optional[bool] = None
+    film_scratches: Optional[bool] = None
+    film_grain: Optional[bool] = None
 
 
 @dataclass
@@ -278,6 +293,11 @@ class ResolvedPlacement:
     # Focus-pull - see ClipPlacementSpec.
     focus_rect: Optional[tuple[float, float, float, float]] = None
     focus_blur: float = 4.0
+    # "Old film" look family - see ClipPlacementSpec.
+    old_film: Optional[bool] = None
+    film_dust: Optional[bool] = None
+    film_scratches: Optional[bool] = None
+    film_grain: Optional[bool] = None
 
     @property
     def length_frames(self) -> int:

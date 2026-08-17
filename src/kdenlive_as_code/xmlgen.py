@@ -582,6 +582,69 @@ def _add_pillar_echo_filter(ids: _IdCounters, entry: ET.Element, placement: Reso
     _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_old_film_filters(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """The "old film" look family (v0.8): four independent, freely
+    combinable kdenlive-native filters (Marco Gittler, GPL, not
+    frei0r), each a plain on/off toggle applying kdenlive's own filter
+    defaults - no per-parameter overrides in this first cut, same
+    narrow-scope call `overlay_text`'s fixed layout made. Confirmed
+    present with these exact parameters via `melt -query filter=<name>`
+    on both the from-source dev melt build and the system's stable one,
+    and confirmed to produce a real, measurable, stable effect via real
+    render (not assumed) -
+    see `tests/test_melt_validation.py::test_old_film_produces_a_real_render_difference`.
+
+    - `old_film` -> `oldfilm`: Y-jitter (`delta`/`every`) + brightness
+      flicker (`brightnessdelta_*`) + patchy "uneven develop"
+      (`unevendevelop_*`) - the strongest match for the "random black
+      burned patches" look this whole feature was scoped around.
+    - `film_dust` -> `dust`: scattered specks (`maxdiameter`/`maxcount`).
+    - `film_scratches` -> `lines`: scratch lines (`line_width`/`num`/
+      `darker`/`lighter`) - named "scratches" in the YAML schema since
+      "lines" alone is a confusing, over-generic word for a user-facing
+      field.
+    - `film_grain` -> `grain`: film grain (`noise`/`contrast`/
+      `brightness`).
+
+    Applied after every other clip-level filter (fade/crop/chroma_key/
+    overlay/Ken Burns/focus-pull), in this fixed order among themselves
+    - order doesn't functionally matter between the four, but a
+    consistent one keeps generated XML diffs stable."""
+    if placement.old_film:
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+        _prop(f, "mlt_service", "oldfilm")
+        _prop(f, "delta", 14)
+        _prop(f, "every", 20)
+        _prop(f, "brightnessdelta_up", 20)
+        _prop(f, "brightnessdelta_down", 30)
+        _prop(f, "brightnessdelta_every", 70)
+        _prop(f, "unevendevelop_up", 60)
+        _prop(f, "unevendevelop_down", 20)
+        _prop(f, "unevendevelop_duration", 70)
+        _prop(f, "kdenlive:collapsed", 0)
+    if placement.film_dust:
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+        _prop(f, "mlt_service", "dust")
+        _prop(f, "maxdiameter", 2)
+        _prop(f, "maxcount", 10)
+        _prop(f, "kdenlive:collapsed", 0)
+    if placement.film_scratches:
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+        _prop(f, "mlt_service", "lines")
+        _prop(f, "line_width", 2)
+        _prop(f, "num", 5)
+        _prop(f, "darker", 40)
+        _prop(f, "lighter", 40)
+        _prop(f, "kdenlive:collapsed", 0)
+    if placement.film_grain:
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+        _prop(f, "mlt_service", "grain")
+        _prop(f, "noise", 40)
+        _prop(f, "contrast", 160)
+        _prop(f, "brightness", 70)
+        _prop(f, "kdenlive:collapsed", 0)
+
+
 def _hex_color(c: tuple[int, int, int, int]) -> str:
     r, g, b, a = c
     return f"0x{r:02x}{g:02x}{b:02x}{a:02x}"
@@ -704,6 +767,7 @@ def _build_track(
                 _add_ken_burns_filter(ids, entry, placement)
             if placement.focus_rect is not None:
                 _add_pillar_echo_filter(ids, entry, placement)
+            _add_old_film_filters(ids, entry, placement)
         if placement.mute:
             _add_mute_filter(ids, entry)
         cursor = placement.start_frame + placement.length_frames

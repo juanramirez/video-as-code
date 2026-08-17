@@ -1685,6 +1685,72 @@ timeline:
     )
 
 
+def test_old_film_produces_a_real_render_difference(tmp_path: Path, melt):
+    """Empirical check for the "old film" filter pack (v0.8's headline):
+    `old_film:`/`film_dust:`/`film_scratches:`/`film_grain:` map to
+    `oldfilm`/`dust`/`lines`/`grain` respectively - four kdenlive-native
+    filters confirmed present via `melt -query filter=<name>` with the
+    exact parameters `_add_old_film_filters` writes. A perfectly flat,
+    solid-gray source frame has ~zero pixel-value stddev on its own;
+    Y-jitter/flicker/burned patches/dust specks/scratch lines/grain
+    noise all introduce real spatial variation into an otherwise flat
+    frame, so a render with all four filters enabled should measure a
+    much higher stddev than the same source rendered plain - proof the
+    filters actually did something, not just "didn't crash"."""
+    gray = tmp_path / "gray.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=0x808080:size=320x240",
+            "-frames:v", "1", str(gray),
+        ],
+        check=True,
+    )
+
+    def build_and_render(name: str, extra_yaml: str) -> Path:
+        yaml_path = tmp_path / f"{name}.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: gray
+    path: {gray}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: gray
+          start: 0
+          duration: 1
+{extra_yaml}
+""",
+            encoding="utf-8",
+        )
+        resolved = load_and_resolve(yaml_path)
+        kdenlive_path = tmp_path / f"{name}.kdenlive"
+        xmlgen.write(resolved, kdenlive_path)
+        rendered = tmp_path / f"{name}.mp4"
+        result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+        _assert_no_fatal_load_error(result)
+        assert rendered.exists() and rendered.stat().st_size > 0
+        return rendered
+
+    baseline = build_and_render("baseline", "")
+    filtered = build_and_render(
+        "filtered",
+        "          old_film: true\n          film_dust: true\n          film_scratches: true\n          film_grain: true",
+    )
+
+    baseline_stddev = _color_stddev(baseline, 0.2)
+    filtered_stddev = _color_stddev(filtered, 0.2)
+
+    assert baseline_stddev < 3, f"expected a flat solid-gray baseline, got stddev={baseline_stddev:.1f}"
+    assert filtered_stddev > baseline_stddev + 8, (
+        f"expected the old-film pack to visibly break up the flat gray frame, "
+        f"got baseline={baseline_stddev:.1f} filtered={filtered_stddev:.1f}"
+    )
+
+
 def test_source_in_out_combines_correctly_with_speed(tmp_path: Path, melt):
     """Empirical check for `source_in:`/`source_out:` (v0.7): unlike
     `in:`/`out:` (relative to the already-warped timeline when `speed:`

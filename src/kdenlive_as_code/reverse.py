@@ -45,6 +45,25 @@ _PILLAR_ECHO_RECT_RE = re.compile(
     r"^(-?[\d.]+)%\s+(-?[\d.]+)%\s+(-?[\d.]+)%\s+(-?[\d.]+)%$"
 )
 
+# The "old film" look family (v0.8) - `_add_old_film_filters` in
+# xmlgen.py writes each of these with exactly these hardcoded kdenlive
+# defaults (plain on/off toggles, no per-parameter overrides), so only
+# an exact match on every parameter round-trips - same "exact match"
+# bar Ken Burns/reveal filters hold to.
+_OLD_FILM_DEFAULTS = {
+    "oldfilm": (
+        {
+            "delta": 14, "every": 20, "brightnessdelta_up": 20, "brightnessdelta_down": 30,
+            "brightnessdelta_every": 70, "unevendevelop_up": 60, "unevendevelop_down": 20,
+            "unevendevelop_duration": 70,
+        },
+        "old_film",
+    ),
+    "dust": ({"maxdiameter": 2, "maxcount": 10}, "film_dust"),
+    "lines": ({"line_width": 2, "num": 5, "darker": 40, "lighter": 40}, "film_scratches"),
+    "grain": ({"noise": 40, "contrast": 160, "brightness": 70}, "film_grain"),
+}
+
 
 @dataclass
 class RawItem:
@@ -542,6 +561,22 @@ class Importer:
             if blur is not None and abs(blur - 4.0) > 1e-6:
                 result["focus_blur"] = round(blur, 3)
             return result
+        if service in _OLD_FILM_DEFAULTS:
+            # Same "exact match" bar as Ken Burns/reveal filters, not
+            # chroma_key's "any value round-trips" one: v0.8 only ever
+            # exposes these four filters as plain on/off toggles using
+            # kdenlive's own defaults (no per-parameter overrides), so
+            # a hand-edited project with customized parameter values
+            # isn't something this schema can represent - falls to
+            # raw_items rather than silently discarding the
+            # customization back to kdenlive's defaults.
+            defaults, yaml_key = _OLD_FILM_DEFAULTS[service]
+            if all(props.get(key, str(default)) == str(default) for key, default in defaults.items()):
+                return {yaml_key: True}
+            self.raw_items.append(
+                RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
+            )
+            return {}
         if service in (
             "frei0r.alphaspot", "frei0r.3dflippo", "frei0r.glitch0r",
             "frei0r.delaygrab", "frei0r.cairogradient",

@@ -448,6 +448,17 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
             else:
                 crop = (top, right, bottom, left)
 
+    old_film_flags = {}
+    for field_name in ("old_film", "film_dust", "film_scratches", "film_grain"):
+        raw = item.get(field_name)
+        if raw is None:
+            old_film_flags[field_name] = None
+        elif not isinstance(raw, bool):
+            errors.append(msg("validation.bool_field_invalid", ctx=ctx, field=field_name, value=raw))
+            old_film_flags[field_name] = None
+        else:
+            old_film_flags[field_name] = raw
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -479,6 +490,10 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         ken_burns_to=ken_burns_to,
         focus_rect=focus_rect,
         focus_blur=focus_blur,
+        old_film=old_film_flags["old_film"],
+        film_dust=old_film_flags["film_dust"],
+        film_scratches=old_film_flags["film_scratches"],
+        film_grain=old_film_flags["film_grain"],
     )
 
 
@@ -819,6 +834,10 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     ken_burns_to=placement.ken_burns_to,
                     focus_rect=placement.focus_rect,
                     focus_blur=placement.focus_blur,
+                    old_film=placement.old_film,
+                    film_dust=placement.film_dust,
+                    film_scratches=placement.film_scratches,
+                    film_grain=placement.film_grain,
                 )
             )
 
