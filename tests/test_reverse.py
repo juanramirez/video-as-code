@@ -811,6 +811,50 @@ timeline:
     assert "freeze_before" not in clip
 
 
+def test_round_trip_preserves_old_film_flags(tmp_path: Path, assets_dir: Path):
+    """The "old film" filter pack (v0.8) round-trips through a real
+    generated .kdenlive: each of `old_film:`/`film_dust:`/
+    `film_scratches:`/`film_grain:` maps to a single kdenlive-native
+    filter (`oldfilm`/`dust`/`lines`/`grain`) written with exactly
+    kdenlive's own default parameters, which `_OLD_FILM_DEFAULTS`
+    recognizes by an exact match on every parameter (same "exact match"
+    bar Ken Burns/reveal filters hold to, since there's no per-parameter
+    override in this schema yet to represent a customized value)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 2.0
+          old_film: true
+          film_dust: true
+          film_scratches: true
+          film_grain: true
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["old_film"] is True
+    assert clip["film_dust"] is True
+    assert clip["film_scratches"] is True
+    assert clip["film_grain"] is True
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -

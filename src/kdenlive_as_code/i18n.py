@@ -89,6 +89,7 @@ _EN: dict[str, str] = {
         "duration on the timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
+    "validation.bool_field_invalid": "{ctx}: '{field}' must be true or false, got {value!r}",
     "validation.source_in_out_incomplete": "{ctx}: 'source_in' and 'source_out' must both be set, or neither",
     "validation.source_in_out_conflicts": "{ctx}: 'source_in'/'source_out' cannot be combined with 'in'/'out'/'duration' - use one or the other",
     "validation.source_in_out_invalid": "{ctx}: 'source_out' ({source_out}) must be greater than 'source_in' ({source_in}), and 'source_in' must not be negative",
@@ -304,6 +305,7 @@ _ES: dict[str, str] = {
         "duración del clip en el timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
+    "validation.bool_field_invalid": "{ctx}: '{field}' debe ser true o false, se recibió {value!r}",
     "validation.source_in_out_incomplete": "{ctx}: 'source_in' y 'source_out' deben indicarse ambos, o ninguno",
     "validation.source_in_out_conflicts": "{ctx}: 'source_in'/'source_out' no se pueden combinar con 'in'/'out'/'duration' - usa uno u otro",
     "validation.source_in_out_invalid": "{ctx}: 'source_out' ({source_out}) debe ser mayor que 'source_in' ({source_in}), y 'source_in' no puede ser negativo",
