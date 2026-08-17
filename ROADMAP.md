@@ -890,29 +890,61 @@ since `crop`'s workaround made this a natural closing point.
 this cycle** - moved back to BACKLOG.md rather than held open (MLT's
 `freeze` filter and `hold` producer are confirmed present via `melt
 -query`, but no real render has confirmed the frozen frame actually
-holds).
-
-**Verified and ready to scope next, found via backlog research this
-cycle (not yet assigned to a version)**: an "old film" look family -
-`oldfilm` (Y-jitter + brightness flicker + patchy "uneven develop",
-the strongest match for a "random black burned patches" look),
-`dust` (scattered specks), `lines` (scratch lines), and `grain` (film
-grain), all kdenlive-native (not frei0r), all confirmed present and
-producing real, measurable, stable effects via real render on both the
-from-source dev `melt` build and the system's stable one (no `crop`-
-style build-specific issue). Their `requires_in_out="1"`/`unique="1"`
-XML attributes turned out to be UI-only concerns (kdenlive's own
-`assetparametermodel.cpp` uses `requires_in_out` purely to decide
-whether to show an in/out zone-trim widget in the GUI; `unique` has no
-engine-side reference anywhere in kdenlive's C++ source beyond the XML
-attribute itself) - confirmed empirically too: rendered identically
-with or without an explicit `in`/`out` on the `<filter>`, and two
-stacked instances of the same filter didn't crash or misbehave.
+holds; picked back up as a v0.8 quick win, below).
 
 **Explicitly deferred, not in v0.7**: `mask_apply`/`mask_start` family
-and the `heart`/`bowtie` luma shapes (leads/sketches only, unverified);
-subtitles, proxy generation, generic color grading (`lift_gamma_gain`),
-richer title clips (large standalone lifts); video stabilization,
-motion tracking, LUT-based grading (`avfilter.lut3d`), audio ducking
-(reserved for a later "kdenlive-native/competitor-parity effects"
-theme).
+(leads/sketches only, unverified); subtitles, proxy generation, generic
+color grading (`lift_gamma_gain`), richer title clips (large standalone
+lifts); video stabilization, motion tracking, LUT-based grading
+(`avfilter.lut3d`), audio ducking (reserved for a later
+"kdenlive-native/competitor-parity effects" theme).
+
+## v0.8 — scoped (2026-08-17)
+
+Headline: an "old film" look family - `oldfilm` (Y-jitter + brightness
+flicker + patchy "uneven develop", the strongest match for the
+original "random black burned patches" question that kicked off this
+round's research), `dust` (scattered specks), `lines` (scratch lines),
+and `grain` (film grain). All four are kdenlive-native filters
+(Marco Gittler, GPL, not frei0r) - confirmed present, with parameters
+matching exactly, on both the from-source dev `melt` build and the
+system's stable one (no `crop`-style build-specific issue) via `melt
+-query filter=<name>`:
+
+- `oldfilm`: `delta`/`every` (Y-jitter magnitude/frequency),
+  `brightnessdelta_up`/`brightnessdelta_down`/`brightnessdelta_every`
+  (flicker), `unevendevelop_up`/`unevendevelop_down`/
+  `unevendevelop_duration` (the patchy "burned" look itself).
+- `dust`: `maxdiameter`/`maxcount`.
+- `lines`: `line_width`/`num`/`darker`/`lighter`.
+- `grain`: `noise`/`contrast`/`brightness`.
+
+All four produced real, measurable, stable effects via real render
+during this cycle's backlog research, on both melt builds. Their
+`requires_in_out="1"`/`unique="1"` XML attributes turned out to be
+UI-only concerns (kdenlive's own `assetparametermodel.cpp` uses
+`requires_in_out` purely to decide whether to show an in/out zone-trim
+widget in the GUI; `unique` has no engine-side reference anywhere in
+kdenlive's C++ source beyond the XML attribute itself) - confirmed
+empirically too: rendered identically with or without an explicit
+`in`/`out` on the `<filter>`, and two stacked instances of the same
+filter didn't crash or misbehave. Scoped as the full four-filter pack
+rather than `oldfilm` alone: each is a distinct, independently useful
+look (dust/lines/grain are common standalone "film texture" effects on
+their own, not just old-film companions), and none of the four need a
+mechanism beyond "one filter, plain numeric parameters" - the same
+shape `focus_rect:`/`chroma_key:` already established.
+
+Two quick wins alongside it:
+
+- **Freeze-frame / hold** - carried over from v0.7 (see above), still
+  **needs a real render** to confirm the frozen frame actually holds
+  before implementation, same discipline `pillar_echo`/`dance` got in
+  v0.6.
+- **`heart`/`bowtie` luma shapes for `wipe`** - two new procedural
+  `wipe` transitions (a heart-silhouette reveal, two opposing
+  triangular wedges), extending the same non-copied, procedurally
+  generated luma set `wipe` already uses (see BACKLOG.md for the
+  per-pixel formulas). **Sketched only, not yet rendered/verified** -
+  same bar every luma shape in this project has had to clear before
+  shipping.
