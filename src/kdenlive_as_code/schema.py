@@ -495,6 +495,15 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
             if valid:
                 color_grade = parsed_cg
 
+    stabilize_raw = item.get("stabilize")
+    stabilize: bool | None = None
+    if stabilize_raw is None:
+        pass
+    elif not isinstance(stabilize_raw, bool):
+        errors.append(msg("validation.bool_field_invalid", ctx=ctx, field="stabilize", value=stabilize_raw))
+    else:
+        stabilize = stabilize_raw
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -534,6 +543,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         film_scratches=old_film_flags["film_scratches"],
         film_grain=old_film_flags["film_grain"],
         color_grade=color_grade,
+        stabilize=stabilize,
     )
 
 
@@ -895,6 +905,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     film_dust=placement.film_dust,
                     film_scratches=placement.film_scratches,
                     film_grain=placement.film_grain,
+                    stabilize=placement.stabilize,
                 )
             )
 

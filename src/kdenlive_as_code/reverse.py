@@ -634,6 +634,15 @@ class Importer:
                 RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
             )
             return {}
+        if service == "deshake":
+            # No exposed parameters in this schema (v0.10 only ever
+            # writes a bare toggle, MLT's own defaults for all eleven
+            # params) - any `deshake` filter present means
+            # `stabilize: true`, no exact-match check needed (unlike
+            # `_OLD_FILM_DEFAULTS`, which does need one because a
+            # hand-customized parameter value is possible there too but
+            # isn't representable in this schema).
+            return {"stabilize": True}
         if service in (
             "frei0r.alphaspot", "frei0r.3dflippo", "frei0r.glitch0r",
             "frei0r.delaygrab", "frei0r.cairogradient",

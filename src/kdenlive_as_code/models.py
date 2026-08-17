@@ -183,6 +183,18 @@ class ClipPlacementSpec:
     # works correctly on the system's stable melt. No native MLT
     # equivalent exists (`rgblut` is a per-channel 1D lookup table, not
     # a real 3D cube LUT, so it can't stand in for it).
+    # Video stabilization (mlt_service "deshake", Vid.Stab/GPLv2) - a
+    # plain on/off toggle at MLT's own defaults for all eleven
+    # parameters, no per-parameter overrides in this first cut (same
+    # narrow-scope call `old_film`'s toggles made). Unlike `vidstab`
+    # (the two-pass version, needs an intermediate `.trf` results file
+    # this project's single-pass-static-XML architecture has no
+    # mechanism for), `deshake` is single-pass. Verified by real render
+    # (a synthetic shaky source, frame-to-frame feature movement
+    # measured before/after): identical, clean result on both this
+    # project's preferred from-source dev melt build and the system's
+    # stable one - no `crop`/`lut3d`-style build-specific issue.
+    stabilize: Optional[bool] = None
 
 
 @dataclass
@@ -339,6 +351,8 @@ class ResolvedPlacement:
     film_grain: Optional[bool] = None
     # Color grading - see ClipPlacementSpec.
     color_grade: Optional[dict[str, tuple[float, float, float]]] = None
+    # Video stabilization - see ClipPlacementSpec.
+    stabilize: Optional[bool] = None
 
     @property
     def length_frames(self) -> int:

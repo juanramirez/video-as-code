@@ -1932,6 +1932,110 @@ timeline:
     )
 
 
+def test_stabilize_reduces_frame_to_frame_jitter(tmp_path: Path, melt):
+    """Empirical check for `stabilize:` (v0.10 headline): MLT's own
+    `deshake` filter (Vid.Stab, GPLv2 - the single-pass version of
+    `vidstab`, no intermediate `.trf` results file, so it fits this
+    project's single-pass-static-XML architecture where `vidstab`'s
+    two-pass analysis/apply workflow wouldn't). Unlike most of this
+    project's filter checks (a static frame's pixel values before/after),
+    stabilization is a *motion* property - proof needs to track a
+    feature's apparent position across several consecutive frames and
+    show the frame-to-frame movement is measurably smaller with the
+    filter than without, not just "the picture looks different." A
+    synthetic "handheld camera" source (a static high-contrast square,
+    viewed through a window that itself jitters frame-to-frame via an
+    animated `crop` offset) gives a clean, large, artificial shake for
+    `deshake` to correct."""
+    base_large = tmp_path / "base_large.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=black:size=640x480:duration=2:rate=25",
+            "-vf", "geq=lum='if(lt(abs(X-320)\\,40)*lt(abs(Y-240)\\,40)\\,255\\,0)':cb=128:cr=128",
+            "-pix_fmt", "yuv420p", str(base_large),
+        ],
+        check=True,
+    )
+    shaky = tmp_path / "shaky.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error", "-i", str(base_large),
+            "-vf", "crop=320:240:x='160+20*sin(n*0.9)+8*sin(n*2.3)':y='120+18*cos(n*0.7)+7*cos(n*2.9)'",
+            "-pix_fmt", "yuv420p", str(shaky),
+        ],
+        check=True,
+    )
+
+    def build_and_render(name: str, extra_yaml: str) -> Path:
+        yaml_path = tmp_path / f"{name}.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: shaky
+    path: {shaky}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: shaky
+          start: 0
+          duration: 2.0
+{extra_yaml}
+""",
+            encoding="utf-8",
+        )
+        resolved = load_and_resolve(yaml_path)
+        kdenlive_path = tmp_path / f"{name}.kdenlive"
+        xmlgen.write(resolved, kdenlive_path)
+        rendered = tmp_path / f"{name}.mp4"
+        result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+        _assert_no_fatal_load_error(result)
+        assert rendered.exists() and rendered.stat().st_size > 0
+        return rendered
+
+    def mean_frame_to_frame_movement(path: Path, w: int = 320, h: int = 240) -> float:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+            capture_output=True, timeout=60, check=True,
+        )
+        data = result.stdout
+        frame_size = w * h
+        n_frames = len(data) // frame_size
+        centroids = []
+        for i in range(n_frames):
+            frame = data[i * frame_size:(i + 1) * frame_size]
+            xsum = ysum = count = 0
+            for j, v in enumerate(frame):
+                if v > 128:
+                    xsum += j % w
+                    ysum += j // w
+                    count += 1
+            if count:
+                centroids.append((xsum / count, ysum / count))
+        deltas = [
+            ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
+            for (x0, y0), (x1, y1) in zip(centroids, centroids[1:])
+        ]
+        return sum(deltas) / len(deltas)
+
+    baseline = build_and_render("baseline", "")
+    stabilized = build_and_render("stabilized", "          stabilize: true")
+
+    baseline_movement = mean_frame_to_frame_movement(baseline)
+    stabilized_movement = mean_frame_to_frame_movement(stabilized)
+
+    assert baseline_movement > 10, (
+        f"expected the synthetic source to have real, large frame-to-frame jitter, "
+        f"got baseline_movement={baseline_movement:.2f}px"
+    )
+    assert stabilized_movement < baseline_movement / 2, (
+        f"expected deshake to clearly reduce frame-to-frame jitter, "
+        f"got baseline={baseline_movement:.2f}px stabilized={stabilized_movement:.2f}px"
+    )
+
+
 def test_source_in_out_combines_correctly_with_speed(tmp_path: Path, melt):
     """Empirical check for `source_in:`/`source_out:` (v0.7): unlike
     `in:`/`out:` (relative to the already-warped timeline when `speed:`

@@ -705,6 +705,30 @@ def _add_color_grade_filter(ids: _IdCounters, entry: ET.Element, placement: Reso
     _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_deshake_filter(ids: _IdCounters, entry: ET.Element) -> None:
+    """Video stabilization (v0.10 headline) via MLT's own `deshake`
+    filter (Vid.Stab, GPLv2 - the single-pass version of `vidstab`, no
+    intermediate `.trf` results file, so it fits this project's
+    single-pass-static-XML architecture where `vidstab`'s two-pass
+    analysis/apply workflow wouldn't). A plain on/off toggle: no
+    properties set beyond `mlt_service`, letting MLT's own defaults
+    apply for all eleven parameters (`shakiness`/`accuracy`/`stepsize`/
+    `mincontrast`/`smoothing`/`maxshift`/`maxangle`/`crop`/`zoom`/
+    `optzoom`/`zoomspeed`) - no per-parameter overrides in this first
+    cut, same narrow-scope call `old_film`'s toggles made. Verified by
+    real render before wiring in: a synthetic shaky source (a static
+    high-contrast square viewed through an animated-crop "handheld
+    camera" window) had its frame-to-frame feature-centroid movement
+    reduced from a mean of ~18.9px/std 8.7 (unstabilized) to ~3.7px/std
+    3.3 (stabilized) - identical results on both this project's
+    preferred from-source dev melt build and the system's stable one,
+    no `crop`/`lut3d`-style build-specific issue (see
+    `tests/test_melt_validation.py::test_stabilize_reduces_frame_to_frame_jitter`)."""
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "deshake")
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _hex_color(c: tuple[int, int, int, int]) -> str:
     r, g, b, a = c
     return f"0x{r:02x}{g:02x}{b:02x}{a:02x}"
@@ -832,6 +856,8 @@ def _build_track(
             _add_old_film_filters(ids, entry, placement)
             if placement.color_grade is not None:
                 _add_color_grade_filter(ids, entry, placement)
+            if placement.stabilize:
+                _add_deshake_filter(ids, entry)
         if placement.mute:
             _add_mute_filter(ids, entry)
         cursor = placement.start_frame + placement.length_frames
