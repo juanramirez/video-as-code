@@ -55,10 +55,6 @@ Not documented gaps — real kdenlive project capabilities this generator's
 schema/model has never addressed, found by reading what's already
 plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
 
-- **Color correction/grading**: nothing touches pixel color beyond the
-  `brightness` filter used for fades. A real grading filter (e.g.
-  `lift_gamma_gain`) would be a new filter category with no existing
-  analog to copy from.
 - **Subtitles**: completely absent from schema/models/xmlgen; kdenlive
   subtitles are a separate track type/file format with no relationship
   to anything currently emitted. Large lift, new mechanism end-to-end.
@@ -109,21 +105,71 @@ still real gaps for this project, since none of them are in the schema.
 All confirmed against `melt -query filter=`/`producer=` on this machine's
 melt 7.32.0, not assumed.
 
-- **Video stabilization**: `vidstab`/`deshake` filters present — what
-  kdenlive's own "Stabilize" effect uses. Absent from this project.
+- **Video stabilization**: `vidstab` (full two-pass stabilizer, needs an
+  analysis pass that writes a `.trf` results file before a second render
+  pass applies it — a mechanism this project doesn't have, every filter
+  shipped so far is single-pass static XML) and `deshake` (single-pass
+  version of the same algorithm, same author, no results file) both
+  confirmed present. `deshake` was a live headline candidate for v0.9
+  (lost to `lift_gamma_gain` mainly because it still needed a real-render
+  verification pass to confirm it actually smooths motion, not because
+  of any known blocker) — worth revisiting first for a future
+  "stabilization" cycle, `vidstab` only if the two-pass workflow question
+  gets solved.
 - **Motion tracking**: `opencv.tracker` present, credited to kdenlive's
   own lead developer (`jb@kdenlive.org`) — this *is* kdenlive's tracker
-  effect. Absent from this project.
-- **LUT-based color grading**: `avfilter.lut3d`/`avfilter.lut1d`
-  confirmed present — DaVinci-style `.cube` LUT application, distinct
-  from (and a smaller lift than) the generic `lift_gamma_gain` grading
-  filter already listed above under "Capabilities not yet touched at
-  all."
+  effect. Also two-pass (analysis + apply, same shape as `vidstab`).
+  Absent from this project.
+- **LUT-based color grading — investigated and dropped (v0.9)**:
+  `avfilter.lut3d` hits the same "Cannot set src colorspace" bug
+  `avfilter.chromakey`/`avfilter.rgbashift` did (see ROADMAP.md's v0.5
+  and v0.9 entries) on this project's preferred from-source dev melt
+  build - confirmed by real render (identity and inverting `.cube` LUTs
+  both produced pixel-identical output to unfiltered), works correctly
+  on the system's stable melt. No native substitute exists this time:
+  `rgblut` is a per-channel 1D lookup table, not a real 3D cube LUT, so
+  it can't stand in the way `frei0r.bluescreen0r` stood in for
+  `chroma_key`. Worth revisiting once a newer stable MLT release is
+  available (same category as `crop`'s original segfault and the
+  sub-1.0 `speed:` bug above). `lift_gamma_gain`-based grading shipped
+  in v0.9 instead - see ROADMAP.md.
 - **Audio ducking/compression/gate**: `avfilter.acompressor`/
   `avfilter.agate` confirmed present, plus a `sox.*` family
-  (`sox.compand`, `sox.noisered` for noise reduction) — sidechain-style
-  ducking (a Premiere/Resolve staple) is buildable from `acompressor`,
-  not currently in the schema.
+  (`sox.compand`, `sox.noisered` for noise reduction). Plain single-track
+  dynamics compression is buildable directly from `acompressor` today,
+  but *real* ducking (a Premiere/Resolve staple - music level reacting
+  to a voice track's level) needs a cross-track relationship (one
+  track's audio driving another's gain) this schema has no precedent
+  for yet - closer to new design work than a single-filter quick win,
+  which is why it lost to `lift_gamma_gain` as a v0.9 headline
+  candidate.
+- **`mask_apply`/`mask_start` — investigated (v0.9), mechanism real but
+  schema design not converged**: MLT's own masking pair (Meltytech,
+  LGPLv2.1) - `mask_start` snapshots the frame, one or more filters in
+  between write to the alpha channel, `mask_apply` composites the
+  current frame over the snapshot through a transition using that alpha
+  as the mask. Confirmed present via `melt -query filter=mask_start`/
+  `mask_apply`, and confirmed **real and safe on both melt builds** (no
+  `crop`-style crash) via a standalone probe: `mask_start`
+  (`frei0r.alphaspot`) -> `lift_gamma_gain` -> `mask_apply`
+  (`frei0r.composition`), pixel-sampled center vs. corner. kdenlive's
+  own "Alpha shapes (Mask)" effect is exactly this pairing with
+  `frei0r.alphaspot` as the shape filter - the same filter this project
+  already drives for `reveal: iris`. Two open problems block shipping
+  it as-is: (1) the alphaspot shape marks the *protected* zone, not a
+  "spotlight" - the encapsulated filter's effect shows *outside* the
+  shape, the inverse of the naive mental model (tried flipping via
+  `Min`/`Max`, no effect - not a simple range flip); (2) MLT's real
+  capability is generic ("bracket *any* filter(s) between mask_start/
+  mask_apply, masked by any alpha-writing filter"), but this schema has
+  no existing precedent for "wrap an arbitrary sub-filter in a masked
+  region" - every filter field today is flat and single-purpose.
+  Hardcoding one narrow slice (e.g. only ever masking `lift_gamma_gain`)
+  would preempt a real design decision. Needs its own dedicated scoping
+  round on what the masked/protected framing should actually expose in
+  the schema (e.g. "apply `color_grade`/`old_film` only outside a rect"
+  as a generalization now that `color_grade` exists) before it's
+  implementation-ready.
 - **Frame-blend speed interpolation confirmed absent**: `avfilter.
   minterpolate` (true optical-flow retiming, what DaVinci/Premiere use
   for smooth slow-motion) is **not present** in this machine's compiled

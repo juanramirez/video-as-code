@@ -983,7 +983,7 @@ Two quick wins alongside it, both implemented:
   are genuine spatial wipes, not instant cuts
   (`tests/test_melt_validation.py::test_scenes_wipe_heart_and_bowtie_produce_real_spatial_wipes`).
 
-## v0.9 — scoped (2026-08-17)
+## v0.9 — shipped (2026-08-17)
 
 Headline: professional color grading via MLT's own `lift_gamma_gain`
 filter (Meltytech, LGPLv2.1 - "lift=shadows, gamma=midtones,
@@ -994,40 +994,73 @@ nine independent float parameters, `lift_r`/`lift_g`/`lift_b` (default
 `gain_b` (default 1.0) - a neutral/no-op filter at its defaults, single
 pass, no external file, no new mechanism (same "one filter, plain
 numeric parameters" shape `focus_rect:`/`chroma_key:` already
-established). New `color_grade:` field on `timeline.tracks[].clips[]`:
+established), and - unlike the quick win below - a native MLT filter,
+not avfilter-bridged, so none of the colorspace risk that's bitten
+`chroma_key`/`glitch` before.
+
+**Implemented.** New `color_grade:` field on `timeline.tracks[].clips[]`:
 a dict with up to three optional `[r, g, b]` triples -
 `{lift: [r,g,b], gamma: [r,g,b], gain: [r,g,b]}` - any subset, each
-omitted group falls back to MLT's own neutral default for that group.
+omitted group falls back to MLT's own neutral default for that group;
+an empty dict, wrong-shaped triples, or negative values are all
+rejected at validation time rather than silently passed through to
+melt. Verified by real render against the generator's own output: a
+neutral gray source with `gain: [2.0, 1.0, 1.0]` measured a red
+channel boosted from ~128 to past 158 (>30 delta), green/blue
+essentially unchanged - a real, targeted, per-channel effect, not a
+global brightness bump
+(`tests/test_melt_validation.py::test_color_grade_produces_a_real_render_shift`).
+Recognized on import: values are plain user-facing numbers (any value
+round-trips, same bar `chroma_key`/`focus_rect` hold to), reconstructing
+only the groups that differ from MLT's own neutral default.
+
 Chosen over `deshake` (video stabilization) and audio ducking
 (`avfilter.acompressor`) after a closer look: `deshake` still needed a
 real-render verification pass before committing to headline status,
 and true ducking (one track's level reacting to another's) would need
 a cross-track relationship this schema doesn't have yet - closer to
 new design work than a "quick win," so neither was ready to commit to
-this cycle without more groundwork.
+this cycle without more groundwork. Both stay in BACKLOG.md.
 
-Quick win alongside it: **LUT-based grading** (`avfilter.lut3d`,
-FFmpeg/libavfilter) - applies a `.cube` 3D LUT file to a clip, the
-DaVinci-standard interchange format. Confirmed present via `melt
--query filter=avfilter.lut3d`. New `lut:` field on
-`timeline.tracks[].clips[]`: a path to a `.cube` file, validated to
-exist on disk at build time (same bar bin clip `path:` already holds
-to). Deliberately minimal for v0.9: only the file path is exposed,
-not `av.interp`'s interpolation-mode choice (nearest/trilinear/
-tetrahedral/pyramid/prism) - same narrow-first-cut call `old_film:`'s
-toggle-only v0.8 scope made.
+**Quick win — investigated and dropped**: LUT-based grading
+(`avfilter.lut3d`, FFmpeg/libavfilter) - applying a `.cube` 3D LUT file
+to a clip, the DaVinci-standard interchange format. Confirmed present
+via `melt -query filter=avfilter.lut3d`, but hit the exact same
+"Cannot set src colorspace" bug `avfilter.chromakey`/`avfilter.
+rgbashift` already ran into (see v0.5's `chroma_key`/`glitch` entries)
+on this project's preferred from-source dev melt build - confirmed by real
+render, not just the warning: an identity `.cube` LUT and an inverting
+one both produced pixel-identical output to an unfiltered render.
+Cross-checked against the system's stable melt (7.32.0), where it
+works correctly (the inverting LUT genuinely flipped red to cyan) - so
+this is build-specific like `crop`'s original segfault, but **unlike
+`crop`, no workaround was found**: the only native (non-avfilter)
+alternative, `rgblut`, is a per-channel 1D lookup table, not a real 3D
+cube LUT, so it can't stand in for real `.cube` file support the way
+`frei0r.bluescreen0r` stood in for `chroma_key`. Not shipped - no
+`lut:` field exists.
 
 **Also scoped, research-first** (same discipline `pillar_echo`/`dance`/
-`freeze-frame` got - verify before implementing, may end up dropped
-like `dance` or `deshake` above rather than shipped): MLT's
-`mask_apply`/`mask_start` pair (Meltytech, LGPLv2.1) - real
-masking/rotoscoping, a two-filter "snapshot, then composite via a
-transition" mechanism (structurally similar in shape to `crop`'s own
-two-filter pattern, though a different mechanism under the hood).
-Confirmed present via `melt -query filter=mask_start`/`mask_apply`,
-but what actually *drives* the mask shape (a luma image? a filter
-like `frei0r.alphaspot`? a static rect?) hasn't been worked out yet -
-real design uncertainty, not just an unverified render, so this is
-scoped as "investigate and design, then implement if it converges on
-something this schema can cleanly represent" rather than a committed
-feature.
+`freeze-frame` got): MLT's `mask_apply`/`mask_start` pair (Meltytech,
+LGPLv2.1) - real masking/rotoscoping, a "snapshot, then composite via
+a transition" bracket around one or more masking filters. **Mechanism
+confirmed real and safe on both melt builds** (no `crop`-style crash),
+via a standalone probe (gray source -> `mask_start`(`frei0r.alphaspot`)
+-> `lift_gamma_gain` -> `mask_apply`(`frei0r.composition`), pixel-
+sampled center vs. corner): kdenlive's own "Alpha shapes (Mask)" effect
+is exactly this pairing with `frei0r.alphaspot` as the shape - the same
+filter this project already drives for `reveal: iris`
+(`_add_reveal_style_filter`/`_match_reveal_filter`). **But the schema
+design doesn't converge yet**: the alphaspot shape marks the
+*protected* zone, not the "spotlight" - the encapsulated filter's
+effect shows *outside* the shape, the inverse of the naive mental
+model (tried flipping via `Min`/`Max`, no effect - not a simple range
+flip). More fundamentally, MLT's actual capability is generic ("bracket
+*any* filter(s), masked by *any* alpha-writing filter"), and this
+schema has no existing precedent for "wrap an arbitrary sub-filter in a
+masked region" - every filter field today is a flat, single-purpose
+property. Committing to one narrow slice (e.g. hardcoding
+`lift_gamma_gain` as the only maskable filter) would preempt a real
+design decision rather than resolve one. Moved to BACKLOG.md with the
+full finding intact, for its own dedicated scoping round rather than
+folded into this cycle.
