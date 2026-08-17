@@ -734,6 +734,44 @@ timeline:
     ]
 
 
+def test_round_trip_preserves_crop(tmp_path: Path, assets_dir: Path):
+    """`crop:` (v0.7, MLT's own `crop` filter via the two-instance
+    workaround - see `_add_crop_filters`'s docstring in xmlgen.py)
+    round-trips through a real generated .kdenlive: `_match_crop_filters`
+    recognizes the passive+active filter pair it itself produces and
+    reconstructs the same top/right/bottom/left dict, while the qtblend
+    refill filter behind it stays silently recognized as the ordinary
+    full-canvas default (crop is mutually exclusive with position/size,
+    so it always is)."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: photo
+          start: 0
+          duration: 2.0
+          crop: {{top: 10, right: 20, bottom: 0, left: 5}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    result = reverse.import_kdenlive(kdenlive_path)
+
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["crop"] == {"top": 10.0, "right": 20.0, "bottom": 0.0, "left": 5.0}
+
+
 def test_round_trip_preserves_negative_speed(tmp_path: Path, assets_dir: Path):
     """Reverse playback (`speed:` negative, new this cycle) round-trips
     through a real generated .kdenlive the same way forward speed does -

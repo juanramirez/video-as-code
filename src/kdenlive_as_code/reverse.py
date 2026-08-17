@@ -596,6 +596,41 @@ class Importer:
         self.raw_items.append(RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service or "?", kid=kid or "?"), _pretty(filter_el)))
         return {}
 
+    def _match_crop_filters(
+        self, filters: list[ET.Element]
+    ) -> Optional[tuple[tuple[float, float, float, float], list[ET.Element]]]:
+        """Recognizes the two-filter `crop` pattern `_add_crop_filters`
+        itself writes (see its docstring in xmlgen.py for why two chained
+        instances are needed): a passive `crop` filter (computes `crop.*`
+        frame properties, `active` unset/0) immediately followed by an
+        active one (`active=1`, does the pixel crop). Only matches the
+        exact leading pair - not just any two `crop` filters found
+        anywhere - since a hand-built project could plausibly use `crop`
+        differently. The qtblend refill filter that follows doesn't need
+        matching here: it's always the full-canvas default (crop is
+        mutually exclusive with position/size), which the existing
+        qtblend branch below already recognizes as a no-op and drops
+        silently."""
+        if len(filters) < 2:
+            return None
+        passive, active = filters[0], filters[1]
+        passive_props = _props(passive)
+        active_props = _props(active)
+        if passive_props.get("mlt_service") != "crop" or active_props.get("mlt_service") != "crop":
+            return None
+        if passive_props.get("active", "0") != "0" or active_props.get("active") != "1":
+            return None
+        try:
+            top = float(passive_props.get("top", 0))
+            right = float(passive_props.get("right", 0))
+            bottom = float(passive_props.get("bottom", 0))
+            left = float(passive_props.get("left", 0))
+        except ValueError:
+            return None
+        if min(top, right, bottom, left) < 0:
+            return None
+        return (round(top, 3), round(right, 3), round(bottom, 3), round(left, 3)), filters[2:]
+
     def convert_playlist(self, playlist: ET.Element, kind: str, ctx: str) -> list[dict]:
         clips = []
         cursor = 0
@@ -675,7 +710,13 @@ class Importer:
                 if props.get("warp_pitch") not in (None, "0"):
                     placement["preserve_pitch"] = True
 
-            for filt in child.findall("filter"):
+            filters = child.findall("filter")
+            crop_match = self._match_crop_filters(filters)
+            if crop_match is not None:
+                (top, right, bottom, left), filters = crop_match
+                placement["crop"] = {"top": top, "right": right, "bottom": bottom, "left": left}
+
+            for filt in filters:
                 placement.update(self.convert_clip_filter(filt, in_frame, out_frame, entry_ctx))
 
             clips.append(placement)

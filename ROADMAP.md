@@ -701,13 +701,16 @@ motion tracking, LUT-based grading (`avfilter.lut3d`), audio ducking
 theme, together with whichever of `pillar_echo`/`dance` doesn't ship
 here).
 
-## v0.7 — scoped (2026-08-16)
+## v0.7 — shipped (2026-08-17)
 
 Headline: speed ramps, a genuinely blocked feature finally unblocked
 this session - deferred at both the v0.6 and (implicitly) earlier
 scoping rounds as "needs one more verification pass," which this round
 delivered. Two quick wins alongside it, both small, well-understood
-lifts from BACKLOG.md.
+lifts from BACKLOG.md, plus `source_in:`/`source_out:` added mid-cycle.
+`Freeze-frame / hold`, the third originally-scoped quick win, wasn't
+reached this cycle - moved back to BACKLOG.md rather than held open,
+since `crop`'s workaround made this a natural closing point.
 
 - **Speed ramps (`timeremap`)** — headline, **implemented**. MLT's
   `timeremap` **link** (not a plain producer property like `timewarp`)
@@ -775,32 +778,58 @@ lifts from BACKLOG.md.
   would otherwise have silently come back as an ordinary unramped one
   on re-import instead of being flagged
   (`tests/test_reverse.py::test_speed_ramp_falls_to_raw_items_instead_of_silently_lost`).
-- **Crop — investigated and dropped**, a different kind of failure than
-  any other drop this project has made: the mechanism itself is real
-  and correct (MLT's own `crop` filter, matching kdenlive's own "Edge
-  Crop" effect exactly), but it needs **two** filter instances on the
-  same clip - one with `left`/`right`/`top`/`bottom` and `active`
-  left at its default `0` (this one only *computes* the crop and
-  stores it as `crop.left`/`crop.right`/`crop.top`/`crop.bottom`
-  properties on the frame - confirmed by reading MLT's own filter
-  source, `~/dev/mlt/src/modules/core/filter_crop.c`, after a
-  single-instance `active=1` attempt produced a real render with zero
-  measurable difference from an uncropped baseline), and a second
-  bare instance with only `active: 1` (which reads those frame
-  properties and performs the actual pixel crop - unscaled, top/left
-  anchored, matching what MLT's own filter documentation implies).
+- **Crop — implemented, with a workaround** for a real bug in this
+  project's own preferred test build. The mechanism is MLT's own `crop`
+  filter, matching kdenlive's "Edge Crop" effect exactly, and (as first
+  found) needs **two** filter instances on the same clip: one with
+  `left`/`right`/`top`/`bottom` and `active` left at its default `0`
+  (this one only *computes* the crop and stores it as
+  `crop.left`/`crop.right`/`crop.top`/`crop.bottom` properties on the
+  frame - confirmed by reading MLT's own filter source,
+  `~/dev/mlt/src/modules/core/filter_crop.c`, after a single-instance
+  `active=1` attempt produced a real render with zero measurable
+  difference from an uncropped baseline), and a second bare instance
+  with only `active: 1` (which reads those frame properties and
+  performs the actual pixel crop - unscaled, top/left anchored).
   Verified working with that two-filter shape on the system's stable
   `melt` (7.32.0: a cyan test frame cropped top+bottom cleanly, exact
-  pixel count, no scaling). **But it reliably segfaults** (exit 139,
-  reproduced with vertical-only and horizontal-only margins
-  separately) **on the from-source `melt` build (7.41.0-dev) this
-  project's own test suite prefers by default** for real `qtblend`
-  compositing support (`tests/conftest.py`'s `melt` fixture) - a real,
-  practical blocker for verifying this project's own output, not a
-  theoretical concern. Dropped for this cycle rather than shipped
-  unverifiable against the build actually used to verify everything
-  else; worth revisiting once a newer stable MLT release is available
-  to check whether the regression has already been fixed upstream.
+  pixel count, no scaling). That two-filter shape alone **reliably
+  segfaults** (exit 139, reproduced with vertical-only and
+  horizontal-only margins separately) **on the from-source `melt`
+  build (7.41.0-dev) this project's own test suite prefers by default**
+  for real `qtblend` compositing support (`tests/conftest.py`'s `melt`
+  fixture) - a real, practical blocker for verifying this project's own
+  output, not a theoretical concern. Root-caused with `gdb -batch -ex
+  run -ex "bt full"`: the crash is inside `libswscale.so.7`'s
+  `sws_scale()`, called from the AVFORMAT CONSUMER, not from the crop
+  filter itself - it's the encoder choking on a post-crop frame that's
+  no longer the project's profile size, not a bug in `crop`'s own logic.
+
+  **The fix**: after the two crop filters, add the same `qtblend`
+  "refill to canvas" filter every video track already gets by default
+  (rect covering the full frame) - this forces the frame back to full
+  profile size before the AVFORMAT CONSUMER ever sees it, sidestepping
+  the `libswscale` crash entirely while also being the natural way to
+  express crop's "then scale back up to fill" behavior a user actually
+  wants (an unscaled crop alone would leave black bars). Verified
+  against the generator's own shipped output (not just the standalone
+  probe that found the workaround): a checkerboard test pattern cropped
+  60px off the top of a 240px canvas and rescaled back to fill it shows
+  its vertical period stretched by the predicted 240/180 = 1.333x
+  factor, measured as fewer black/white transitions along a vertical
+  scanline than an uncropped baseline
+  (`tests/test_melt_validation.py::test_crop_produces_a_real_crop_and_fill`).
+  New `crop:` field on `timeline.tracks[].clips[]` (a
+  `{top, right, bottom, left}` dict, pixels, mutually exclusive with
+  `position:`/`size:`/`position_keyframes:` since the refill pass
+  always targets the full canvas). The full reasoning - both for the
+  two-instance mechanism and for the refill-based workaround - lives as
+  a code comment on `xmlgen.py`'s `_add_crop_filters`, per the "explain
+  why this and not the 'normal' method" bar. Recognized on import too:
+  `reverse.py`'s `_match_crop_filters` looks for the exact
+  passive-then-active filter pair this generator itself writes and
+  reconstructs the same `{top, right, bottom, left}` dict
+  (`tests/test_reverse.py::test_round_trip_preserves_crop`).
 - **Animated/keyframed picture-in-picture position** — quick win,
   **implemented**. `ClipPlacementSpec.position`/`size` and the
   `qtblend` `rect` property were already plumbed, but only as one
@@ -857,14 +886,11 @@ lifts from BACKLOG.md.
   caught because every existing `speed:` test only ever checked
   rendered *duration*, never *content*, for the sub-1.0 video case -
   see BACKLOG.md.
-- **Freeze-frame / hold** — quick win, **needs verification before
-  implementation** (same discipline `pillar_echo`/`dance` got in
-  v0.6 - confirmed present, not yet rendered). MLT ships a `freeze`
-  filter and a `hold` producer (`type: producer`, `title: Still`), both
-  already used by kdenlive's own "Freeze" effect
-  (`melt -query filter=freeze` / `-query producer=hold` to confirm
-  again at implementation time, and a real render to confirm the
-  frozen frame actually holds rather than continuing to play).
+**`Freeze-frame / hold` was scoped alongside these two but not reached
+this cycle** - moved back to BACKLOG.md rather than held open (MLT's
+`freeze` filter and `hold` producer are confirmed present via `melt
+-query`, but no real render has confirmed the frozen frame actually
+holds).
 
 **Verified and ready to scope next, found via backlog research this
 cycle (not yet assigned to a version)**: an "old film" look family -

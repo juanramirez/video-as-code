@@ -45,10 +45,14 @@ clips, guides/markers, track names/hidden/locked/audio-muted state, bin
 folders, project notes, cross-track `wipe`/`affine` transitions (into a
 low-level `transitions:` key), `iris`/`flip`/`glitch`/`delaygrab`/
 `cairogradient` reveal/burst filters, chroma-key, burned-in text
-overlays, Ken Burns pan+zoom, focus-pull rects, simple `qtblend`
-picture-in-picture compositing). Anything it doesn't recognize isn't
+overlays, Ken Burns pan+zoom, focus-pull rects, `qtblend`
+picture-in-picture compositing (static or animated via
+`position_keyframes:`), edge crop). Anything it doesn't recognize isn't
 discarded: it's kept as-is under `x_kdenlive_raw:` in the output YAML
-so you can decide by hand what to do with it.
+so you can decide by hand what to do with it. Speed ramps
+(`speed_ramp:`) are a known exception — a dense per-frame keyframe map
+can't be cleanly inverted back to its original breakpoints, so those
+fall to `x_kdenlive_raw:` too, deliberately.
 
 See `examples/simple/` for a minimal working project (tiny generated
 assets, one audio + one video track, fades, trims, a speed change, mute,
@@ -103,7 +107,7 @@ affects what a `kdenlive-as-code` *user* sees at runtime.
 
 ## Current status
 
-Verified by the test suite (`pytest`, 121 tests, all passing):
+Verified by the test suite (`pytest`, 144 tests, all passing):
 
 - **YAML schema and validation** (`schema.py`): checks shape, types, that
   referenced assets exist on disk, that each clip's `in`/`out`/`duration`
@@ -114,11 +118,14 @@ Verified by the test suite (`pytest`, 121 tests, all passing):
   kdenlive 24-26.x produces on save (per-track tractors, dual playlist for
   kdenlive's "mix" feature, project bin, fade to/from black on video,
   volume fades on audio, per-clip mute, audio pan/balance, speed changes
-  (timewarp, forward or reverse), dissolve/luma-wipe/affine (zoom, slide)/
-  iris/flip/glitch/delaygrab/cairogradient transitions, chroma-key
-  compositing, burned-in text overlays, Ken Burns pan+zoom, focus-pull
-  (blur outside a rect), title clips (`titles.py`), guides/markers, bin
-  folders, track name/hidden/locked/audio-muted state, project notes,
+  (timewarp, forward or reverse, and multi-segment speed ramps via
+  `timeremap`), source-seconds trimming (`source_in:`/`source_out:`),
+  dissolve/luma-wipe/affine (zoom, slide)/iris/flip/glitch/delaygrab/
+  cairogradient transitions, chroma-key compositing, burned-in text
+  overlays, Ken Burns pan+zoom, focus-pull (blur outside a rect),
+  static or animated picture-in-picture (`qtblend`), edge crop, title
+  clips (`titles.py`), guides/markers, bin folders,
+  track name/hidden/locked/audio-muted state, project notes,
   default `qtblend` filter). Deterministic output
   (IDs derived via `ids.py`, no hashes/thumbnails, which kdenlive
   recomputes on open anyway).

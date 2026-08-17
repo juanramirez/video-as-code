@@ -222,6 +222,64 @@ def _add_speed_ramp_link(
     _prop(link_el, "image_mode", image_mode)
 
 
+def _add_crop_filters(ids: _IdCounters, entry: ET.Element, crop: tuple[float, float, float, float]) -> None:
+    """Edge crop via MLT's own `crop` filter, matching kdenlive's own
+    "Edge Crop" effect exactly (`~/dev/kdenlive/data/effects/crop.xml`) -
+    but deliberately NOT the "obvious" single-filter shape, for two
+    reasons both confirmed empirically rather than assumed:
+
+    1. `crop` genuinely needs **two** filter instances on the same clip:
+       one with `top`/`right`/`bottom`/`left` and `active` left at its
+       default `0` (this one only *computes* the crop and stores it as
+       `crop.top`/`crop.right`/`crop.bottom`/`crop.left`/
+       `crop.original_width`/`crop.original_height` properties on the
+       FRAME, not the filter - confirmed by reading MLT's own filter
+       source, `~/dev/mlt/src/modules/core/filter_crop.c`), and a second,
+       bare instance with only `active: 1` (which reads those frame
+       properties back and performs the actual pixel crop). A single
+       `active: 1` instance alone produces zero measurable effect - it
+       reads `crop.*` off the frame, which nothing has set yet, so every
+       margin evaluates to 0. Setting `crop.*` directly as plain
+       properties on the chain/entry instead of via the passive filter
+       does NOT work either (frame properties don't inherit arbitrary
+       custom producer properties) - checked directly, not assumed.
+
+    2. Cropping shrinks the frame's own reported dimensions (e.g. a
+       320x240 clip cropped by 30px top+bottom becomes 320x180
+       internally) - encoding that non-profile-sized frame directly
+       reliably **segfaults** the from-source `melt` build
+       (7.41.0-dev) this project's test suite prefers, in the AVFORMAT
+       CONSUMER's own `libswscale` (confirmed with `gdb`: the crash is
+       in `sws_scale`, not in the crop filter itself - a real
+       environment/library issue, not a bug in this project's own
+       output). A `qtblend` pass immediately after crop, rescaling the
+       cropped remainder back to fill the whole canvas, avoids ever
+       handing that consumer a non-profile-sized frame - this project's
+       existing per-track `qtblend` default filter *is* that pass
+       (emitted right after this function returns), so no extra filter
+       is added here beyond the two crop instances themselves.
+
+       This means the *visible* result is "crop and zoom to fill,"
+       not kdenlive's own unscaled "crop and letterbox" - confirmed
+       correct and stable via real render on both the from-source dev
+       build and the system's stable `melt` (7.32.0): a checkerboard's
+       vertical square period visibly grows after a top+bottom crop
+       (cropped-then-rescaled), not just clipped - see
+       `tests/test_melt_validation.py::test_crop_produces_a_real_crop_and_fill`."""
+    top, right, bottom, left = crop
+    passive = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(passive, "mlt_service", "crop")
+    _prop(passive, "top", f"{top:g}")
+    _prop(passive, "right", f"{right:g}")
+    _prop(passive, "bottom", f"{bottom:g}")
+    _prop(passive, "left", f"{left:g}")
+    _prop(passive, "kdenlive:collapsed", 0)
+    active = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(active, "mlt_service", "crop")
+    _prop(active, "active", 1)
+    _prop(active, "kdenlive:collapsed", 0)
+
+
 def _add_video_default_filter(
     ids: _IdCounters,
     entry: ET.Element,
@@ -633,6 +691,8 @@ def _build_track(
                 _add_reveal_style_filter(ids, entry, placement)
             else:
                 _add_video_fade_filters(ids, entry, placement)
+            if placement.crop is not None:
+                _add_crop_filters(ids, entry, placement.crop)
             _add_video_default_filter(
                 ids, entry, project.width, project.height, placement.rect, placement.position_keyframes
             )

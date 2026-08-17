@@ -41,9 +41,11 @@ code itself already marks the boundary.
   ever checked rendered *duration*, never *content*, for the video
   case - duration alone doesn't distinguish "stretched correctly" from
   "played once, then frozen for the same total length." Worth
-  revisiting once a newer stable MLT release is available (same
-  category of finding as `crop`'s segfault on this build), and
-  possibly worth adding a content-checking test for the existing
+  revisiting once a newer stable MLT release is available (`crop` hit
+  a similarly build-specific issue on this same build - see the
+  ROADMAP's v0.7 entry - but that one had a working rescale-based
+  workaround; no equivalent workaround has been found for this one),
+  and possibly worth adding a content-checking test for the existing
   `speed:` feature itself, not just new features that happen to
   exercise it.
 
@@ -64,6 +66,13 @@ plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
   `enableproxy=0`/`generateproxy=0`. Real support means generating actual
   proxy media files, not just flipping a flag — out of proportion with
   the rest of the schema's "just emit static XML" scope.
+- **Freeze-frame / hold**: scoped as a v0.7 quick win alongside crop and
+  animated PiP, but not reached this cycle. MLT ships a `freeze` filter
+  and a `hold` producer (`type: producer`, `title: Still`), both already
+  used by kdenlive's own "Freeze" effect (confirmed present via `melt
+  -query filter=freeze` / `-query producer=hold`) — still needs a real
+  render to confirm the frozen frame actually holds rather than
+  continuing to play before it's implemented.
 
 ## Creative transitions beyond kdenlive's own set
 

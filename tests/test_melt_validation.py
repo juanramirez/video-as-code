@@ -1602,6 +1602,89 @@ timeline:
     )
 
 
+def test_crop_produces_a_real_crop_and_fill(tmp_path: Path, melt):
+    """Empirical check for `crop:` (v0.7): MLT's own `crop` filter needs two
+    chained instances (a passive one that computes crop.* frame properties,
+    an active one that reads them and does the pixel crop - see
+    `_add_crop_filters`'s docstring in xmlgen.py) plus a rescale-to-canvas
+    pass, because the active-only, single-instance approach segfaults
+    `libswscale` on this project's preferred from-source melt build (root-
+    caused with gdb, also documented in `_add_crop_filters`). This test
+    proves the *shipped* generator output does a real crop-then-rescale,
+    not just "doesn't crash": a fine checkerboard pattern, cropped 60px off
+    the top of a 240px-tall canvas and rescaled back to fill it, should
+    show its vertical period stretched by the predicted 240/180 = 1.333x
+    factor (8px source period -> ~10.7px on screen), which shows up as
+    measurably *fewer* black/white transitions along a vertical scanline
+    than the uncropped baseline."""
+    checker = tmp_path / "checker.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "color=c=black:size=320x240",
+            "-vf", "geq=lum='if(mod(floor(X/8)+floor(Y/8)\\,2)\\,255\\,0)':cb=128:cr=128",
+            "-frames:v", "1", str(checker),
+        ],
+        check=True,
+    )
+
+    def build_and_render(name: str, crop_yaml: str) -> Path:
+        yaml_path = tmp_path / f"{name}.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: checker
+    path: {checker}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: checker
+          start: 0
+          duration: 1
+{crop_yaml}
+""",
+            encoding="utf-8",
+        )
+        resolved = load_and_resolve(yaml_path)
+        kdenlive_path = tmp_path / f"{name}.kdenlive"
+        xmlgen.write(resolved, kdenlive_path)
+        rendered = tmp_path / f"{name}.mp4"
+        result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+        _assert_no_fatal_load_error(result)
+        assert rendered.exists() and rendered.stat().st_size > 0
+        return rendered
+
+    def count_vertical_transitions(rendered: Path, x: int, t: float) -> int:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(t), "-i", str(rendered), "-frames:v", "1",
+             "-vf", f"crop=2:240:{x}:0", "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+            capture_output=True, timeout=30, check=True,
+        )
+        data = result.stdout[::2]  # one column's worth (crop width must be even for yuv420p chroma)
+        transitions = 0
+        for prev, cur in zip(data, data[1:]):
+            if (prev < 128) != (cur < 128):
+                transitions += 1
+        return transitions
+
+    baseline = build_and_render("baseline", "")
+    cropped = build_and_render("cropped", "          crop: {top: 60}")
+
+    baseline_transitions = count_vertical_transitions(baseline, 160, 0.04)
+    cropped_transitions = count_vertical_transitions(cropped, 160, 0.04)
+
+    # Baseline: 240px / 8px period ~= 30 transitions. Cropped+rescaled:
+    # 180 source rows stretched to fill 240 -> ~10.7px period -> ~22-23
+    # transitions. A generous band (well short of baseline) confirms the
+    # stretch happened without pinning to the exact melt-build rounding.
+    assert cropped_transitions < baseline_transitions - 3, (
+        f"expected crop+rescale to visibly widen the checkerboard period, "
+        f"got baseline={baseline_transitions} cropped={cropped_transitions}"
+    )
+
+
 def test_source_in_out_combines_correctly_with_speed(tmp_path: Path, melt):
     """Empirical check for `source_in:`/`source_out:` (v0.7): unlike
     `in:`/`out:` (relative to the already-warped timeline when `speed:`

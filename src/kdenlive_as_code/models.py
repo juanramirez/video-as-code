@@ -91,6 +91,16 @@ class ClipPlacementSpec:
     # h), ...]`, pixels (same convention as static position:/size:, not
     # Ken Burns' percentages), sorted, first at 0.
     position_keyframes: Optional[list[tuple[float, float, float, float, float]]] = None
+    # Edge crop (MLT's own `crop` filter, matching kdenlive's own "Edge
+    # Crop" effect) - (top, right, bottom, left) pixel margins trimmed
+    # from the *source*, then rescaled back to fill the whole canvas
+    # (see xmlgen.py's _add_crop_filters for why the rescale step is
+    # mandatory here, not optional/cosmetic). Mutually exclusive with
+    # position:/size:/position_keyframes: (the rescale step *is* this
+    # clip's own qtblend positioning - combining it with custom PiP
+    # placement would need deciding which one "wins" the canvas, not
+    # attempted this round).
+    crop: Optional[tuple[float, float, float, float]] = None
     reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" | "delaygrab" | "cairogradient" - see ResolvedPlacement
     chroma_key: Optional[str] = None  # color to key out (e.g. "#00ff00"), None = no chroma-key
     chroma_key_distance: float = 0.35  # frei0r.bluescreen0r "Distance" - only used when chroma_key is set
@@ -233,6 +243,8 @@ class ResolvedPlacement:
     rect: Optional[tuple[float, float, float, float]] = None  # x y w h in pixels
     # Animated PiP - see ClipPlacementSpec. `[(at_frame, x, y, w, h), ...]`.
     position_keyframes: Optional[list[tuple[int, float, float, float, float]]] = None
+    # Edge crop - see ClipPlacementSpec. (top, right, bottom, left) pixels.
+    crop: Optional[tuple[float, float, float, float]] = None
     # which filter `fade_in_frames`/`fade_out_frames` should drive instead
     # of the plain brightness alpha fade. "iris" (frei0r.alphaspot) and
     # "flip" (frei0r.3dflippo) are real two-source-*looking* reveals built

@@ -431,6 +431,23 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
             if valid:
                 position_keyframes = parsed_pk
 
+    crop_raw = item.get("crop")
+    crop: tuple[float, float, float, float] | None = None
+    if crop_raw is not None:
+        if position is not None or size is not None or position_keyframes is not None:
+            errors.append(msg("validation.crop_conflicts", ctx=ctx))
+        elif not isinstance(crop_raw, dict):
+            errors.append(msg("validation.crop_invalid", ctx=ctx))
+        else:
+            top = float(crop_raw.get("top", 0))
+            right = float(crop_raw.get("right", 0))
+            bottom = float(crop_raw.get("bottom", 0))
+            left = float(crop_raw.get("left", 0))
+            if top < 0 or right < 0 or bottom < 0 or left < 0:
+                errors.append(msg("validation.crop_negative", ctx=ctx))
+            else:
+                crop = (top, right, bottom, left)
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -449,6 +466,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         position=position,
         size=size,
         position_keyframes=position_keyframes,
+        crop=crop,
         reveal_style=reveal,
         chroma_key=chroma_key,
         chroma_key_distance=chroma_key_distance,
@@ -788,6 +806,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     speed_ramp_image_mode=placement.speed_ramp_image_mode,
                     rect=rect,
                     position_keyframes=position_keyframes_frames,
+                    crop=placement.crop,
                     reveal_style=placement.reveal_style,
                     chroma_key=placement.chroma_key,
                     chroma_key_distance=placement.chroma_key_distance,

@@ -57,6 +57,9 @@ _EN: dict[str, str] = {
         "{ctx}: 'position_keyframes[{idx}]' ([{x:g}, {y:g}] {w:g}x{h:g}) falls outside "
         "the project canvas ({width}x{height})"
     ),
+    "validation.crop_conflicts": "{ctx}: 'crop' cannot be combined with 'position'/'size'/'position_keyframes' - use one or the other",
+    "validation.crop_invalid": "{ctx}: 'crop' must be a mapping with 'top'/'right'/'bottom'/'left'",
+    "validation.crop_negative": "{ctx}: 'crop' margins ('top'/'right'/'bottom'/'left') must not be negative",
     "validation.track_missing_type": "timeline.tracks[{idx}] is invalid (missing 'type'): {item!r}",
     "validation.track_type_invalid": "timeline.tracks[{idx}].type={type!r} must be one of {valid}",
     "validation.pan_on_video_track": "timeline.tracks[{idx}]: 'pan' only applies to audio tracks",
@@ -266,6 +269,9 @@ _ES: dict[str, str] = {
         "{ctx}: 'position_keyframes[{idx}]' ([{x:g}, {y:g}] {w:g}x{h:g}) queda fuera "
         "del lienzo del proyecto ({width}x{height})"
     ),
+    "validation.crop_conflicts": "{ctx}: 'crop' no se puede combinar con 'position'/'size'/'position_keyframes' - usa uno u otro",
+    "validation.crop_invalid": "{ctx}: 'crop' debe ser un mapeo con 'top'/'right'/'bottom'/'left'",
+    "validation.crop_negative": "{ctx}: los márgenes de 'crop' ('top'/'right'/'bottom'/'left') no pueden ser negativos",
     "validation.track_missing_type": "timeline.tracks[{idx}] inválida (falta 'type'): {item!r}",
     "validation.track_type_invalid": "timeline.tracks[{idx}].type={type!r} debe ser uno de {valid}",
     "validation.pan_on_video_track": "timeline.tracks[{idx}]: 'pan' sólo se aplica a pistas de audio",
