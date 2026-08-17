@@ -1065,54 +1065,72 @@ design decision rather than resolve one. Moved to BACKLOG.md with the
 full finding intact, for its own dedicated scoping round rather than
 folded into this cycle.
 
-## v0.10 — scoped (2026-08-17)
+## v0.10 — shipped (2026-08-17)
 
 Headline: video stabilization via MLT's own `deshake` filter (Vid.Stab,
 GPLv2, Georg Martius/Jakub Ksiezniak - the single-pass version of
 `vidstab`, same algorithm, no intermediate `.trf` results file, no
 two-pass build workflow this project doesn't have). Confirmed present
-via `melt -query filter=deshake`: `shakiness`/`accuracy` (detection
-tuning), `stepsize`/`mincontrast` (search internals), `smoothing`
-(temporal lowpass window), `maxshift`/`maxangle` (clamp limits),
-`crop`/`zoom`/`optzoom`/`zoomspeed` (how the stabilized frame fills the
-canvas) - eleven parameters total, `shakiness` default 4 and
-`smoothing` default 15 the two most user-meaningful. New `stabilize:`
-field on `timeline.tracks[].clips[]`: a plain boolean toggle at MLT's
-own defaults, no per-parameter overrides in this first cut - same
-narrow-first-cut call `old_film:`'s toggle-only v0.8 scope made. Chosen
-over `vidstab` (the full two-pass stabilizer) specifically because it
-fits the "one filter, static XML" shape every filter shipped so far
-has had - `vidstab` would need a new build-time mechanism (run melt
-once to analyze, write a results file, then render again) this project
-doesn't have yet. **Needs a real-render verification pass before
-implementation** (does it actually smooth motion, not just avoid
-crashing) - same discipline every filter this project ships holds to.
+with identical parameters on both melt builds - no `crop`/`lut3d`-style
+build-specific issue. Chosen over `vidstab` (the full two-pass
+stabilizer) specifically because it fits the "one filter, static XML"
+shape every filter shipped so far has had.
+
+**Implemented.** New `stabilize:` field on `timeline.tracks[].clips[]`:
+a plain boolean toggle at MLT's own defaults for all eleven parameters
+(`shakiness`/`accuracy`/`stepsize`/`mincontrast`/`smoothing`/
+`maxshift`/`maxangle`/`crop`/`zoom`/`optzoom`/`zoomspeed`) - no
+per-parameter overrides in this first cut, same narrow-first-cut call
+`old_film:`'s toggle-only v0.8 scope made. Verified with a real,
+quantitative motion measurement, not just a visual check: a synthetic
+"shaky handheld camera" source (a static high-contrast square viewed
+through an animated-crop window) rendered through the generator's own
+output, tracking a fixed feature's frame-to-frame centroid movement -
+**mean movement dropped from 18.9px (unstabilized) to 3.7px
+(`stabilize: true`)**, identical results on both the from-source dev
+build and the system's stable one
+(`tests/test_melt_validation.py::test_stabilize_reduces_frame_to_frame_jitter`).
+Recognized on import: any `deshake` filter present means
+`stabilize: true`
+(`tests/test_reverse.py::test_round_trip_preserves_stabilize`).
 
 Two quick wins alongside it:
 
-- **`mask_apply`/`mask_start`, second design round** - v0.9 confirmed
-  the mechanism is real and safe on both melt builds (see that
-  version's entry above) but didn't converge on a schema shape: MLT's
-  actual capability is generic ("bracket any filter(s), masked by any
-  alpha-writing filter"), and nothing in this schema wraps an arbitrary
-  sub-filter in a masked region. The angle to explore this time:
-  generalize it as "apply an existing per-clip effect only outside a
-  rect" now that `color_grade:`/`old_film:` exist as real effects worth
-  masking (e.g. grade only the background, leave a subject rect
-  untouched) - a `mask_rect:` field naming which already-declared
-  effect(s) it wraps, rather than a bespoke new effect of its own. If
-  this still doesn't converge on something clean, drop it again and
-  document why, same as last time - not a committed feature yet.
-- **Richer title clips** - `titles.py` is deliberately narrow today:
-  one `QGraphicsTextItem`, one line, one style, no animation (see its
-  own module docstring). BACKLOG.md flags full multi-item support as a
-  large lift (a real schema redesign, title clips would need to become
-  a list of positioned items rather than a flat set of fields) - out of
-  proportion for a quick win. Scoped down instead to the single most
-  commonly needed case: **multi-line text** within the existing single
-  text item (literal newlines in `overlay_text`/title text rendered as
-  multiple lines, still one style/one box) - achievable without
-  redesigning the bin-clip schema. A true second independent text item
-  stays out of scope for this cycle; if multi-line convergence still
-  raises the same design questions BACKLOG.md already flags, drop and
-  document rather than force it.
+- **`mask_apply`/`mask_start`, second design round — investigated
+  further, still not implementation-ready, but the real blocker is now
+  pinpointed.** v0.9 found the alphaspot shape *protects* the marked
+  zone rather than spotlighting it; v0.10 resolved that (`Operation`,
+  `frei0r.alphaspot`'s `filter.9`, controls the polarity - `0` protects
+  the shape, `1` inverts it) and confirmed the bracket composes cleanly
+  with a real shipped effect (`color_grade:`). But a deeper problem
+  surfaced: `mask_start` forwards `filter.*` properties to its internal
+  `frei0r.alphaspot` instance, and passing **any** Position X/Y value
+  through that path collapses the shape to a fixed small patch in the
+  top-left corner, ignoring the requested value - a real MLT property-
+  forwarding bug (`~/dev/mlt/src/modules/core/filter_mask_start.c`),
+  isolated with a dedicated test, not a schema design question anymore.
+  No `mask_rect:` field shipped - without reliable position/size
+  control there's nothing honest to offer. Full finding, including the
+  leading unconfirmed theory (animated-type params may need `"0=value"`
+  keyframe format when forwarded via `mlt_properties_pass`) and the
+  concrete next step for a third round, moved to BACKLOG.md.
+- **Richer title clips, scoped to multi-line text** — **implemented**,
+  and turned out simpler than expected: `titles.py`'s default rendering
+  path (`kdenlivetitle_wrapper.cpp`'s `PlainTextItem::updateText`) was
+  **already splitting on `\n` and laying out real multi-line text
+  natively** via Qt's own `QFontMetrics` - a literal newline in title
+  text reached MLT's renderer unmodified even before this cycle. The
+  only actual bug was `titles.py`'s own text-box size estimate treating
+  the whole string as one line, producing a too-wide box and a
+  vertically off-center block for 2+ lines. Fixed by sizing width from
+  the *longest* line and height as `font_size * (1 + len(lines))`
+  (reduces to the original single-line formula at one line). Verified
+  by real render: a two-line title shows two distinct bright bands with
+  a measurably darker gap between them, not a merged blob
+  (`tests/test_melt_validation.py::test_melt_renders_multiline_title_as_separate_lines`).
+  `\n` survives a full build→import round trip unchanged - no reverse.py
+  changes needed, it already read the raw text node directly
+  (`tests/test_reverse.py::test_round_trip_preserves_multiline_title_text`).
+  True multi-item titles (independently positioned/styled text boxes)
+  stay out of scope, as planned - still a real schema redesign, still
+  in BACKLOG.md.

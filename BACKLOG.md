@@ -9,11 +9,14 @@ it moves to `ROADMAP.md` under that version; it stays here until then.
 Each of these is a documented limitation, not a speculative feature — the
 code itself already marks the boundary.
 
-- **Richer title clips**: `titles.py` deliberately generates one line, one
-  style, no animation, no multiple items. `reverse.py` already recognizes
-  a title clip's *presence* but falls back to `x_kdenlive_raw` for
-  anything richer (multiple items, animation, image/rect items) since
-  there's nothing in the YAML model to represent them.
+- **Richer title clips**: multi-line text shipped in v0.10 (see
+  ROADMAP.md) - `titles.py` still generates one style, no animation, no
+  multiple items. `reverse.py` already recognizes a title clip's
+  *presence* but falls back to `x_kdenlive_raw` for anything richer
+  (multiple independently-positioned items, animation, image/rect
+  items) since there's nothing in the YAML model to represent them -
+  would need title clips to become a list of positioned items rather
+  than a flat set of fields, a real schema redesign, not a quick win.
 - **`kdenlive-as-code reconstruct`: matching through fades**: known limitation,
   documented but not addressed at the root — matching compares against
   each asset's *plain* content, so a segment that's mid-fade (darkened/
@@ -105,17 +108,14 @@ still real gaps for this project, since none of them are in the schema.
 All confirmed against `melt -query filter=`/`producer=` on this machine's
 melt 7.32.0, not assumed.
 
-- **Video stabilization**: `vidstab` (full two-pass stabilizer, needs an
-  analysis pass that writes a `.trf` results file before a second render
-  pass applies it — a mechanism this project doesn't have, every filter
-  shipped so far is single-pass static XML) and `deshake` (single-pass
-  version of the same algorithm, same author, no results file) both
-  confirmed present. `deshake` was a live headline candidate for v0.9
-  (lost to `lift_gamma_gain` mainly because it still needed a real-render
-  verification pass to confirm it actually smooths motion, not because
-  of any known blocker) — worth revisiting first for a future
-  "stabilization" cycle, `vidstab` only if the two-pass workflow question
-  gets solved.
+- **Video stabilization**: `deshake` (single-pass) shipped in v0.10 as
+  `stabilize:` (see ROADMAP.md). `vidstab` (the full two-pass
+  stabilizer - needs an analysis pass that writes a `.trf` results file
+  before a second render pass applies it) is still absent - would need
+  a build-time mechanism this project doesn't have, every filter
+  shipped so far is single-pass static XML. Worth revisiting only if
+  that two-pass workflow question gets solved for something bigger than
+  this one filter.
 - **Motion tracking**: `opencv.tracker` present, credited to kdenlive's
   own lead developer (`jb@kdenlive.org`) — this *is* kdenlive's tracker
   effect. Also two-pass (analysis + apply, same shape as `vidstab`).
@@ -143,33 +143,58 @@ melt 7.32.0, not assumed.
   for yet - closer to new design work than a single-filter quick win,
   which is why it lost to `lift_gamma_gain` as a v0.9 headline
   candidate.
-- **`mask_apply`/`mask_start` — investigated (v0.9), mechanism real but
-  schema design not converged**: MLT's own masking pair (Meltytech,
-  LGPLv2.1) - `mask_start` snapshots the frame, one or more filters in
-  between write to the alpha channel, `mask_apply` composites the
-  current frame over the snapshot through a transition using that alpha
-  as the mask. Confirmed present via `melt -query filter=mask_start`/
-  `mask_apply`, and confirmed **real and safe on both melt builds** (no
-  `crop`-style crash) via a standalone probe: `mask_start`
-  (`frei0r.alphaspot`) -> `lift_gamma_gain` -> `mask_apply`
-  (`frei0r.composition`), pixel-sampled center vs. corner. kdenlive's
-  own "Alpha shapes (Mask)" effect is exactly this pairing with
-  `frei0r.alphaspot` as the shape filter - the same filter this project
-  already drives for `reveal: iris`. Two open problems block shipping
-  it as-is: (1) the alphaspot shape marks the *protected* zone, not a
-  "spotlight" - the encapsulated filter's effect shows *outside* the
-  shape, the inverse of the naive mental model (tried flipping via
-  `Min`/`Max`, no effect - not a simple range flip); (2) MLT's real
-  capability is generic ("bracket *any* filter(s) between mask_start/
-  mask_apply, masked by any alpha-writing filter"), but this schema has
-  no existing precedent for "wrap an arbitrary sub-filter in a masked
-  region" - every filter field today is flat and single-purpose.
-  Hardcoding one narrow slice (e.g. only ever masking `lift_gamma_gain`)
-  would preempt a real design decision. Needs its own dedicated scoping
-  round on what the masked/protected framing should actually expose in
-  the schema (e.g. "apply `color_grade`/`old_film` only outside a rect"
-  as a generalization now that `color_grade` exists) before it's
-  implementation-ready.
+- **`mask_apply`/`mask_start` — investigated twice (v0.9, v0.10), a real
+  MLT bug now pinpointed, not just an unconverged design**: MLT's own
+  masking pair (Meltytech, LGPLv2.1) - `mask_start` snapshots the frame,
+  one or more filters in between write to the alpha channel, `mask_apply`
+  composites the current frame over the snapshot through a transition
+  using that alpha as the mask. kdenlive's own "Alpha shapes (Mask)"
+  effect is exactly this pairing with `frei0r.alphaspot` as the shape
+  filter - the same filter this project already drives for `reveal:
+  iris`.
+
+  **v0.9** confirmed the bracket is real and safe on both melt builds
+  (no `crop`-style crash), and found the alphaspot shape *protects* the
+  marked zone rather than spotlighting it - the encapsulated filter's
+  effect shows *outside* the shape. **v0.10** resolved that: `Operation`
+  (`frei0r.alphaspot`'s `filter.9`) controls the polarity - `0` ("Write
+  on clear", the default) protects the shape and filters everything
+  else, `1` ("Subtract") inverts it. Confirmed with real renders,
+  isolating that one variable. The bracket also composes cleanly with a
+  real shipped effect (`color_grade:`'s own `lift_gamma_gain`), verified
+  through the actual generator's own output, not just a standalone
+  probe.
+
+  **The real blocker, found in v0.10**: `mask_start` forwards its
+  `filter.*` properties to the `frei0r.alphaspot` instance it builds
+  internally via `mlt_properties_pass(instance_props, properties,
+  "filter.")` (`~/dev/mlt/src/modules/core/filter_mask_start.c`), but
+  passing **any** value for `filter.1`/`filter.2` (Position X/Y) through
+  that path - whether using kdenlive's friendly names or the same
+  numeric indices this project already validates for `frei0r.alphaspot`
+  elsewhere (`_add_reveal_style_filter`, `reveal: iris`) - collapses the
+  shape to a small fixed patch in the top-left corner, ignoring the
+  requested value entirely. Isolated with a dedicated test:
+  `filter.1=0.7, filter.2=0.3` (should place the shape top-right)
+  produced the exact same degenerate patch as `filter.1=0.5,
+  filter.2=0.5`. With no overrides (alphaspot's own internal defaults),
+  the shape appears reasonably centered - so the filter itself works;
+  it's specifically property forwarding through `mask_start` that
+  breaks positioning. Ruled out: aspect ratio (tried a square 240x240
+  canvas too, same result) and multi-threaded render non-determinism
+  (tried forcing single-frame renders). Leading unconfirmed theory:
+  `Position X`/`Size X`/etc. are `animated`-type params in frei0r - they
+  may need the `"0=value"` keyframe format even for a constant value
+  when forwarded via `mlt_properties_pass`, unlike when set directly via
+  XML (`_add_reveal_style_filter`'s approach) - not confirmed within
+  reasonable effort this round.
+
+  Without reliable position/size control, a `mask_rect:`-style field
+  still isn't honestly implementable - "mask at alphaspot's fixed
+  default position/size, no control" is too degenerate to ship. A third
+  round should start by diagnosing `mask_start`'s `animated`-property
+  forwarding directly - try passing `filter.1` as `"0=0.7"` instead of
+  `"0.7"` before anything else.
 - **Frame-blend speed interpolation confirmed absent**: `avfilter.
   minterpolate` (true optical-flow retiming, what DaVinci/Premiere use
   for smooth slow-motion) is **not present** in this machine's compiled
