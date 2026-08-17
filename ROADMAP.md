@@ -1064,3 +1064,55 @@ property. Committing to one narrow slice (e.g. hardcoding
 design decision rather than resolve one. Moved to BACKLOG.md with the
 full finding intact, for its own dedicated scoping round rather than
 folded into this cycle.
+
+## v0.10 — scoped (2026-08-17)
+
+Headline: video stabilization via MLT's own `deshake` filter (Vid.Stab,
+GPLv2, Georg Martius/Jakub Ksiezniak - the single-pass version of
+`vidstab`, same algorithm, no intermediate `.trf` results file, no
+two-pass build workflow this project doesn't have). Confirmed present
+via `melt -query filter=deshake`: `shakiness`/`accuracy` (detection
+tuning), `stepsize`/`mincontrast` (search internals), `smoothing`
+(temporal lowpass window), `maxshift`/`maxangle` (clamp limits),
+`crop`/`zoom`/`optzoom`/`zoomspeed` (how the stabilized frame fills the
+canvas) - eleven parameters total, `shakiness` default 4 and
+`smoothing` default 15 the two most user-meaningful. New `stabilize:`
+field on `timeline.tracks[].clips[]`: a plain boolean toggle at MLT's
+own defaults, no per-parameter overrides in this first cut - same
+narrow-first-cut call `old_film:`'s toggle-only v0.8 scope made. Chosen
+over `vidstab` (the full two-pass stabilizer) specifically because it
+fits the "one filter, static XML" shape every filter shipped so far
+has had - `vidstab` would need a new build-time mechanism (run melt
+once to analyze, write a results file, then render again) this project
+doesn't have yet. **Needs a real-render verification pass before
+implementation** (does it actually smooth motion, not just avoid
+crashing) - same discipline every filter this project ships holds to.
+
+Two quick wins alongside it:
+
+- **`mask_apply`/`mask_start`, second design round** - v0.9 confirmed
+  the mechanism is real and safe on both melt builds (see that
+  version's entry above) but didn't converge on a schema shape: MLT's
+  actual capability is generic ("bracket any filter(s), masked by any
+  alpha-writing filter"), and nothing in this schema wraps an arbitrary
+  sub-filter in a masked region. The angle to explore this time:
+  generalize it as "apply an existing per-clip effect only outside a
+  rect" now that `color_grade:`/`old_film:` exist as real effects worth
+  masking (e.g. grade only the background, leave a subject rect
+  untouched) - a `mask_rect:` field naming which already-declared
+  effect(s) it wraps, rather than a bespoke new effect of its own. If
+  this still doesn't converge on something clean, drop it again and
+  document why, same as last time - not a committed feature yet.
+- **Richer title clips** - `titles.py` is deliberately narrow today:
+  one `QGraphicsTextItem`, one line, one style, no animation (see its
+  own module docstring). BACKLOG.md flags full multi-item support as a
+  large lift (a real schema redesign, title clips would need to become
+  a list of positioned items rather than a flat set of fields) - out of
+  proportion for a quick win. Scoped down instead to the single most
+  commonly needed case: **multi-line text** within the existing single
+  text item (literal newlines in `overlay_text`/title text rendered as
+  multiple lines, still one style/one box) - achievable without
+  redesigning the bin-clip schema. A true second independent text item
+  stays out of scope for this cycle; if multi-line convergence still
+  raises the same design questions BACKLOG.md already flags, drop and
+  document rather than force it.
