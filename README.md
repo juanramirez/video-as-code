@@ -47,12 +47,13 @@ low-level `transitions:` key), `iris`/`flip`/`glitch`/`delaygrab`/
 `cairogradient` reveal/burst filters, chroma-key, burned-in text
 overlays, Ken Burns pan+zoom, focus-pull rects, `qtblend`
 picture-in-picture compositing (static or animated via
-`position_keyframes:`), edge crop). Anything it doesn't recognize isn't
-discarded: it's kept as-is under `x_kdenlive_raw:` in the output YAML
-so you can decide by hand what to do with it. Speed ramps
-(`speed_ramp:`) are a known exception — a dense per-frame keyframe map
-can't be cleanly inverted back to its original breakpoints, so those
-fall to `x_kdenlive_raw:` too, deliberately.
+`position_keyframes:`), edge crop, freeze-frame, and the "old film"
+filter pack). Anything it doesn't recognize isn't discarded: it's kept
+as-is under `x_kdenlive_raw:` in the output YAML so you can decide by
+hand what to do with it. Speed ramps (`speed_ramp:`) are a known
+exception — a dense per-frame keyframe map can't be cleanly inverted
+back to its original breakpoints, so those fall to `x_kdenlive_raw:`
+too, deliberately.
 
 See `examples/simple/` for a minimal working project (tiny generated
 assets, one audio + one video track, fades, trims, a speed change, mute,
@@ -107,7 +108,7 @@ affects what a `kdenlive-as-code` *user* sees at runtime.
 
 ## Current status
 
-Verified by the test suite (`pytest`, 144 tests, all passing):
+Verified by the test suite (`pytest`, 157 tests, all passing):
 
 - **YAML schema and validation** (`schema.py`): checks shape, types, that
   referenced assets exist on disk, that each clip's `in`/`out`/`duration`
@@ -123,7 +124,9 @@ Verified by the test suite (`pytest`, 144 tests, all passing):
   dissolve/luma-wipe/affine (zoom, slide)/iris/flip/glitch/delaygrab/
   cairogradient transitions, chroma-key compositing, burned-in text
   overlays, Ken Burns pan+zoom, focus-pull (blur outside a rect),
-  static or animated picture-in-picture (`qtblend`), edge crop, title
+  static or animated picture-in-picture (`qtblend`), edge crop,
+  freeze-frame/hold, an "old film" filter pack (jitter/flicker/burn,
+  dust, scratches, grain), heart/bowtie procedural wipe shapes, title
   clips (`titles.py`), guides/markers, bin folders,
   track name/hidden/locked/audio-muted state, project notes,
   default `qtblend` filter). Deterministic output

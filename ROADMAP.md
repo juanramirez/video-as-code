@@ -899,7 +899,7 @@ lifts); video stabilization, motion tracking, LUT-based grading
 (`avfilter.lut3d`), audio ducking (reserved for a later
 "kdenlive-native/competitor-parity effects" theme).
 
-## v0.8 — scoped (2026-08-17)
+## v0.8 — shipped (2026-08-17)
 
 Headline: an "old film" look family - `oldfilm` (Y-jitter + brightness
 flicker + patchy "uneven develop", the strongest match for the
@@ -909,42 +909,76 @@ and `grain` (film grain). All four are kdenlive-native filters
 (Marco Gittler, GPL, not frei0r) - confirmed present, with parameters
 matching exactly, on both the from-source dev `melt` build and the
 system's stable one (no `crop`-style build-specific issue) via `melt
--query filter=<name>`:
+-query filter=<name>`. Their `requires_in_out="1"`/`unique="1"` XML
+attributes turned out to be UI-only concerns (kdenlive's own
+`assetparametermodel.cpp` uses `requires_in_out` purely to decide
+whether to show an in/out zone-trim widget in the GUI; `unique` has no
+engine-side reference anywhere in kdenlive's C++ source beyond the XML
+attribute itself) - confirmed empirically too: rendered identically
+with or without an explicit `in`/`out` on the `<filter>`, and two
+stacked instances of the same filter didn't crash or misbehave.
 
-- `oldfilm`: `delta`/`every` (Y-jitter magnitude/frequency),
+**Implemented** as four independent, freely combinable boolean toggles
+on `timeline.tracks[].clips[]` (video), each applying kdenlive's own
+filter defaults - no per-parameter overrides in this first cut,
+deliberately narrow scope (same call `overlay_text`'s fixed layout
+made):
+
+- `old_film: true` -> `oldfilm` (`delta`/`every` Y-jitter,
   `brightnessdelta_up`/`brightnessdelta_down`/`brightnessdelta_every`
-  (flicker), `unevendevelop_up`/`unevendevelop_down`/
-  `unevendevelop_duration` (the patchy "burned" look itself).
-- `dust`: `maxdiameter`/`maxcount`.
-- `lines`: `line_width`/`num`/`darker`/`lighter`.
-- `grain`: `noise`/`contrast`/`brightness`.
+  flicker, `unevendevelop_up`/`unevendevelop_down`/
+  `unevendevelop_duration` the "burned" look itself).
+- `film_dust: true` -> `dust` (`maxdiameter`/`maxcount`).
+- `film_scratches: true` -> `lines` (`line_width`/`num`/`darker`/
+  `lighter`) - named "scratches" in the schema since bare "lines" is a
+  confusing, over-generic word for a user-facing field.
+- `film_grain: true` -> `grain` (`noise`/`contrast`/`brightness`).
 
-All four produced real, measurable, stable effects via real render
-during this cycle's backlog research, on both melt builds. Their
-`requires_in_out="1"`/`unique="1"` XML attributes turned out to be
-UI-only concerns (kdenlive's own `assetparametermodel.cpp` uses
-`requires_in_out` purely to decide whether to show an in/out zone-trim
-widget in the GUI; `unique` has no engine-side reference anywhere in
-kdenlive's C++ source beyond the XML attribute itself) - confirmed
-empirically too: rendered identically with or without an explicit
-`in`/`out` on the `<filter>`, and two stacked instances of the same
-filter didn't crash or misbehave. Scoped as the full four-filter pack
-rather than `oldfilm` alone: each is a distinct, independently useful
-look (dust/lines/grain are common standalone "film texture" effects on
-their own, not just old-film companions), and none of the four need a
-mechanism beyond "one filter, plain numeric parameters" - the same
-shape `focus_rect:`/`chroma_key:` already established.
+Verified against the generator's own shipped output, not just the
+standalone probe: a flat solid-gray frame has pixel-value stddev of
+exactly 0.0 unfiltered, and a stable ~15.0-15.3 with all four filters
+enabled, checked at five different timestamps across the clip - a
+real, camera-independent effect, not a lucky single-frame sample
+(`tests/test_melt_validation.py::test_old_film_produces_a_real_render_difference`).
+Recognized on import by an exact match on every parameter (same bar
+Ken Burns/reveal filters hold to, since there's no per-parameter
+override yet to represent a hand-customized value) - anything else
+falls to `x_kdenlive_raw`
+(`tests/test_reverse.py::test_round_trip_preserves_old_film_flags`).
 
-Two quick wins alongside it:
+Two quick wins alongside it, both implemented:
 
-- **Freeze-frame / hold** - carried over from v0.7 (see above), still
-  **needs a real render** to confirm the frozen frame actually holds
-  before implementation, same discipline `pillar_echo`/`dance` got in
-  v0.6.
+- **Freeze-frame / hold** - carried over from v0.7. MLT's own `freeze`
+  filter (kdenlive-native, LGPLv2.1 - matches kdenlive's own "Freeze"
+  effect exactly, `~/dev/kdenlive/data/effects/freeze.xml`). Verified
+  by real render before writing any generator code, against a
+  red/green two-segment probe: with `freeze_before`/`freeze_after`
+  both left at their default 0, the whole clip holds on frame N;
+  `freeze_after=1` plays normally up to N and then holds; `freeze_before=1`
+  is the mirror image - cross-checked against MLT's own filter source,
+  `~/dev/mlt/src/modules/kdenlive/filter_freeze.c`'s `do_freeze`
+  condition, not just the XML effect definition. No build-specific
+  issue like `crop` hit. New `freeze_at:` (seconds, relative to the
+  clip's own post-trim timeline) plus `freeze_before:`/`freeze_after:`
+  fields on `timeline.tracks[].clips[]`. `frame` is a plain
+  user-facing value (same "any value round-trips freely" bar
+  `chroma_key`/`focus_rect` hold to), so it's recognized on import
+  directly, no exact-match restriction needed
+  (`tests/test_reverse.py::test_round_trip_preserves_freeze_at`).
 - **`heart`/`bowtie` luma shapes for `wipe`** - two new procedural
-  `wipe` transitions (a heart-silhouette reveal, two opposing
-  triangular wedges), extending the same non-copied, procedurally
-  generated luma set `wipe` already uses (see BACKLOG.md for the
-  per-pixel formulas). **Sketched only, not yet rendered/verified** -
-  same bar every luma shape in this project has had to clear before
-  shipping.
+  `wipe` transitions, extending the same non-copied, procedurally
+  generated 64x64 `.pgm` luma set `wipe` already uses (ten shapes
+  before this). `heart` uses the sketched implicit curve
+  `(x²+y²-1)³ - x²y³`, with its raw magnitude cube-root-compressed and
+  linearly stretched to the full 0-255 range (the raw cubic term only
+  spanned ~88-227 uncompressed, narrower than every other luma in the
+  set). `bowtie` uses the sketched `255·(|x|-|y|+0.5)` directly,
+  clamped - but its actual reveal order turned out to be top-center/
+  bottom-center first, left/right mid-edges last (a horizontal-band
+  reveal), not the "vertical center band" the original backlog sketch
+  described in prose; the formula was right, the plain-English
+  description of what it'd look like wasn't. Verified with a real
+  `melt` render (not just a rendered-PNG visual check first): sampling
+  early-reveal vs. late-reveal points mid-transition confirmed both
+  are genuine spatial wipes, not instant cuts
+  (`tests/test_melt_validation.py::test_scenes_wipe_heart_and_bowtie_produce_real_spatial_wipes`).
