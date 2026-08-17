@@ -2010,6 +2010,77 @@ timeline:
     assert r3 > b3 + 50 and g3 > b3 + 50, f"expected yellow (high r+g, low b) near the end, got {(r3, g3, b3)}"
 
 
+def test_melt_respects_freeze_at(tmp_path: Path, melt):
+    """Empirical check for `freeze_at:`/`freeze_after:` (v0.8, MLT's own
+    `freeze` filter - matches kdenlive's own "Freeze" effect exactly)
+    through the generator's own actual output, not just the standalone
+    probe used to first confirm the mechanism (`melt clip.mp4 -filter
+    freeze frame=N freeze_after=1` against a red/green two-segment test
+    source - see ROADMAP.md). A 2-second red/green source (1s each),
+    frozen at 0.2s with `freeze_after: true`, should stay red for the
+    rest of playback instead of turning green at the 1s mark - proving a
+    genuine hold, not just "didn't crash"."""
+    source = tmp_path / "source.mp4"
+    segments = []
+    for i, color in enumerate(["red", "green"]):
+        seg = tmp_path / f"seg_{i}.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", f"color=c={color}:size=160x120:rate=25:duration=1",
+                "-pix_fmt", "yuv420p", str(seg),
+            ],
+            check=True,
+        )
+        segments.append(seg)
+    concat_list = tmp_path / "concat.txt"
+    concat_list.write_text("".join(f"file '{seg}'\n" for seg in segments), encoding="utf-8")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(concat_list),
+         "-pix_fmt", "yuv420p", str(source)],
+        check=True,
+    )
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 160, height: 120}}
+bin:
+  - id: clip
+    path: {source}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 2.0
+          freeze_at: 0.2
+          freeze_after: true
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    r0, g0, b0 = _mean_rgb(rendered, timestamp=0.1)
+    assert r0 > g0 + 50 and r0 > b0 + 50, f"expected red before the freeze point, got {(r0, g0, b0)}"
+
+    r1, g1, b1 = _mean_rgb(rendered, timestamp=1.5)
+    assert r1 > g1 + 50 and r1 > b1 + 50, (
+        f"expected the freeze to hold red past the 1s mark instead of turning green, got {(r1, g1, b1)}"
+    )
+
+    r2, g2, b2 = _mean_rgb(rendered, timestamp=1.9)
+    assert r2 > g2 + 50 and r2 > b2 + 50, f"expected red still held near the end, got {(r2, g2, b2)}"
+
+
 def test_melt_renders_a_real_title_clip(tmp_path: Path, melt):
     """Empirical check for `type: title` bin clips (titles.py, new this
     cycle): a real melt render of a title actually shows the text, not

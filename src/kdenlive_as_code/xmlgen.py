@@ -582,6 +582,32 @@ def _add_pillar_echo_filter(ids: _IdCounters, entry: ET.Element, placement: Reso
     _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_freeze_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """Freeze-frame via MLT's own `freeze` filter (kdenlive-native,
+    LGPLv2.1, Jean-Baptiste Mardelle - matches kdenlive's own "Freeze"
+    effect exactly, `~/dev/kdenlive/data/effects/freeze.xml`). Verified
+    by real render before wiring in (`melt clip.mp4 -filter freeze
+    frame=N freeze_after=1` etc. against a red/green two-segment test
+    source): with both `freeze_before`/`freeze_after` left at their
+    default 0, the *whole* clip holds frame N; `freeze_after=1` plays
+    normally up to frame N and then holds it for the rest; `freeze_before=1`
+    holds frame N's content from the start and plays normally from N
+    onward - confirmed against MLT's own filter source,
+    `~/dev/mlt/src/modules/kdenlive/filter_freeze.c`'s `do_freeze`
+    condition, not just the XML effect definition. `frame` is 0-based
+    from this clip's own first visible frame (its `in`/`out` trim
+    already applied), matching MLT's own `pos = frame-property +
+    producer's in`."""
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "freeze")
+    _prop(f, "frame", placement.freeze_at_frame)
+    if placement.freeze_before:
+        _prop(f, "freeze_before", 1)
+    if placement.freeze_after:
+        _prop(f, "freeze_after", 1)
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _hex_color(c: tuple[int, int, int, int]) -> str:
     r, g, b, a = c
     return f"0x{r:02x}{g:02x}{b:02x}{a:02x}"
@@ -704,6 +730,8 @@ def _build_track(
                 _add_ken_burns_filter(ids, entry, placement)
             if placement.focus_rect is not None:
                 _add_pillar_echo_filter(ids, entry, placement)
+            if placement.freeze_at_frame is not None:
+                _add_freeze_filter(ids, entry, placement)
         if placement.mute:
             _add_mute_filter(ids, entry)
         cursor = placement.start_frame + placement.length_frames

@@ -448,6 +448,16 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
             else:
                 crop = (top, right, bottom, left)
 
+    freeze_at = float(item["freeze_at"]) if item.get("freeze_at") is not None else None
+    freeze_before = bool(item.get("freeze_before", False))
+    freeze_after = bool(item.get("freeze_after", False))
+    if freeze_at is None and (freeze_before or freeze_after):
+        errors.append(msg("validation.freeze_before_after_without_at", ctx=ctx))
+        freeze_before = freeze_after = False
+    elif freeze_at is not None and freeze_at < 0:
+        errors.append(msg("validation.freeze_at_negative", ctx=ctx, freeze_at=freeze_at))
+        freeze_at = None
+
     return ClipPlacementSpec(
         clip=str(item["clip"]),
         start=float(item["start"]),
@@ -467,6 +477,9 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         size=size,
         position_keyframes=position_keyframes,
         crop=crop,
+        freeze_at=freeze_at,
+        freeze_before=freeze_before,
+        freeze_after=freeze_after,
         reveal_style=reveal,
         chroma_key=chroma_key,
         chroma_key_distance=chroma_key_distance,
@@ -774,6 +787,19 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                             )
                         )
 
+            freeze_at_frame = fps.seconds_to_frames(placement.freeze_at) if placement.freeze_at is not None else None
+            if freeze_at_frame is not None:
+                clip_length_frames = fps.seconds_to_frames(out_s) - fps.seconds_to_frames(in_s)
+                if freeze_at_frame < 0 or freeze_at_frame >= clip_length_frames:
+                    errors.append(
+                        msg(
+                            "validation.freeze_at_out_of_bounds",
+                            ctx=ctx,
+                            freeze_at=placement.freeze_at,
+                            duration=fps.frames_to_seconds(clip_length_frames),
+                        )
+                    )
+
             if errors:
                 continue
 
@@ -807,6 +833,9 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     rect=rect,
                     position_keyframes=position_keyframes_frames,
                     crop=placement.crop,
+                    freeze_at_frame=freeze_at_frame,
+                    freeze_before=placement.freeze_before,
+                    freeze_after=placement.freeze_after,
                     reveal_style=placement.reveal_style,
                     chroma_key=placement.chroma_key,
                     chroma_key_distance=placement.chroma_key_distance,

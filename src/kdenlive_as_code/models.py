@@ -101,6 +101,21 @@ class ClipPlacementSpec:
     # placement would need deciding which one "wins" the canvas, not
     # attempted this round).
     crop: Optional[tuple[float, float, float, float]] = None
+    # Freeze-frame (mlt_service "freeze", kdenlive-native, matching
+    # kdenlive's own "Freeze" effect exactly - verified by real render:
+    # `melt clip.mp4 -filter freeze frame=N freeze_after=1` genuinely
+    # holds frame N for the rest of playback instead of continuing, and
+    # symmetrically for freeze_before/plain). `freeze_at` is seconds
+    # within *this clip's own* post-trim timeline (0 = the clip's first
+    # visible frame), matching how ken_burns_from/focus_rect are already
+    # scoped to "this clip's own duration", not the source file's.
+    # `freeze_before`/`freeze_after` false (the default) freezes the
+    # *whole* clip on that one frame; setting one plays normally on the
+    # other side of `freeze_at` and only freezes past it - see MLT's own
+    # filter_freeze.c for the exact do_freeze condition this mirrors.
+    freeze_at: Optional[float] = None
+    freeze_before: bool = False
+    freeze_after: bool = False
     reveal_style: Optional[str] = None  # None | "iris" | "flip" | "glitch" | "delaygrab" | "cairogradient" - see ResolvedPlacement
     chroma_key: Optional[str] = None  # color to key out (e.g. "#00ff00"), None = no chroma-key
     chroma_key_distance: float = 0.35  # frei0r.bluescreen0r "Distance" - only used when chroma_key is set
@@ -245,6 +260,12 @@ class ResolvedPlacement:
     position_keyframes: Optional[list[tuple[int, float, float, float, float]]] = None
     # Edge crop - see ClipPlacementSpec. (top, right, bottom, left) pixels.
     crop: Optional[tuple[float, float, float, float]] = None
+    # Freeze-frame - see ClipPlacementSpec. `freeze_at_frame` already
+    # resolved to a frame offset within this clip's own post-trim
+    # timeline (0 = clip's first frame).
+    freeze_at_frame: Optional[int] = None
+    freeze_before: bool = False
+    freeze_after: bool = False
     # which filter `fade_in_frames`/`fade_out_frames` should drive instead
     # of the plain brightness alpha fade. "iris" (frei0r.alphaspot) and
     # "flip" (frei0r.3dflippo) are real two-source-*looking* reveals built

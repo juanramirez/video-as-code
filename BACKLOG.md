@@ -66,13 +66,6 @@ plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
   `enableproxy=0`/`generateproxy=0`. Real support means generating actual
   proxy media files, not just flipping a flag — out of proportion with
   the rest of the schema's "just emit static XML" scope.
-- **Freeze-frame / hold**: scoped as a v0.7 quick win alongside crop and
-  animated PiP, but not reached this cycle. MLT ships a `freeze` filter
-  and a `hold` producer (`type: producer`, `title: Still`), both already
-  used by kdenlive's own "Freeze" effect (confirmed present via `melt
-  -query filter=freeze` / `-query producer=hold`) — still needs a real
-  render to confirm the frozen frame actually holds rather than
-  continuing to play before it's implemented.
 
 ## Creative transitions beyond kdenlive's own set
 
