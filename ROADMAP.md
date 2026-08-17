@@ -982,3 +982,52 @@ Two quick wins alongside it, both implemented:
   early-reveal vs. late-reveal points mid-transition confirmed both
   are genuine spatial wipes, not instant cuts
   (`tests/test_melt_validation.py::test_scenes_wipe_heart_and_bowtie_produce_real_spatial_wipes`).
+
+## v0.9 — scoped (2026-08-17)
+
+Headline: professional color grading via MLT's own `lift_gamma_gain`
+filter (Meltytech, LGPLv2.1 - "lift=shadows, gamma=midtones,
+gain=highlights", the classic three-way grading formula every serious
+NLE exposes). Confirmed present via `melt -query filter=lift_gamma_gain`:
+nine independent float parameters, `lift_r`/`lift_g`/`lift_b` (default
+0.0), `gamma_r`/`gamma_g`/`gamma_b` (default 1.0), `gain_r`/`gain_g`/
+`gain_b` (default 1.0) - a neutral/no-op filter at its defaults, single
+pass, no external file, no new mechanism (same "one filter, plain
+numeric parameters" shape `focus_rect:`/`chroma_key:` already
+established). New `color_grade:` field on `timeline.tracks[].clips[]`:
+a dict with up to three optional `[r, g, b]` triples -
+`{lift: [r,g,b], gamma: [r,g,b], gain: [r,g,b]}` - any subset, each
+omitted group falls back to MLT's own neutral default for that group.
+Chosen over `deshake` (video stabilization) and audio ducking
+(`avfilter.acompressor`) after a closer look: `deshake` still needed a
+real-render verification pass before committing to headline status,
+and true ducking (one track's level reacting to another's) would need
+a cross-track relationship this schema doesn't have yet - closer to
+new design work than a "quick win," so neither was ready to commit to
+this cycle without more groundwork.
+
+Quick win alongside it: **LUT-based grading** (`avfilter.lut3d`,
+FFmpeg/libavfilter) - applies a `.cube` 3D LUT file to a clip, the
+DaVinci-standard interchange format. Confirmed present via `melt
+-query filter=avfilter.lut3d`. New `lut:` field on
+`timeline.tracks[].clips[]`: a path to a `.cube` file, validated to
+exist on disk at build time (same bar bin clip `path:` already holds
+to). Deliberately minimal for v0.9: only the file path is exposed,
+not `av.interp`'s interpolation-mode choice (nearest/trilinear/
+tetrahedral/pyramid/prism) - same narrow-first-cut call `old_film:`'s
+toggle-only v0.8 scope made.
+
+**Also scoped, research-first** (same discipline `pillar_echo`/`dance`/
+`freeze-frame` got - verify before implementing, may end up dropped
+like `dance` or `deshake` above rather than shipped): MLT's
+`mask_apply`/`mask_start` pair (Meltytech, LGPLv2.1) - real
+masking/rotoscoping, a two-filter "snapshot, then composite via a
+transition" mechanism (structurally similar in shape to `crop`'s own
+two-filter pattern, though a different mechanism under the hood).
+Confirmed present via `melt -query filter=mask_start`/`mask_apply`,
+but what actually *drives* the mask shape (a luma image? a filter
+like `frei0r.alphaspot`? a static rect?) hasn't been worked out yet -
+real design uncertainty, not just an unverified render, so this is
+scoped as "investigate and design, then implement if it converges on
+something this schema can cleanly represent" rather than a committed
+feature.
