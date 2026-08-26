@@ -502,6 +502,82 @@ timeline:
     assert r > g + 20 and r > b + 20, f"expected the red picture to still render, got {(r, g, b)}"
 
 
+def test_video_stream_not_first_still_decodes(tmp_path: Path, melt):
+    """Regression: a timeline-track clip whose container has its *audio*
+    stream before its *video* stream (a common phone-camera layout - a
+    real Pixel 8 clip triggered this, though its 10-bit HDR turned out to
+    be a red herring, not the actual trigger - see xmlgen.py's
+    `_service_for`) used to render as a flat, blank frame instead of the
+    real picture. Root cause: `xmlgen.py` used `avformat-novalidate` for
+    timeline-track chains (matching real kdenlive's own editor-load perf
+    convention) - verified by real render that it silently mis-selects a
+    stream once the video track isn't first, unlike plain `avformat`
+    (used for the bin's own master producer, which never hit this and is
+    why the bug was easy to miss). Fixed by dropping `avformat-novalidate`
+    entirely. This reproduces with a fully synthetic, SDR fixture - the
+    original HDR footage that surfaced it isn't needed to trigger it."""
+    clip_audio_first = tmp_path / "clip_audio_first.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+            "-f", "lavfi", "-i", "testsrc=size=320x240:rate=25:duration=2",
+            # Explicit `-map` in this order, not just input order: ffmpeg's
+            # default stream selection groups by codec type (video before
+            # audio) regardless of input order, which would silently
+            # defeat this fixture's whole point.
+            "-map", "0:0", "-map", "1:0",
+            "-pix_fmt", "yuv420p", "-shortest", str(clip_audio_first),
+        ],
+        check=True,
+    )
+    # Confirm the fixture actually came out audio-then-video - otherwise
+    # this test would pass for the wrong reason.
+    probe_result = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "stream=index,codec_type",
+            "-of", "csv=p=0",
+            str(clip_audio_first),
+        ],
+        capture_output=True, text=True, check=True,
+    )
+    streams = [line.split(",") for line in probe_result.stdout.strip().splitlines()]
+    assert streams[0][1] == "audio" and streams[1][1] == "video", (
+        f"fixture didn't come out audio-then-video as expected: {streams}"
+    )
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {clip_audio_first}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, duration: 2}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    variance = _color_stddev(rendered, timestamp=1.0)
+    assert variance > 10, (
+        f"expected real testsrc content (high pixel variance) but got a "
+        f"near-flat frame (stddev={variance}) - avformat-novalidate regression"
+    )
+
+
 def _mean_rgb(path: Path, timestamp: float = 0.0) -> tuple[float, float, float]:
     result = subprocess.run(
         [

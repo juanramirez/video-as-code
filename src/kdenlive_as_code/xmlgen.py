@@ -62,12 +62,30 @@ class _IdCounters:
         return f"{prefix}{n}"
 
 
-def _service_for(kind: str, *, fast: bool) -> str:
+def _service_for(kind: str) -> str:
     if kind == "image":
         return "qimage"
     if kind == "title":
         return "kdenlivetitle"
-    return "avformat-novalidate" if fast else "avformat"
+    # Real kdenlive uses `avformat-novalidate` (skips re-probing an
+    # already-validated bin clip) for timeline-track producer chains, as
+    # a startup-time optimization for its own editor. Deliberately not
+    # replicated here: verified by real render (two independent MLT
+    # builds, and reproduced with a fully synthetic ffmpeg-generated
+    # fixture, not just real phone footage) that `avformat-novalidate`
+    # silently decodes a flat/blank frame whenever the video stream isn't
+    # the *first* stream in the container (e.g. any file muxed with its
+    # audio track before its video track) - plain `avformat` decodes the
+    # exact same file correctly regardless of stream order. Common real
+    # phone footage hits this because the camera app's own container
+    # layout doesn't put video first (confirmed on a real Pixel 8 clip,
+    # which additionally happens to be 10-bit HDR - that HDR-ness turned
+    # out to be a red herring, not the actual trigger; a plain SDR
+    # audio-then-video file reproduces the exact same blank frame). See
+    # `tests/test_melt_validation.py::test_video_stream_not_first_still_decodes`.
+    # Correctness for real footage wins over matching an editor-load perf
+    # optimization that silently breaks on a common container layout.
+    return "avformat"
 
 
 def _resource_for(placement_kind: str, path: Path) -> str:
@@ -81,7 +99,6 @@ def _build_media_element(
     kind: str,
     in_frame: int,
     out_frame: int,
-    fast: bool,
     numeric_id: int,
     control_uuid: str,
     speed: Optional[float] = None,
@@ -137,7 +154,7 @@ def _build_media_element(
     tag = "chain"
     xml_id = ids.next("chain")
     el = ET.Element(tag, {"id": xml_id, "in": str(in_frame), "out": str(out_frame)})
-    service = _service_for(kind, fast=fast)
+    service = _service_for(kind)
     if kind == "image":
         _prop(el, "length", out_frame + 1)
         _prop(el, "eof", "pause")
@@ -815,7 +832,6 @@ def _build_track(
             kind=placement.bin_clip.kind,
             in_frame=0,
             out_frame=full_duration_frames - 1,
-            fast=True,
             numeric_id=placement.bin_clip.numeric_id,
             control_uuid=control_uuid_for[placement.bin_clip.id],
             speed=placement.speed,
@@ -1122,7 +1138,6 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
             kind=clip.kind,
             in_frame=0,
             out_frame=clip.duration_frames - 1,
-            fast=False,
             numeric_id=clip.numeric_id,
             control_uuid=control_uuid_for[clip.id],
             folder_id=folder_ids.get(clip.folder, -1),

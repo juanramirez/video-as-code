@@ -51,26 +51,6 @@ code itself already marks the boundary.
   and possibly worth adding a content-checking test for the existing
   `speed:` feature itself, not just new features that happen to
   exercise it.
-- **10-bit HDR video (HEVC, `yuv420p10le`/`bt2020nc`/`arib-std-b67` -
-  the default capture mode on recent phones, confirmed with real
-  footage from a Pixel 8) renders as a blank frame on any timeline
-  track placement**: found while rendering a real personal project
-  (`projects/`). Root cause isolated to `xmlgen.py`'s `_service_for`
-  (`fast=True` for any timeline-track chain, matching real kdenlive's
-  own performance convention of using `avformat-novalidate` there
-  instead of plain `avformat`) - `avformat-novalidate` fails to decode
-  this specific HDR profile and silently returns a blank frame instead
-  of erroring, while plain `avformat` (used for the un-warped bin/
-  `main_bin` producer) decodes the exact same file correctly. Confirmed
-  build-independent, unlike `crop`/`lut3d`/slow-motion above: reproduced
-  identically on both the system's stable `melt` (7.32.0) and this
-  project's preferred from-source dev build. A real, everyday-footage
-  correctness gap, not a synthetic edge case - most modern phones default
-  to HDR capture. No workaround found yet other than transcoding the
-  source to 8-bit SDR before use (confirmed to fix it). Worth its own
-  verification pass before deciding between dropping `avformat-novalidate`
-  for timeline entries (diverges from matching real kdenlive's own XML)
-  or some other mechanism.
 - **A `type: video` track placement never carries its own audio to the
   final render, `mute:` or not** - by design (`hide="audio"` is set
   unconditionally on both of a video track's internal sub-tracks in
