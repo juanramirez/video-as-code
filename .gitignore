@@ -22,3 +22,7 @@ cachefiles/
 
 # Scratch working copy for manual testing (real footage, not project content)
 wc/
+
+# Personal projects, each its own separate local-only git repo
+projects/*
+!projects/README.md
