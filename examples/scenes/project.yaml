@@ -1,3 +1,5 @@
+# Project-wide settings: frame rate and canvas size apply to every
+# scene below.
 project:
   id: scenes_demo
   title: "Scenes demo"
@@ -9,15 +11,19 @@ project:
 # that play one after another, with duration computed automatically
 # (`pacing`, or an explicit `duration` split across the clips) - no need
 # to set `start:`/`duration:` by hand the way `timeline.tracks:` requires
-# (see examples/simple/ for that lower-level form). Paths are
+# (see examples/simple/project.yaml for that lower-level form). Paths are
 # auto-registered in the bin; no `bin:` section needed here.
 scenes:
+  # A plain hard cut: red plays, then blue, split evenly across the
+  # scene's 3s duration - no `transition:` means no overlap between them.
   - scene: cut
     clips:
       - assets/red.png
       - assets/blue.png
     duration: 3.0
 
+  # A crossfade: the same two clips, but blended into each other over
+  # `transition_duration` seconds instead of cutting cleanly.
   - scene: crossfade
     transition: dissolve
     transition_duration: 0.5
@@ -26,6 +32,9 @@ scenes:
       - assets/blue.png
     duration: 3.0
 
+  # A wipe: blue reveals over red following a procedurally generated
+  # luma shape (`luma: diagonal` here - see lumas.AVAILABLE_LUMAS for
+  # every shape this project ships) instead of a plain cross-blend.
   - scene: wipe_reveal
     transition: wipe
     transition_duration: 0.5

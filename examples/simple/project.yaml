@@ -1,3 +1,5 @@
+# Project-wide settings: frame rate and canvas size apply to every clip
+# and track below.
 project:
   id: simple
   title: "Simple example"
@@ -5,6 +7,10 @@ project:
   width: 160
   height: 90
 
+# The project bin: every asset used further down must be registered
+# here first, each with a short `id:` that `clip:` refers to below.
+# `type: title` generates a text card on the fly instead of pointing to
+# a file on disk.
 bin:
   - id: photo
     path: assets/photo.png
@@ -16,11 +22,20 @@ bin:
     type: title
     text: "kdenlive-as-code"
 
+# The timeline: one or more tracks, each a list of clips with an
+# explicit `start:` (seconds) and `duration:`/`out:`. This is the
+# low-level form - see examples/scenes/project.yaml for the
+# higher-level `scenes:` compiler, which computes timing automatically.
 timeline:
   tracks:
+    # Audio track: plays tone.mp3 from the start, trimmed to 3s, with a
+    # half-second fade-out at the end.
     - type: audio
       clips:
         - {clip: tone, start: 0, out: 3, fade_out: 0.5}
+    # Video track: a still photo, then a sped-up video clip (muted, so
+    # its own audio doesn't clash with the audio track above), then a
+    # title card - laid out back to back along `start:`.
     - type: video
       clips:
         - {clip: photo, start: 0, duration: 1.5, fade_in: 0.5}
