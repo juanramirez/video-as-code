@@ -792,6 +792,60 @@ timeline:
     )
 
 
+def test_melt_renders_a_real_video_fade_with_nonzero_in(tmp_path: Path, assets_dir: Path, melt):
+    """Regression test for a real bug found in `projects/`: `_add_video_
+    fade_filters`'s fade_in filter set only `out` on the `<filter>` element,
+    never an explicit `in` - fine when the clip's own in_frame is 0 (every
+    existing test above this one), but wrong once in_frame is nonzero
+    (e.g. `in:` directly, or `source_in:`/`source_out:`): MLT defaults a
+    filter's missing `in` to producer frame 0, so the brightness ramp's
+    keyframes (relative to frame 0, not the clip's own in_frame) had
+    already finished playing out by the time the clip's actual visible
+    window started - the clip appeared at full brightness immediately
+    instead of fading in. Same missing-`in` shape existed in three more
+    places (`_add_reveal_style_filter`'s burst styles and iris/flip,
+    `_add_audio_fade_filters`) - all fixed together, this one exercises the
+    plain video fade specifically."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, in: 1, duration: 2, fade_in: 1.5}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    def brightness(t: float) -> float:
+        r, g, b = _mean_rgb(rendered, timestamp=t)
+        return (r + g + b) / 3
+
+    dark = brightness(0.0)
+    mid = brightness(0.6)
+    bright = brightness(1.4)
+
+    assert dark < mid < bright, (
+        f"expected brightness to ramp up across the fade_in even with a "
+        f"nonzero in-point, got dark={dark:.1f} mid={mid:.1f} bright={bright:.1f} "
+        f"(a flat bright=dark=mid at full brightness means the fade_in ran "
+        f"before the clip's own visible window and had no effect)"
+    )
+
+
 def test_scenes_dissolve_produces_a_real_crossfade(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
     """Empirical check for `transition: dissolve` (scenes.py): renders a
     two-clip scene (a red still, then a blue one) and confirms the

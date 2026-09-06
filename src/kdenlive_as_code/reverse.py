@@ -366,7 +366,7 @@ class Importer:
         raise ValueError(msg("reverse.unrecognized_track_structure", ctx=ctx, tag=ref.tag))
 
     def _match_reveal_filter(
-        self, filter_el: ET.Element, props: dict[str, str], f_in: int, f_out: int
+        self, filter_el: ET.Element, props: dict[str, str], f_in: int, f_out: int, entry_in: int
     ) -> Optional[dict]:
         """Recognizes an `iris` (frei0r.alphaspot) / `flip`
         (frei0r.3dflippo) / `glitch` (frei0r.glitch0r) / `delaygrab`
@@ -380,10 +380,11 @@ class Importer:
         `iris`/`flip` that comes purely from which keyframe direction
         matches; the three burst styles (`glitch`/`delaygrab`/
         `cairogradient`) have no keyframe direction at all (a constant
-        burst), so it's read off whether this filter has an explicit
-        `in` attribute the same way `_add_reveal_style_filter` itself
-        distinguishes the two windows - absent means it starts at the
-        entry's own `in` (fade_in)."""
+        burst), so it's read off whether this filter's own `in` matches
+        the entry's own `in` (fade_in) or its `out` matches the entry's
+        own `out` (fade_out) - both filters carry an explicit `in`
+        attribute (see `_add_reveal_style_filter`), so presence alone no
+        longer distinguishes them."""
         service = props.get("mlt_service")
         length = f_out - f_in + 1
         if service == "frei0r.alphaspot":
@@ -414,11 +415,11 @@ class Importer:
                 or props.get("3") != "0.5"
             ):
                 return None
-            return {"style": "glitch", "kind": "in" if filter_el.get("in") is None else "out"}
+            return {"style": "glitch", "kind": "in" if f_in == entry_in else "out"}
         if service == "frei0r.delaygrab":
             # No adjustable parameters at all (see _add_reveal_style_filter's
             # docstring) - the only thing to check is the service itself.
-            return {"style": "delaygrab", "kind": "in" if filter_el.get("in") is None else "out"}
+            return {"style": "delaygrab", "kind": "in" if f_in == entry_in else "out"}
         if service == "frei0r.cairogradient":
             if (
                 props.get("0") != "gradient_linear" or props.get("1") != "#ff8800" or props.get("2") != "1"
@@ -426,7 +427,7 @@ class Importer:
                 or props.get("6") != "0" or props.get("7") != "1" or props.get("8") != "1"
             ):
                 return None
-            return {"style": "cairogradient", "kind": "in" if filter_el.get("in") is None else "out"}
+            return {"style": "cairogradient", "kind": "in" if f_in == entry_in else "out"}
         return None
 
     def _match_ken_burns_filter(self, props: dict[str, str], f_in: int, f_out: int) -> Optional[dict]:
@@ -647,7 +648,7 @@ class Importer:
             "frei0r.alphaspot", "frei0r.3dflippo", "frei0r.glitch0r",
             "frei0r.delaygrab", "frei0r.cairogradient",
         ):
-            matched = self._match_reveal_filter(filter_el, props, f_in, f_out)
+            matched = self._match_reveal_filter(filter_el, props, f_in, f_out, entry_in)
             if matched is not None:
                 key = "fade_in" if matched["kind"] == "in" else "fade_out"
                 return {key: round(length_s, 3), "reveal": matched["style"]}

@@ -343,7 +343,11 @@ def _add_video_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
     p_in, p_out = placement.in_frame, placement.out_frame
     if placement.fade_in_frames > 0:
         L = placement.fade_in_frames
-        f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
+        f = ET.SubElement(
+            entry,
+            "filter",
+            {"id": ids.next("filter"), "in": str(p_in), "out": str(p_in + L - 1)},
+        )
         _prop(f, "start", 1)
         _prop(f, "level", f"0=0;{L - 1}=1")
         _prop(f, "mlt_service", "brightness")
@@ -442,7 +446,11 @@ def _add_reveal_style_filter(ids: _IdCounters, entry: ET.Element, placement: Res
 
         if placement.fade_in_frames > 0:
             L = placement.fade_in_frames
-            f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
+            f = ET.SubElement(
+                entry,
+                "filter",
+                {"id": ids.next("filter"), "in": str(p_in), "out": str(p_in + L - 1)},
+            )
             burst_props(f)
             _prop(f, "kdenlive:collapsed", 0)
         if placement.fade_out_frames > 0:
@@ -473,7 +481,11 @@ def _add_reveal_style_filter(ids: _IdCounters, entry: ET.Element, placement: Res
 
     if placement.fade_in_frames > 0:
         L = placement.fade_in_frames
-        f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
+        f = ET.SubElement(
+            entry,
+            "filter",
+            {"id": ids.next("filter"), "in": str(p_in), "out": str(p_in + L - 1)},
+        )
         if style == "iris":
             iris_props(f, 0.02, 1.0, L)
         else:
@@ -502,7 +514,11 @@ def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
     p_in, p_out = placement.in_frame, placement.out_frame
     if placement.fade_in_frames > 0:
         L = placement.fade_in_frames
-        f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
+        f = ET.SubElement(
+            entry,
+            "filter",
+            {"id": ids.next("filter"), "in": str(p_in), "out": str(p_in + L - 1)},
+        )
         _prop(f, "mlt_service", "volume")
         _prop(f, "kdenlive_id", "fadein")
         _prop(f, "gain", placement.fade_in_level)

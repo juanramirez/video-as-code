@@ -161,7 +161,7 @@ _EN: dict[str, str] = {
     "reverse.track_not_imported": "{ctx}: track not imported",
     "reverse.extra_sequence_not_imported": "additional sequence not imported (only the active one is converted)",
     "reverse.guides_unreadable": "sequenceproperties.guides is not the expected JSON array of {{pos, comment, type}} entries, kept as-is",
-    "cli.build_done": "Generated {output} ({frames} frames, {fps:g} fps)",
+    "cli.build_done": "Generated {output} ({n_tracks} track(s), {frames} frames, {fps:g} fps)",
     "cli.validate_done": "OK: {n_tracks} track(s), {n_clips} clip(s) placed, {frames} total frames",
     "cli.import_error": "Error importing '{path}': {exc}",
     "cli.import_done": "Generated {output}",
@@ -208,6 +208,11 @@ _EN: dict[str, str] = {
     "cli.help.build": "Generates a .kdenlive from a YAML",
     "cli.help.project_path": "Path to the project's .yaml file",
     "cli.help.build_output": "Output path (default: same name with .kdenlive extension)",
+    "cli.help.pack_tracks": (
+        "Repacks the generated project onto the fewest tracks possible "
+        "(fewer parallel lines when opened in the Kdenlive app), preserving "
+        "every clip's timing and the compositing order of any crossfades"
+    ),
     "cli.help.validate": "Validates a YAML without generating the .kdenlive",
     "cli.help.import": "Converts an existing .kdenlive to YAML",
     "cli.help.kdenlive_path": "Path to the source .kdenlive file",
@@ -382,7 +387,7 @@ _ES: dict[str, str] = {
     "reverse.track_not_imported": "{ctx}: pista no importada",
     "reverse.extra_sequence_not_imported": "secuencia adicional no importada (sólo se convierte la activa)",
     "reverse.guides_unreadable": "sequenceproperties.guides no es el array JSON esperado de entradas {{pos, comment, type}}, se conserva tal cual",
-    "cli.build_done": "Generado {output} ({frames} fotogramas, {fps:g} fps)",
+    "cli.build_done": "Generado {output} ({n_tracks} pista(s), {frames} fotogramas, {fps:g} fps)",
     "cli.validate_done": "OK: {n_tracks} pista(s), {n_clips} clip(s) colocados, {frames} fotogramas totales",
     "cli.import_error": "Error importando '{path}': {exc}",
     "cli.import_done": "Generado {output}",
@@ -429,6 +434,11 @@ _ES: dict[str, str] = {
     "cli.help.build": "Genera un .kdenlive a partir de un YAML",
     "cli.help.project_path": "Ruta al archivo .yaml del proyecto",
     "cli.help.build_output": "Ruta de salida (por defecto: mismo nombre con extensión .kdenlive)",
+    "cli.help.pack_tracks": (
+        "Reempaqueta el proyecto generado en el menor número de pistas posible "
+        "(menos líneas paralelas al abrirlo en la app de Kdenlive), conservando "
+        "el timing de cada clip y el orden de composición de los crossfades"
+    ),
     "cli.help.validate": "Valida un YAML sin generar el .kdenlive",
     "cli.help.import": "Convierte un .kdenlive existente a YAML",
     "cli.help.kdenlive_path": "Ruta al archivo .kdenlive de origen",

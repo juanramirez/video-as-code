@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from . import i18n, probe, reverse, xmlgen
+from . import i18n, probe, reverse, trackpack, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve
@@ -34,12 +34,22 @@ def cmd_build(args: argparse.Namespace) -> int:
     except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
+    if args.pack_tracks:
+        resolved = trackpack.pack_tracks(resolved)
     try:
         xmlgen.write(resolved, output)
     except OSError as exc:
         print(msg("cli.write_failed", path=output, exc=exc), file=sys.stderr)
         return 1
-    print(msg("cli.build_done", output=output, frames=resolved.total_frames, fps=resolved.fps.fps))
+    print(
+        msg(
+            "cli.build_done",
+            output=output,
+            n_tracks=len(resolved.tracks),
+            frames=resolved.total_frames,
+            fps=resolved.fps.fps,
+        )
+    )
     return 0
 
 
@@ -164,6 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_build = sub.add_parser("build", help=msg("cli.help.build"))
     p_build.add_argument("project", help=msg("cli.help.project_path"))
     p_build.add_argument("-o", "--output", help=msg("cli.help.build_output"))
+    p_build.add_argument("--pack-tracks", action="store_true", help=msg("cli.help.pack_tracks"))
     p_build.set_defaults(func=cmd_build)
 
     p_validate = sub.add_parser("validate", help=msg("cli.help.validate"))
