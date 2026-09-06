@@ -514,6 +514,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         source_out=source_out,
         fade_in=float(item["fade_in"]) if item.get("fade_in") is not None else None,
         fade_out=float(item["fade_out"]) if item.get("fade_out") is not None else None,
+        fade_in_level=float(item["fade_in_level"]) if item.get("fade_in_level") is not None else None,
         mute=mute,
         speed=speed,
         preserve_pitch=bool(item.get("preserve_pitch", False)),
@@ -795,8 +796,11 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             clip_len_s = max(out_s - in_s, 0.0)
             fade_in_s = placement.fade_in or 0.0
             fade_out_s = placement.fade_out or 0.0
+            fade_in_level = placement.fade_in_level if placement.fade_in_level is not None else 0.0
             if fade_in_s < 0 or fade_out_s < 0:
                 errors.append(msg("validation.fade_negative", ctx=ctx))
+            if placement.fade_in_level is not None and not (0.0 <= placement.fade_in_level <= 1.0):
+                errors.append(msg("validation.fade_in_level_out_of_range", ctx=ctx, fade_in_level=placement.fade_in_level))
             elif fade_in_s + fade_out_s > clip_len_s + 1e-6:
                 errors.append(
                     msg(
@@ -877,6 +881,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     out_frame=max(out_frame, in_frame),
                     fade_in_frames=fps.seconds_to_frames(fade_in_s),
                     fade_out_frames=fps.seconds_to_frames(fade_out_s),
+                    fade_in_level=fade_in_level,
                     mute=placement.mute,
                     speed=speed,
                     preserve_pitch=placement.preserve_pitch,

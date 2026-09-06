@@ -62,6 +62,10 @@ class ClipPlacementSpec:
     source_out: Optional[float] = None
     fade_in: Optional[float] = None
     fade_out: Optional[float] = None
+    # Starting volume level (0..1) for an audio fade_in, instead of always
+    # ramping up from silence - see xmlgen.py's _add_audio_fade_filters.
+    # Ignored for video clips and meaningless without fade_in.
+    fade_in_level: Optional[float] = None
     mute: bool = False
     speed: Optional[float] = None
     preserve_pitch: bool = False
@@ -293,6 +297,7 @@ class ResolvedPlacement:
     out_frame: int  # last included frame (MLT convention)
     fade_in_frames: int = 0
     fade_out_frames: int = 0
+    fade_in_level: float = 0.0
     mute: bool = False
     speed: Optional[float] = None
     preserve_pitch: bool = False

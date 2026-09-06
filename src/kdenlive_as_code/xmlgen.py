@@ -505,7 +505,7 @@ def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
         f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), "out": str(p_in + L - 1)})
         _prop(f, "mlt_service", "volume")
         _prop(f, "kdenlive_id", "fadein")
-        _prop(f, "gain", 0)
+        _prop(f, "gain", placement.fade_in_level)
         _prop(f, "end", 1)
         _prop(f, "kdenlive:collapsed", 0)
     if placement.fade_out_frames > 0:

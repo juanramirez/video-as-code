@@ -1278,3 +1278,38 @@ timeline:
     resolved = load_and_resolve(path)
     assert resolved.total_frames == 75  # 3s @ 25fps
     assert len(resolved.tracks) == 2
+
+
+def test_fade_in_level_resolves(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 3, fade_in: 1.0, fade_in_level: 0.4}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    assert resolved.tracks[0].placements[0].fade_in_level == 0.4
+
+
+def test_fade_in_level_out_of_range_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 3, fade_in: 1.0, fade_in_level: 1.5}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "fade_in_level" in str(exc.value)

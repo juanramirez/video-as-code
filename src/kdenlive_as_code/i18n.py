@@ -88,6 +88,7 @@ _EN: dict[str, str] = {
     ),
     "validation.start_negative": "{ctx}: 'start' is negative ({start})",
     "validation.fade_negative": "{ctx}: fade_in/fade_out cannot be negative",
+    "validation.fade_in_level_out_of_range": "{ctx}: fade_in_level ({fade_in_level}) must be between 0 and 1",
     "validation.fade_exceeds_duration": (
         "{ctx}: fade_in ({fade_in}s) + fade_out ({fade_out}s) exceed the clip's "
         "duration on the timeline ({clip_len:.3f}s)"
@@ -308,6 +309,7 @@ _ES: dict[str, str] = {
     ),
     "validation.start_negative": "{ctx}: 'start' negativo ({start})",
     "validation.fade_negative": "{ctx}: fade_in/fade_out no pueden ser negativos",
+    "validation.fade_in_level_out_of_range": "{ctx}: fade_in_level ({fade_in_level}) debe estar entre 0 y 1",
     "validation.fade_exceeds_duration": (
         "{ctx}: fade_in ({fade_in}s) + fade_out ({fade_out}s) superan la "
         "duración del clip en el timeline ({clip_len:.3f}s)"
