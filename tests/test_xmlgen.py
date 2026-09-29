@@ -76,6 +76,74 @@ timeline:
     assert float(gain) == 0.4
 
 
+def test_audio_fade_out_level_sets_ending_volume(tmp_path: Path, assets_dir: Path):
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: "Test Project", fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 3, fade_out: 1.0, fade_out_level: 0.5}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    out_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, out_path)
+    root = ET.parse(out_path).getroot()
+
+    fadeout_filters = [
+        f
+        for f in root.iter("filter")
+        if any(p.get("name") == "kdenlive_id" and p.text == "fadeout" for p in f.iter("property"))
+    ]
+    assert len(fadeout_filters) == 1
+    end = next(p.text for p in fadeout_filters[0].iter("property") if p.get("name") == "end")
+    assert float(end) == 0.5
+
+
+def test_gain_adds_flat_volume_filter(tmp_path: Path, assets_dir: Path):
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: "Test Project", fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 3, gain: 1.5}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    out_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, out_path)
+    root = ET.parse(out_path).getroot()
+
+    entry = next(root.iter("entry"))
+    volume_filters = [
+        f
+        for f in entry.iter("filter")
+        if any(p.get("name") == "mlt_service" and p.text == "volume" for p in f.iter("property"))
+    ]
+    gain_filters = [
+        f
+        for f in volume_filters
+        if not any(p.get("name") == "kdenlive_id" for p in f.iter("property"))
+    ]
+    assert len(gain_filters) == 1
+    gain = next(p.text for p in gain_filters[0].iter("property") if p.get("name") == "gain")
+    assert float(gain) == 1.5
+
+
 def test_all_producer_references_resolve(tmp_path: Path, assets_dir: Path):
     out_path = _build(tmp_path, assets_dir)
     root = ET.parse(out_path).getroot()

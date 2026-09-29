@@ -611,6 +611,8 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         fade_in=float(item["fade_in"]) if item.get("fade_in") is not None else None,
         fade_out=float(item["fade_out"]) if item.get("fade_out") is not None else None,
         fade_in_level=float(item["fade_in_level"]) if item.get("fade_in_level") is not None else None,
+        fade_out_level=float(item["fade_out_level"]) if item.get("fade_out_level") is not None else None,
+        gain=float(item["gain"]) if item.get("gain") is not None else None,
         mute=mute,
         boomerang=boomerang,
         speed=speed,
@@ -954,11 +956,19 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             fade_in_s = placement.fade_in or 0.0
             fade_out_s = placement.fade_out or 0.0
             fade_in_level = placement.fade_in_level if placement.fade_in_level is not None else 0.0
+            fade_out_level = placement.fade_out_level if placement.fade_out_level is not None else 0.0
             if fade_in_s < 0 or fade_out_s < 0:
                 errors.append(msg("validation.fade_negative", ctx=ctx))
             if placement.fade_in_level is not None and not (0.0 <= placement.fade_in_level <= 1.0):
                 errors.append(msg("validation.fade_in_level_out_of_range", ctx=ctx, fade_in_level=placement.fade_in_level))
-            elif fade_in_s + fade_out_s > clip_len_s + 1e-6:
+            if placement.fade_out_level is not None and not (0.0 <= placement.fade_out_level <= 1.0):
+                errors.append(msg("validation.fade_out_level_out_of_range", ctx=ctx, fade_out_level=placement.fade_out_level))
+            if placement.gain is not None and placement.gain < 0:
+                errors.append(msg("validation.gain_negative", ctx=ctx, gain=placement.gain))
+            # Independent checks (not elif off the level checks above): an out-of-range level and
+            # fades that don't fit the clip are unrelated problems, so both should be reported
+            # together instead of the second check being skipped when the first already failed.
+            if fade_in_s + fade_out_s > clip_len_s + 1e-6:
                 errors.append(
                     msg(
                         "validation.fade_exceeds_duration",
@@ -1039,6 +1049,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     fade_in_frames=fps.seconds_to_frames(fade_in_s),
                     fade_out_frames=fps.seconds_to_frames(fade_out_s),
                     fade_in_level=fade_in_level,
+                    fade_out_level=fade_out_level,
+                    gain=placement.gain,
                     mute=placement.mute,
                     speed=speed,
                     preserve_pitch=placement.preserve_pitch,

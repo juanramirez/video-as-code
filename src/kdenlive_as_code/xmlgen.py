@@ -512,6 +512,10 @@ def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
     kdenlive_id and a dB keyframe string on a property, "gain", that MLT's
     own filter docs mark as ignoring animation when "level" isn't set)."""
     p_in, p_out = placement.in_frame, placement.out_frame
+    # "gain" is the level at the filter's `in` frame, "end" is the level at its `out` frame - the
+    # filter ramps linearly between them. fadein starts at fade_in_level (0 = silence, the usual
+    # case) and always ends at full volume (1); fadeout is the mirror image, always starting at
+    # full volume and ending at fade_out_level.
     if placement.fade_in_frames > 0:
         L = placement.fade_in_frames
         f = ET.SubElement(
@@ -534,7 +538,7 @@ def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
         _prop(f, "mlt_service", "volume")
         _prop(f, "kdenlive_id", "fadeout")
         _prop(f, "gain", 1)
-        _prop(f, "end", 0)
+        _prop(f, "end", placement.fade_out_level)
         _prop(f, "kdenlive:collapsed", 0)
 
 
@@ -790,6 +794,17 @@ def _add_overlay_text_filter(ids: _IdCounters, entry: ET.Element, placement: Res
     _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_gain_filter(ids: _IdCounters, entry: ET.Element, gain: float) -> None:
+    """A flat, non-animated volume multiplier for the entry's whole
+    duration - same mlt_service/no-span shape as `_add_mute_filter` (a
+    fixed gain of 0), just with an arbitrary gain instead of always 0.
+    Independent of fade_in/fade_out: this is a static level, not a ramp."""
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "volume")
+    _prop(f, "gain", gain)
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _add_mute_filter(ids: _IdCounters, entry: ET.Element) -> None:
     """Matches kdenlive's own "Mute" effect (share/kdenlive/effects/mute.xml):
     mlt_service "volume", kdenlive_id "mute", a fixed gain of 0 with no
@@ -892,6 +907,8 @@ def _build_track(
                 _add_deshake_filter(ids, entry)
         if placement.mute:
             _add_mute_filter(ids, entry)
+        if placement.gain is not None:
+            _add_gain_filter(ids, entry, placement.gain)
         cursor = placement.start_frame + placement.length_frames
 
     root.append(playlist_main)
