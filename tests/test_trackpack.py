@@ -7,9 +7,9 @@ import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from kdenlive_as_code import cli, xmlgen
-from kdenlive_as_code.schema import load_and_resolve
-from kdenlive_as_code.trackpack import pack_tracks
+from video_as_code import cli, xmlgen
+from video_as_code.schema import load_and_resolve
+from video_as_code.trackpack import pack_tracks
 
 
 def _resolve(tmp_path: Path, yaml_text: str):
@@ -312,7 +312,7 @@ timeline:
 
 
 def test_cli_build_pack_tracks_flag(tmp_path: Path, assets_dir: Path, capsys):
-    """`kdenlive-as-code build --pack-tracks` should produce a .kdenlive
+    """`video-as-code build --pack-tracks` should produce a .kdenlive
     with fewer tracks than a plain `build` of the same project, and its
     success message should report the (now lower) track count."""
     yaml_path = tmp_path / "project.yaml"

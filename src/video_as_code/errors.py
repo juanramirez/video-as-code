@@ -4,7 +4,7 @@ from .i18n import msg
 
 
 class KdenliveAsCodeError(Exception):
-    """Base error for kdenlive-as-code."""
+    """Base error for video-as-code."""
 
 
 class ValidationErrors(KdenliveAsCodeError):

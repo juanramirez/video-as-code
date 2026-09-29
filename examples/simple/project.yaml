@@ -20,7 +20,7 @@ bin:
     path: assets/tone.mp3
   - id: caption
     type: title
-    text: "kdenlive-as-code"
+    text: "video-as-code"
 
 # The timeline: one or more tracks, each a list of clips with an
 # explicit `start:` (seconds) and `duration:`/`out:`. This is the

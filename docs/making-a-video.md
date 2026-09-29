@@ -26,7 +26,7 @@ before anything else runs).
 ## 2. Validate
 
 ```bash
-kdenlive-as-code validate project.yaml
+video-as-code validate project.yaml
 ```
 
 Checks the YAML's shape, that every referenced asset exists on disk, that
@@ -37,7 +37,7 @@ anything. Catches typos before you burn time on a build/render cycle.
 ## 3. Build
 
 ```bash
-kdenlive-as-code build project.yaml -o project.kdenlive
+video-as-code build project.yaml -o project.kdenlive
 ```
 
 Generates the `.kdenlive` project file. Open it in kdenlive to inspect,
@@ -50,7 +50,7 @@ regenerated deterministically from the YAML every time (see the
 ## 4. Render straight to video (optional)
 
 ```bash
-kdenlive-as-code render project.yaml -o output.mp4
+video-as-code render project.yaml -o output.mp4
 ```
 
 Needs `melt` (the MLT engine kdenlive itself renders with) on `PATH`.
@@ -71,6 +71,6 @@ way it would be for code.
 - What's implemented and how each mechanism was verified:
   `ROADMAP.md`.
 - Already have a `.kdenlive` and want the YAML back instead?
-  `kdenlive-as-code import project.kdenlive -o project.yaml` - see
+  `video-as-code import project.kdenlive -o project.yaml` - see
   `README.md`'s *Usage* section. Have a rendered video with no project
   file at all instead? See `docs/reconstructing.md`.

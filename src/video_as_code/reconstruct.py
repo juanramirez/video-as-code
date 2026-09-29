@@ -1,4 +1,4 @@
-"""Reconstructs a `kdenlive-as-code` YAML from an already-rendered video plus a folder
+"""Reconstructs a `video-as-code` YAML from an already-rendered video plus a folder
 of the source assets that presumably went into it — not from a `.kdenlive`
 project file (see `reverse.py` for that). There is no structure to parse
 here, just pixels and audio samples, so this works by content-based
@@ -383,7 +383,7 @@ def find_trim_offset(segment_signatures_fine: list[np.ndarray], asset_signatures
     matched asset's own fine-grained signature sequence, returning the
     (start_frame_index, mean_distance) of the best-matching window. This is
     the same sliding-window search used to recover exact in/out points,
-    validated once an unrelated kdenlive-as-code bug (nonzero `in:` being doubled when
+    validated once an unrelated video-as-code bug (nonzero `in:` being doubled when
     generating XML — see xmlgen.py, mltframework/mlt#1282) stopped
     corrupting the ground truth used to test it."""
     n_seg, n_asset = len(segment_signatures_fine), len(asset_signatures_fine)
@@ -638,7 +638,7 @@ class ReconstructResult:
 
 
 def _make_asset_ids(names: set[str]) -> dict[str, str]:
-    """Maps asset filenames (bank keys) to short kdenlive-as-code bin ids: the
+    """Maps asset filenames (bank keys) to short video-as-code bin ids: the
     filename stem, disambiguated the same way reverse.py's
     register_bin_clip is if two different assets happen to share one."""
     ids: dict[str, str] = {}
@@ -657,7 +657,7 @@ def _make_asset_ids(names: set[str]) -> dict[str, str]:
 def _quantized_duration(seconds: float, fps: float) -> float:
     """Rounds `seconds` the same way schema.py will when it resolves the
     generated YAML (seconds -> whole frames -> seconds), so a duration
-    computed here doesn't drift from what `kdenlive-as-code validate` independently
+    computed here doesn't drift from what `video-as-code validate` independently
     re-derives from the same source file - ffprobe's raw duration and its
     frame-quantized equivalent can differ by a frame or more (e.g. a
     3.056s source becomes 3.04s at 25fps), and clamping against the wrong
@@ -672,7 +672,7 @@ def reconstruct(
     on_progress: Optional[Callable[[str], None]] = None,
 ) -> ReconstructResult:
     """Top-level entry point: given an already-rendered video and a folder
-    of candidate source assets, produces a kdenlive-as-code-compatible YAML dict by
+    of candidate source assets, produces a video-as-code-compatible YAML dict by
     content-based matching (see the module docstring - there's no
     guaranteed correct answer here). Unmatched or low-confidence segments
     are never silently guessed: they're flagged under
@@ -704,7 +704,7 @@ def reconstruct(
     warnings: list[str] = []
     unmatched: list[dict] = []
 
-    with tempfile.TemporaryDirectory(prefix="kdenlive-as-code-reconstruct-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="video-as-code-reconstruct-") as tmp:
         tmp_dir = Path(tmp)
         _report(msg("reconstruct.progress.probing", name=video_path.name))
         info = probe_video_info(video_path)

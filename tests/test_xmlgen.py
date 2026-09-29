@@ -3,8 +3,8 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from kdenlive_as_code import xmlgen
-from kdenlive_as_code.schema import load_and_resolve
+from video_as_code import xmlgen
+from video_as_code.schema import load_and_resolve
 
 
 def _project_yaml(assets_dir: Path) -> str:

@@ -17,12 +17,12 @@ code itself already marks the boundary.
   items) since there's nothing in the YAML model to represent them -
   would need title clips to become a list of positioned items rather
   than a flat set of fields, a real schema redesign, not a quick win.
-- **`kdenlive-as-code reconstruct`: matching through fades**: known limitation,
+- **`video-as-code reconstruct`: matching through fades**: known limitation,
   documented but not addressed at the root — matching compares against
   each asset's *plain* content, so a segment that's mid-fade (darkened/
   quieted relative to source) can score too poorly to match confidently,
   and segmentation can split a fade into spurious extra segments.
-- **`kdenlive-as-code reconstruct`: background audio continuity across cuts**:
+- **`video-as-code reconstruct`: background audio continuity across cuts**:
   flagged inline in `reconstruct.py` as real and out of scope —
   background audio commonly doesn't segment cleanly to match video cuts;
   a harder, separate problem this doesn't attempt to solve.
@@ -114,7 +114,7 @@ mechanisms competitors' editors don't expose either.
 ## Effects other NLEs have, verified buildable (or confirmed absent) via melt
 
 Found by asking what DaVinci/Premiere/CapCut-class editors have that
-kdenlive-as-code doesn't yet produce. Several turned out to be effects
+video-as-code doesn't yet produce. Several turned out to be effects
 kdenlive's *own* UI already exposes (their MLT filters are credited to
 kdenlive's own lead developer) — not competitor-exclusive after all, but
 still real gaps for this project, since none of them are in the schema.

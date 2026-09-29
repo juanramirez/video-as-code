@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from kdenlive_as_code import reverse, xmlgen
-from kdenlive_as_code.schema import load_and_resolve
+from video_as_code import reverse, xmlgen
+from video_as_code.schema import load_and_resolve
 
 
 def test_round_trip_preserves_structure(tmp_path: Path, assets_dir: Path):
@@ -1081,7 +1081,7 @@ timeline:
 
 
 def test_reimported_yaml_is_re_buildable(tmp_path: Path, assets_dir: Path):
-    """The result of `kdenlive-as-code import` must be re-buildable: this validates that
+    """The result of `video-as-code import` must be re-buildable: this validates that
     the produced YAML respects our own schema, not just that it 'looks
     right'."""
     import yaml as pyyaml
@@ -1118,7 +1118,7 @@ def test_second_round_trip_is_a_fixed_point(tmp_path: Path, assets_dir: Path):
     """`import . build` isn't the identity (frame rounding can change values,
     e.g. 0.5s -> 0.52s), but it must be idempotent: once a YAML has been
     through the cycle once, doing it again shouldn't change it any further.
-    Without this, `kdenlive-as-code build` -> `kdenlive-as-code import` -> `kdenlive-as-code build` -> `kdenlive-as-code
+    Without this, `video-as-code build` -> `video-as-code import` -> `video-as-code build` -> `video-as-code
     import` could drift indefinitely instead of settling."""
     import yaml as pyyaml
 
@@ -1204,8 +1204,8 @@ timeline:
     # the sequence UUID, the document id), so naming this file anything
     # other than "p1.kdenlive" would make the second build's UUIDs diverge
     # from the first even though nothing about the timeline changed. This
-    # mirrors the CLI's own default naming (`kdenlive-as-code build p1.yaml` ->
-    # `p1.kdenlive`, `kdenlive-as-code import p1.kdenlive` -> `p1.yaml`), which keeps
+    # mirrors the CLI's own default naming (`video-as-code build p1.yaml` ->
+    # `p1.kdenlive`, `video-as-code import p1.kdenlive` -> `p1.yaml`), which keeps
     # the stem consistent automatically — it's only a foot-gun if you
     # rename the file in between.
     resolved1 = load_and_resolve(yaml_path)

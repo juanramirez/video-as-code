@@ -13,9 +13,9 @@ backlog.
 - Deterministic `.kdenlive` (MLT XML) generation.
 - Reverse importer, `.kdenlive` -> YAML, preserving unrecognized elements
   under `x_kdenlive_raw` instead of discarding them.
-- CLI: `kdenlive-as-code build` / `validate` / `import` / `render` (build + render to
+- CLI: `video-as-code build` / `validate` / `import` / `render` (build + render to
   video via a real `melt`, added 2026-08-15).
-- i18n message catalog for user-facing output (`en`/`es`, via `KDENLIVE_AS_CODE_LANG`).
+- i18n message catalog for user-facing output (`en`/`es`, via `VIDEO_AS_CODE_LANG`).
 - Example project with tiny committed assets (`examples/simple/`).
 
 ## v0.2 — shipped (2026-08-15)
@@ -39,12 +39,12 @@ backlog.
   placement's own embedded audio would have played at the same time as
   the audio-track copy's faded audio, overlapping instead of the
   audio-track copy standing in cleanly for the video's sound.
-- **`kdenlive-as-code reconstruct`** — **implemented** (2026-08-14, merged to
+- **`video-as-code reconstruct`** — **implemented** (2026-08-14, merged to
   `master` 2026-08-15): reconstructs a YAML from an
   already-rendered video + an assets folder, via content-based matching
   (not XML parsing — there's no structure to walk, just pixels and audio
   samples). Its own module (`reconstruct.py`) and CLI subcommand
-  (`kdenlive-as-code reconstruct <video> <assets_dir> [-o output.yaml]`), not an
+  (`video-as-code reconstruct <video> <assets_dir> [-o output.yaml]`), not an
   extension of `reverse.py` — doesn't share `Importer`'s XML-tree-walking
   logic. Needs the optional `reconstruct` extra (`numpy`, `Pillow`); the
   base install stays light, `cli.py` imports it lazily.
@@ -225,7 +225,7 @@ feature.
     `cmd_build`/`cmd_import`/`cmd_reconstruct`) now routed through the
     same `KdenliveAsCodeError`/`msg()` path every other failure mode already
     uses, instead of a raw traceback.
-  - `--lang` CLI flag as an alternative to the `KDENLIVE_AS_CODE_LANG` environment
+  - `--lang` CLI flag as an alternative to the `VIDEO_AS_CODE_LANG` environment
     variable - applied before `build_parser()` (a lightweight pre-parser
     peels it off `argv`) so `--help` itself comes out localized too.
   - `pyproject.toml` version bump to match what's actually shipped.
@@ -377,7 +377,7 @@ close for `reverse.py`, and a project/track metadata round-trip theme.
     `kdenlive:sequenceproperties.guides` to `"[]"`; wire a YAML
     `guides:` list into that JSON - the placeholder already exists in
     the emitted XML.
-  - **`--keep-kdenlive`/`-k` for `kdenlive-as-code render`**: it currently builds
+  - **`--keep-kdenlive`/`-k` for `video-as-code render`**: it currently builds
     into a `tempfile.TemporaryDirectory()` and discards the
     intermediate `.kdenlive` once `melt` finishes, with no way to keep
     the file it just generated.

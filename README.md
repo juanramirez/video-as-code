@@ -1,9 +1,9 @@
-# kdenlive-as-code
+# video-as-code
 
 Programmatic generator for [kdenlive](https://kdenlive.org) projects from a
 declarative YAML description, meant for versioning videos with a VCS (like
 Git): the `.yaml` is what you check in; the `.kdenlive` (XML/MLT) is
-regenerated deterministically with `kdenlive-as-code build` and doesn't need to live
+regenerated deterministically with `video-as-code build` and doesn't need to live
 in the repo.
 
 ## Install
@@ -12,33 +12,33 @@ in the repo.
 pip install -e ".[dev]"
 ```
 
-`kdenlive-as-code reconstruct` (see below) needs the optional `reconstruct` extra
+`video-as-code reconstruct` (see below) needs the optional `reconstruct` extra
 (`numpy`, `Pillow`) on top of that:
 
 ```bash
 pip install -e ".[dev,reconstruct]"
 ```
 
-The rest of `kdenlive-as-code` (`build`/`validate`/`import`) only ever needs PyYAML —
+The rest of `video-as-code` (`build`/`validate`/`import`) only ever needs PyYAML —
 `reconstruct.py` is imported lazily, so skipping this extra doesn't affect
 anything else.
 
 ## Usage
 
 ```bash
-kdenlive-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
-kdenlive-as-code validate project.yaml                     # validate without building
-kdenlive-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
-kdenlive-as-code render project.yaml [-o output.mp4]       # build + render straight to video via melt
+video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
+video-as-code validate project.yaml                     # validate without building
+video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
+video-as-code render project.yaml [-o output.mp4]       # build + render straight to video via melt
 ```
 
-`kdenlive-as-code render` needs `melt` (the MLT engine kdenlive itself renders with) on
-PATH — it's not bundled with `kdenlive-as-code`. It's equivalent to running
-`kdenlive-as-code build` and then `melt output.kdenlive -consumer avformat:output.mp4`
+`video-as-code render` needs `melt` (the MLT engine kdenlive itself renders with) on
+PATH — it's not bundled with `video-as-code`. It's equivalent to running
+`video-as-code build` and then `melt output.kdenlive -consumer avformat:output.mp4`
 yourself, minus the intermediate `.kdenlive` file (built to a temp
 directory and discarded).
 
-`kdenlive-as-code import` recognizes everything this generator knows how to produce
+`video-as-code import` recognizes everything this generator knows how to produce
 (video/audio tracks, trimmed clips, fade to/from black, volume fades,
 per-clip mute, audio pan, speed changes (forward or reverse), title
 clips, guides/markers, track names/hidden/locked/audio-muted state, bin
@@ -58,21 +58,21 @@ deliberately.
 
 See `examples/simple/` for a minimal working project (tiny generated
 assets, one audio + one video track, fades, trims, a speed change, mute,
-and a title clip): `kdenlive-as-code build examples/simple/project.yaml`. See
+and a title clip): `video-as-code build examples/simple/project.yaml`. See
 `examples/scenes/` for the high-level `scenes:` compiler (a cut, a
 `dissolve`, and a `wipe`, all from the same two tiny images):
-`kdenlive-as-code build examples/scenes/project.yaml`.
+`video-as-code build examples/scenes/project.yaml`.
 
 See `docs/making-a-video.md` for a short step-by-step howto of this
 whole flow.
 
-### `kdenlive-as-code reconstruct`: recovering a YAML from a rendered video
+### `video-as-code reconstruct`: recovering a YAML from a rendered video
 
 ```bash
-kdenlive-as-code reconstruct rendered.mp4 assets/ [-o output.yaml]
+video-as-code reconstruct rendered.mp4 assets/ [-o output.yaml]
 ```
 
-Unlike `kdenlive-as-code import`, this doesn't start from a `.kdenlive` project — it
+Unlike `video-as-code import`, this doesn't start from a `.kdenlive` project — it
 starts from an already-**rendered** video (a flat `.mp4`, no edit
 metadata) plus a folder of the source assets that presumably went into
 it, and tries to recover which asset appears where, trimmed how, and with
@@ -81,7 +81,7 @@ structured XML. There is no guaranteed correct answer here (see
 `ROADMAP.md` for how the matching works and its known limitations) —
 segments it isn't confident about are never silently guessed; they're
 kept under `x_reconstruct_unmatched:` in the output YAML for you to
-review by hand, the same way `kdenlive-as-code import` handles `x_kdenlive_raw:`.
+review by hand, the same way `video-as-code import` handles `x_kdenlive_raw:`.
 
 Treat its output as a rough first draft to check against the real
 project, not a finished YAML.
@@ -94,18 +94,18 @@ whole flow.
 All user-facing text (validation errors, CLI output, import warnings) goes
 through a small message catalog (`i18n.py`), keyed by token and looked up at
 call time. English is the source of truth and the fallback for any locale
-or key that isn't translated. Set `KDENLIVE_AS_CODE_LANG=es` to get the Spanish
+or key that isn't translated. Set `VIDEO_AS_CODE_LANG=es` to get the Spanish
 catalog:
 
 ```bash
-KDENLIVE_AS_CODE_LANG=es kdenlive-as-code validate project.yaml
+VIDEO_AS_CODE_LANG=es video-as-code validate project.yaml
 ```
 
 We deliberately don't read the system `LANG`/`LC_ALL`: locale selection is
 opt-in and explicit, so behavior doesn't silently change across machines
 and test runs stay deterministic. Code comments, docstrings, and this
-README are always in English regardless of `KDENLIVE_AS_CODE_LANG` — that setting only
-affects what a `kdenlive-as-code` *user* sees at runtime.
+README are always in English regardless of `VIDEO_AS_CODE_LANG` — that setting only
+affects what a `video-as-code` *user* sees at runtime.
 
 ## Current status
 
@@ -137,7 +137,7 @@ Verified by the test suite (`pytest`, 171 tests, all passing):
   recomputes on open anyway).
 - **Reverse importer** (`reverse.py`): `.kdenlive` -> YAML, with a clean
   split between what's recognized and what isn't (`x_kdenlive_raw`).
-- **`kdenlive-as-code reconstruct`** (`reconstruct.py`, optional `reconstruct` extra):
+- **`video-as-code reconstruct`** (`reconstruct.py`, optional `reconstruct` extra):
   rendered video + assets folder -> YAML, by content-based matching
   instead of XML parsing. See the *Usage* section above and `ROADMAP.md`
   for how it works and its known limitations.

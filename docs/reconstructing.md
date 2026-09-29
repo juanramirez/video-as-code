@@ -2,11 +2,11 @@
 
 For when you have a flat, already-rendered video (a `.mp4`, no edit
 metadata) and the source assets that probably went into it, but no
-project file at all - not even a `.kdenlive`. `kdenlive-as-code
+project file at all - not even a `.kdenlive`. `video-as-code
 reconstruct` recovers an approximate YAML by comparing pixel/audio
 content, not by parsing structure (there's no structure to parse).
 
-If you *do* have a `.kdenlive` project file, use `kdenlive-as-code
+If you *do* have a `.kdenlive` project file, use `video-as-code
 import` instead (see `README.md`) - it's exact, since it's reading real
 edit data rather than guessing from pixels.
 
@@ -28,7 +28,7 @@ just candidates); the matcher figures out which ones actually appear.
 ## 3. Run it
 
 ```bash
-kdenlive-as-code reconstruct rendered.mp4 assets/ -o output.yaml
+video-as-code reconstruct rendered.mp4 assets/ -o output.yaml
 ```
 
 This is a real, multi-minute pipeline on non-trivial footage (several
@@ -62,7 +62,7 @@ Treat `output.yaml` as a rough first draft, not a finished project:
 ## 6. Verify
 
 ```bash
-kdenlive-as-code render output.yaml -o check.mp4
+video-as-code render output.yaml -o check.mp4
 ```
 
 Build and render the recovered YAML, then compare `check.mp4` against

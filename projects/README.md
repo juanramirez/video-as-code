@@ -1,9 +1,9 @@
 # projects/
 
-Personal projects made with `kdenlive-as-code`, each in its own
+Personal projects made with `video-as-code`, each in its own
 subdirectory. This directory lives inside the tool's own repo for
 convenience, but its contents (aside from this README) are excluded via
-`.gitignore` — it isn't part of `kdenlive-as-code`'s own code.
+`.gitignore` — it isn't part of `video-as-code`'s own code.
 
 ## Organization
 

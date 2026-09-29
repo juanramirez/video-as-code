@@ -163,7 +163,7 @@ def cmd_reconstruct(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="kdenlive-as-code", description=msg("cli.help.description"))
+    parser = argparse.ArgumentParser(prog="video-as-code", description=msg("cli.help.description"))
     parser.add_argument(
         "--lang",
         choices=sorted(i18n.CATALOGS),
