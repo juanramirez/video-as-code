@@ -11,6 +11,8 @@ Philosophy: accumulate every error found and report them all at once
 """
 from __future__ import annotations
 
+import math
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -79,7 +81,8 @@ def load_yaml(path: str | Path) -> ProjectDoc:
     if not isinstance(tracks_data, list):
         errors.append(msg("validation.tracks_not_list"))
         tracks_data = []
-    tracks = [t for t in (_parse_track(item, idx, errors) for idx, item in enumerate(tracks_data)) if t]
+    fps = resolve_fps(project.fps)
+    tracks = [t for t in (_parse_track(item, idx, errors, fps) for idx, item in enumerate(tracks_data)) if t]
 
     unknown_keys = set(data.keys()) - RESERVED_TOP_LEVEL_KEYS
     if unknown_keys:
@@ -214,7 +217,94 @@ def _parse_bin_clip(item: Any, source_dir: Path, errors: list[str]) -> BinClipSp
     return BinClipSpec(id=str(item["id"]), path=resolved, type=clip_type, folder=folder)
 
 
-def _parse_track(item: Any, idx: int, errors: list[str]) -> TrackSpec | None:
+def _boomerang_source_duration_s(placement: ClipPlacementSpec) -> float | None:
+    """This clip's own duration in output-timeline seconds, computed only
+    from what's on the placement itself (no source-file probing) - the
+    same explicit-only subset `boomerang` requires. Mirrors the no-ramp
+    branch of validate_and_resolve's own in/out resolution, minus the
+    "fall back to the whole probed asset" case that needs the bin."""
+    if placement.out is not None:
+        return placement.out - placement.in_
+    if placement.duration is not None:
+        return placement.duration
+    if placement.source_in is not None and placement.source_out is not None:
+        speed = abs(placement.speed) if placement.speed else 1.0
+        return abs(placement.source_out - placement.source_in) / speed
+    return None
+
+
+def _boomerang_source_window_s(placement: ClipPlacementSpec) -> tuple[float, float] | None:
+    """Real (unwarped) source seconds [in, out) this boomerang placement
+    covers - the exact window to hand `probe.render_reversed_segment` when
+    pre-rendering its reverse half's derivative file. Same priority order
+    as `_boomerang_source_duration_s`, but resolved back to real source
+    time even for the `out:`/`duration:` forms (which are on the already-
+    warped timeline when `speed:` is set - unlike `source_in:`/
+    `source_out:`, which are always real seconds already)."""
+    if placement.source_in is not None and placement.source_out is not None:
+        return (placement.source_in, placement.source_out)
+    speed = abs(placement.speed) if placement.speed else 1.0
+    if placement.out is not None:
+        return (placement.in_ * speed, placement.out * speed)
+    if placement.duration is not None:
+        return (placement.in_ * speed, (placement.in_ + placement.duration) * speed)
+    return None
+
+
+def _expand_boomerangs(
+    clips: list[ClipPlacementSpec], track_idx: int, errors: list[str], fps: FrameRate
+) -> list[ClipPlacementSpec]:
+    """Expands each `boomerang: true` placement into itself (boomerang
+    stripped) plus an auto-generated reverse repeat right after it - see
+    ClipPlacementSpec.boomerang for the exact rules.
+
+    The reverse's `start` is computed in *frames*, not raw seconds: the
+    forward placement's own real on-timeline length always gets rounded
+    to a whole frame later (validate_and_resolve's own
+    `fps.seconds_to_frames`), so deriving the reverse's start from the
+    unrounded float duration can land it a frame short of where the
+    forward one actually ends, overlapping by one frame - reproduced and
+    fixed while wiring this up against real-world clips (e.g.
+    source_out=1.2s @ speed=1.935: 1.2/1.935 = 0.620155...s, which rounds to 19
+    frames = 0.6333s, not the raw 0.6201s).
+
+    The reverse placement keeps `source_in`/`source_out`/`speed` exactly
+    as written (same segment, same *positive* speed as the forward half -
+    no negation) and is instead marked via `_boomerang_reverse_of` so
+    validate_and_resolve substitutes a pre-reversed derivative file for
+    its bin clip - see ClipPlacementSpec.boomerang's docstring for why
+    negative `speed:` isn't used here."""
+    expanded: list[ClipPlacementSpec] = []
+    for c_idx, placement in enumerate(clips):
+        if not placement.boomerang:
+            expanded.append(placement)
+            continue
+        ctx = f"timeline.tracks[{track_idx}].clips[{c_idx}]"
+        forward = replace(placement, boomerang=False)
+        expanded.append(forward)
+        if placement.speed_ramp is not None:
+            errors.append(msg("validation.boomerang_conflicts_with_speed_ramp", ctx=ctx))
+            continue
+        own_duration_s = _boomerang_source_duration_s(placement)
+        if own_duration_s is None:
+            errors.append(msg("validation.boomerang_requires_explicit_duration", ctx=ctx))
+            continue
+        own_duration_frames = fps.seconds_to_frames(own_duration_s)
+        reverse_start_frame = fps.seconds_to_frames(placement.start) + own_duration_frames
+        expanded.append(
+            replace(
+                forward,
+                start=fps.frames_to_seconds(reverse_start_frame),
+                fade_in=None,
+                fade_in_level=None,
+                mute=True,
+                _boomerang_reverse_of=placement.clip,
+            )
+        )
+    return expanded
+
+
+def _parse_track(item: Any, idx: int, errors: list[str], fps: FrameRate) -> TrackSpec | None:
     if not isinstance(item, dict) or "type" not in item:
         errors.append(msg("validation.track_missing_type", idx=idx, item=item))
         return None
@@ -230,6 +320,7 @@ def _parse_track(item: Any, idx: int, errors: list[str]) -> TrackSpec | None:
     clips = [
         c for c in (_parse_clip_placement(c, idx, i, errors) for i, c in enumerate(clips_data)) if c
     ]
+    clips = _expand_boomerangs(clips, idx, errors, fps)
 
     pan = float(item["pan"]) if item.get("pan") is not None else None
     if pan is not None:
@@ -279,6 +370,11 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
     if not isinstance(mute, bool):
         errors.append(msg("validation.mute_invalid", ctx=ctx, mute=mute))
         mute = False
+
+    boomerang = item.get("boomerang", False)
+    if not isinstance(boomerang, bool):
+        errors.append(msg("validation.boomerang_invalid", ctx=ctx, boomerang=boomerang))
+        boomerang = False
 
     source_in = float(item["source_in"]) if item.get("source_in") is not None else None
     source_out = float(item["source_out"]) if item.get("source_out") is not None else None
@@ -516,6 +612,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         fade_out=float(item["fade_out"]) if item.get("fade_out") is not None else None,
         fade_in_level=float(item["fade_in_level"]) if item.get("fade_in_level") is not None else None,
         mute=mute,
+        boomerang=boomerang,
         speed=speed,
         preserve_pitch=bool(item.get("preserve_pitch", False)),
         speed_ramp=speed_ramp,
@@ -630,6 +727,10 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
 
     # --- probing: source type and duration ----------------------------------
     titles_dir = doc.source_path.parent / ".titles"
+    # See ClipPlacementSpec.boomerang's docstring: reverse halves are
+    # rendered here (once, then cached) instead of using MLT's own
+    # negative-speed timewarp.
+    boomerang_cache_dir = doc.source_path.parent / ".boomerang_cache"
     resolved_bin: dict[str, ResolvedBinClip] = {}
     for numeric_id, (clip_id, clip) in enumerate(bin_by_id.items(), start=1):
         kind = clip.type or probe.guess_type(clip.path)
@@ -682,6 +783,62 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             if bin_clip is None:
                 errors.append(msg("validation.clip_unknown_reference", ctx=ctx, clip=placement.clip))
                 continue
+
+            if placement._boomerang_reverse_of is not None:
+                # See ClipPlacementSpec.boomerang's docstring: substitute a
+                # pre-reversed derivative for this placement's bin clip
+                # instead of resolving `placement.clip` directly, and
+                # rewrite it to reference that derivative from its own
+                # start (0) at the same speed - real render testing found
+                # MLT's own negative-speed timewarp reliably corrupts a
+                # chunk of playback on large images, so this sidesteps it
+                # entirely rather than trying to fix it at the XML level.
+                window = _boomerang_source_window_s(placement)
+                if window is None:
+                    errors.append(msg("validation.boomerang_requires_explicit_duration", ctx=ctx))
+                    continue
+                in_win_s, out_win_s = window
+                try:
+                    reversed_path = probe.render_reversed_segment(
+                        bin_clip.path, in_win_s, out_win_s, boomerang_cache_dir
+                    )
+                except probe.ProbeError as exc:
+                    errors.append(str(exc))
+                    continue
+                segment_len_s = out_win_s - in_win_s
+                # `duration_frames` below feeds `source_duration_s = frames_to_seconds(round(
+                # duration_frames / divisor))` a few lines down, checked against `out_s =
+                # source_out / divisor` (computed directly from the unrounded segment_len_s, no
+                # intermediate frame-rounding). Dividing an already-rounded frame count by a
+                # non-integer speed can round DOWN relative to dividing the real seconds value
+                # first (confirmed on real-world clips - e.g. segment_len_s=3.0s
+                # @ speed=1.98, lost ~0.015s, most of a frame at 30fps, this way), which would
+                # otherwise fail the "out exceeds duration" check for a derivative file that's
+                # actually exactly the right length.
+                #
+                # Fix: pick the smallest frame count whose frames_to_seconds is >= out_s (a
+                # ceiling, NOT `fps.seconds_to_frames`'s round-half-up - out_s often isn't exactly
+                # on a frame boundary, and rounding it to the *nearest* frame can round down,
+                # reproducing the exact same problem one level up - confirmed on a real clip:
+                # out_s=0.766936s rounds to 23 frames = 0.766667s, which is already < out_s).
+                # Then solve for a `duration_frames` guaranteed to round back to at least that
+                # many frames regardless of `speed`: since out_frames is an integer,
+                # D/divisor >= out_frames implies round(D/divisor) >= out_frames (round only ever
+                # moves a value by <=0.5, so it can't drop below the next integer below an
+                # already->= value) - ceil() plus one whole extra frame of margin for float
+                # precision at that exact boundary.
+                divisor = abs(placement.speed) if placement.speed else 1.0
+                out_s = segment_len_s / divisor
+                out_frames = math.ceil(out_s * fps.num / fps.den - 1e-9)
+                bin_clip = ResolvedBinClip(
+                    id=bin_clip.id,
+                    numeric_id=bin_clip.numeric_id,
+                    path=reversed_path,
+                    kind=bin_clip.kind,
+                    duration_frames=math.ceil((out_frames + 1) * divisor),
+                    folder=bin_clip.folder,
+                )
+                placement = replace(placement, source_in=0.0, source_out=segment_len_s)
 
             speed = placement.speed
             if speed is not None and bin_clip.kind in ("image", "title"):

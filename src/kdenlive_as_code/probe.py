@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 import shutil
 import subprocess
@@ -72,3 +73,44 @@ def probe_duration_seconds(path_str: str) -> float:
         return float(data["format"]["duration"])
     except (KeyError, ValueError, json.JSONDecodeError) as exc:
         raise ProbeError(msg("probe.duration_unreadable", path=path)) from exc
+
+
+def render_reversed_segment(path: Path, in_s: float, out_s: float, cache_dir: Path) -> Path:
+    """Pre-renders (and caches, keyed by source path + window) a reversed
+    copy of [in_s, out_s) from `path` via ffmpeg - the actual workaround
+    for `boomerang:`'s reverse half, since MLT's own negative-speed
+    timewarp corrupts playback on large images (see
+    ClipPlacementSpec.boomerang's docstring in models.py for the full
+    root-cause writeup). Playing this file forward at the placement's own
+    (positive) speed instead sidesteps MLT's reverse-seek path entirely.
+    Idempotent: a second call with the same path/window reuses the cached
+    file instead of re-rendering."""
+    if not ffmpeg_available():
+        raise ProbeError(msg("probe.ffmpeg_unavailable", path=path))
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    digest = hashlib.sha1(f"{path.resolve()}|{in_s:.6f}|{out_s:.6f}".encode()).hexdigest()[:16]
+    ext = path.suffix or ".mp4"
+    cache_path = cache_dir / f"{digest}{ext}"
+    if cache_path.exists():
+        return cache_path
+    tmp_path = cache_dir / f"{digest}.tmp{ext}"
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-i", str(path),
+                "-vf", f"trim=start={in_s:.6f}:end={out_s:.6f},setpts=PTS-STARTPTS,reverse",
+                "-an",
+                str(tmp_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        raise ProbeError(msg("probe.ffmpeg_reverse_failed", path=path, stderr=exc.stderr.strip())) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ProbeError(msg("probe.ffmpeg_reverse_timeout", path=path)) from exc
+    tmp_path.replace(cache_path)
+    return cache_path

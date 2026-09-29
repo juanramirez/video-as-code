@@ -1313,3 +1313,175 @@ timeline:
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(path)
     assert "fade_in_level" in str(exc.value)
+
+
+def test_boomerang_expands_into_forward_and_reverse(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 1.0, source_in: 0, source_out: 2, speed: 2.0, fade_in: 0.5, mute: true, boomerang: true}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    placements = resolved.tracks[0].placements
+    assert len(placements) == 2
+    forward, reverse = placements
+    # forward: as written, just with boomerang consumed - own duration (2-0)/2.0 = 1.0s
+    assert forward.start_frame == pytest.approx(25.0, abs=1)
+    # reverse: starts right where the forward one ends, hard cut, forced mute, SAME (positive)
+    # speed as forward - no negation (see ClipPlacementSpec.boomerang: the reverse half plays a
+    # pre-reversed derivative file forward instead of using MLT's own negative-speed timewarp)
+    assert reverse.start_frame == forward.start_frame + forward.length_frames
+    assert reverse.speed == 2.0
+    assert reverse.fade_in_frames == 0
+    assert reverse.mute is True
+    # the reverse half's bin clip is a distinct (cached, pre-reversed) derivative file, not the
+    # original source
+    assert reverse.bin_clip.path != forward.bin_clip.path
+    assert reverse.bin_clip.path.exists()
+
+
+def test_boomerang_reverse_uses_same_speed_as_forward_when_unset(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, source_in: 0, source_out: 1, boomerang: true}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    forward, reverse = resolved.tracks[0].placements
+    assert forward.speed is None
+    assert reverse.speed is None
+
+
+def test_boomerang_preserves_crop_on_both_halves(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, source_in: 0, source_out: 1, boomerang: true, crop: {{top: 10, bottom: 5}}}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    forward, reverse = resolved.tracks[0].placements
+    assert forward.crop == reverse.crop == (10, 0, 5, 0)
+
+
+def test_boomerang_requires_explicit_duration(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, boomerang: true}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "boomerang" in str(exc.value)
+
+
+def test_boomerang_conflicts_with_speed_ramp(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, out: 1, boomerang: true,
+            speed_ramp: [{{at: 0, speed: 2.0}}]}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "boomerang" in str(exc.value) and "speed_ramp" in str(exc.value)
+
+
+def test_boomerang_invalid_type_rejected(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, out: 1, boomerang: "yes"}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "boomerang" in str(exc.value)
+
+
+def test_boomerang_reverse_derivative_is_cached(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, source_in: 0, source_out: 1, boomerang: true}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    first = load_and_resolve(path)
+    second = load_and_resolve(path)
+    _, reverse_first = first.tracks[0].placements
+    _, reverse_second = second.tracks[0].placements
+    # same window -> same cache key -> reused, not regenerated
+    assert reverse_first.bin_clip.path == reverse_second.bin_clip.path
+
+
+def test_boomerang_reverse_derivative_duration_survives_awkward_speed_rounding(
+    tmp_path: Path, assets_dir: Path
+):
+    # Regression test for a real bug found wiring this up against real-world clips
+    # (a clip with source_out=2.2s @ speed=2.8688, fps=30): the reverse half's synthetic
+    # bin clip duration is derived through the SAME `round(duration_frames / speed)` formula
+    # every other speed-warped clip's `out` bound check uses, and for this specific
+    # segment/speed/fps combination an earlier version of the padding math rounded the
+    # available-duration bound to just *under* what the reverse placement itself needs,
+    # failing "'out' exceeds the actual duration" for a derivative file that's actually
+    # exactly the right length. Uses the project's own fps (25 here, matching the other
+    # fixtures) with a speed picked to land near a frame-rounding boundary the same way.
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, source_in: 0, source_out: 2.2, speed: 2.8688, boomerang: true}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    load_and_resolve(path)  # must not raise ValidationErrors

@@ -69,6 +69,43 @@ class ClipPlacementSpec:
     mute: bool = False
     speed: Optional[float] = None
     preserve_pitch: bool = False
+    # Shorthand for the "play forward, then immediately play the same
+    # segment backward" repeat pattern often done by hand
+    # (two placements per clip, written out manually): expanded
+    # at parse time (schema.py's _parse_track) into two placements - this
+    # one as written (boomerang stripped), plus an auto-generated second
+    # one right after it, no fade_in (a hard cut into the repeat, matching
+    # the hand-written convention), and mute forced true (reversed audio
+    # is rarely wanted; set `mute: false` explicitly on THIS placement if
+    # a reversed audio repeat is actually intended).
+    #
+    # The reverse half does NOT use negative `speed:` (MLT's own negative-
+    # speed timewarp producer) - real render testing (frame-by-frame, on
+    # real-world upscaled gifs) found it reliably corrupts a chunk of the
+    # reverse playback (a solid-color/striped garbage frame at the seam,
+    # then anywhere from a few frames to most of the reverse half showing
+    # wrong/garbled content before it catches up) on large images. Root
+    # cause confirmed by reading MLT's own producer_timewarp.c: negative
+    # speed re-seeks the wrapped producer backward one frame at a time
+    # every frame, and the qimage/gif producer's own decode path isn't
+    # robust against a strictly-decreasing seek pattern at large
+    # resolutions - not something fixable from this project's XML output
+    # (see validate_and_resolve's `_render_boomerang_reverse_source` for
+    # the actual workaround: pre-render an already-reversed derivative
+    # file with ffmpeg once, cache it, and play *that* forward at the
+    # same positive speed - sidesteps MLT's reverse-seek path entirely).
+    # Deliberately narrow v1 scope (same call speed_ramp's docstring
+    # made): requires an explicit `out:`/`duration:`/`source_in:`+
+    # `source_out:` so the repeat's start can be computed without probing
+    # the source file, and is mutually exclusive with `speed_ramp`
+    # (reversing a multi-segment ramp isn't attempted this round).
+    boomerang: bool = False
+    # Internal only (never set from YAML - schema.py's _expand_boomerangs
+    # sets this on the placement it synthesizes for `boomerang:`'s reverse
+    # half): tells validate_and_resolve to substitute this placement's bin
+    # clip for a pre-reversed derivative file instead of resolving
+    # `self.clip` directly - see `boomerang`'s docstring above for why.
+    _boomerang_reverse_of: Optional[str] = None
     # Speed ramp (mlt_service "timeremap", a <link> on a <chain> - see
     # xmlgen.py's _add_speed_ramp_link) - a real, non-flat speed curve,
     # distinct from `speed`'s single multiplier (mutually exclusive with

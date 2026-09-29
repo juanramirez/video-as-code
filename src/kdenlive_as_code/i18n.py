@@ -19,6 +19,12 @@ _EN: dict[str, str] = {
     "probe.ffprobe_failed": "ffprobe failed analyzing '{path}': {stderr}",
     "probe.ffprobe_timeout": "ffprobe did not respond in time analyzing '{path}'",
     "probe.duration_unreadable": "Could not read the duration of '{path}' from ffprobe's output",
+    "probe.ffmpeg_unavailable": (
+        "ffmpeg is not available on PATH; can't pre-render a reversed derivative of '{path}' "
+        "for `boomerang:`'s reverse half."
+    ),
+    "probe.ffmpeg_reverse_failed": "ffmpeg failed pre-rendering a reversed segment of '{path}': {stderr}",
+    "probe.ffmpeg_reverse_timeout": "ffmpeg did not respond in time pre-rendering a reversed segment of '{path}'",
     "validation.yaml_missing": "YAML file not found: {path}",
     "validation.yaml_invalid": "Invalid YAML in {path}: {exc}",
     "validation.project_section_missing": "Missing 'project:' section (or it isn't a map) in {path}",
@@ -94,6 +100,15 @@ _EN: dict[str, str] = {
         "duration on the timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
+    "validation.boomerang_invalid": "{ctx}: 'boomerang' must be true or false, got {boomerang!r}",
+    "validation.boomerang_conflicts_with_speed_ramp": (
+        "{ctx}: 'boomerang' cannot be combined with 'speed_ramp' - reversing a multi-segment "
+        "ramp isn't supported"
+    ),
+    "validation.boomerang_requires_explicit_duration": (
+        "{ctx}: 'boomerang' needs an explicit 'out:', 'duration:', or 'source_in:'+'source_out:' "
+        "so the repeat's start can be computed without probing the source file"
+    ),
     "validation.bool_field_invalid": "{ctx}: '{field}' must be true or false, got {value!r}",
     "validation.source_in_out_incomplete": "{ctx}: 'source_in' and 'source_out' must both be set, or neither",
     "validation.source_in_out_conflicts": "{ctx}: 'source_in'/'source_out' cannot be combined with 'in'/'out'/'duration' - use one or the other",
@@ -245,6 +260,12 @@ _ES: dict[str, str] = {
     "probe.ffprobe_failed": "ffprobe falló al analizar '{path}': {stderr}",
     "probe.ffprobe_timeout": "ffprobe no respondió a tiempo analizando '{path}'",
     "probe.duration_unreadable": "No se pudo leer la duración de '{path}' en la salida de ffprobe",
+    "probe.ffmpeg_unavailable": (
+        "ffmpeg no está disponible en PATH; no se puede generar un derivado invertido de "
+        "'{path}' para la mitad reverse de `boomerang:`."
+    ),
+    "probe.ffmpeg_reverse_failed": "ffmpeg falló generando un tramo invertido de '{path}': {stderr}",
+    "probe.ffmpeg_reverse_timeout": "ffmpeg no respondió a tiempo generando un tramo invertido de '{path}'",
     "validation.yaml_missing": "No existe el archivo YAML: {path}",
     "validation.yaml_invalid": "YAML inválido en {path}: {exc}",
     "validation.project_section_missing": "Falta la sección 'project:' (o no es un mapa) en {path}",
@@ -320,6 +341,15 @@ _ES: dict[str, str] = {
         "duración del clip en el timeline ({clip_len:.3f}s)"
     ),
     "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
+    "validation.boomerang_invalid": "{ctx}: 'boomerang' debe ser true o false, se recibió {boomerang!r}",
+    "validation.boomerang_conflicts_with_speed_ramp": (
+        "{ctx}: 'boomerang' no se puede combinar con 'speed_ramp' - invertir una rampa "
+        "multi-segmento no está soportado"
+    ),
+    "validation.boomerang_requires_explicit_duration": (
+        "{ctx}: 'boomerang' necesita 'out:', 'duration:', o 'source_in:'+'source_out:' explícitos "
+        "para poder calcular el inicio de la repetición sin sondear el archivo fuente"
+    ),
     "validation.bool_field_invalid": "{ctx}: '{field}' debe ser true o false, se recibió {value!r}",
     "validation.source_in_out_incomplete": "{ctx}: 'source_in' y 'source_out' deben indicarse ambos, o ninguno",
     "validation.source_in_out_conflicts": "{ctx}: 'source_in'/'source_out' no se pueden combinar con 'in'/'out'/'duration' - usa uno u otro",
