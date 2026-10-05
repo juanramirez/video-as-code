@@ -1021,6 +1021,61 @@ timeline:
     assert "source_in" in str(exc.value)
 
 
+
+def test_speed_ramp_with_source_in_resolves(tmp_path: Path, assets_dir: Path):
+    """`source_in:` alone (no `source_out:`) is the supported way to start
+    a ramp later in the source - it only offsets where the ramp reads
+    from, the placement's own range still starts at 0."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 1.0
+          source_in: 1.0
+          speed_ramp:
+            - {{at: 0, speed: 1.0}}
+            - {{at: 0.5, speed: 2.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    resolved = load_and_resolve(path)
+    placement = resolved.tracks[0].placements[0]
+    assert placement.speed_ramp_source_offset_s == 1.0
+    assert placement.in_frame == 0
+    assert placement.out_frame - placement.in_frame + 1 == 25  # 1.0s @ 25fps
+
+
+def test_speed_ramp_with_source_in_exceeds_source_rejected(tmp_path: Path, assets_dir: Path):
+    """clip.mp4 (assets_dir) is 3s - starting at 2.5s leaves only 0.5s,
+    so a flat 1x ramp over 1s of output runs out of source."""
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 1.0
+          source_in: 2.5
+          speed_ramp:
+            - {{at: 0, speed: 1.0}}
+"""
+    path = _write_yaml(tmp_path, yaml_text)
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "speed_ramp" in str(exc.value)
+
+
 def test_position_keyframes_resolves(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

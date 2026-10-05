@@ -105,6 +105,7 @@ def _build_media_element(
     preserve_pitch: bool = False,
     speed_ramp: Optional[list[tuple[int, float]]] = None,
     speed_ramp_image_mode: str = "nearest",
+    speed_ramp_source_offset_s: float = 0.0,
     fps: Optional[float] = None,
     folder_id: int = -1,
 ) -> ET.Element:
@@ -172,11 +173,15 @@ def _build_media_element(
     _prop(el, "kdenlive:control_uuid", control_uuid)
     if speed_ramp is not None:
         assert fps is not None, "speed_ramp requires fps"
-        _add_speed_ramp_link(el, speed_ramp, speed_ramp_image_mode, preserve_pitch, out_frame + 1, fps)
+        _add_speed_ramp_link(
+            el, speed_ramp, speed_ramp_image_mode, preserve_pitch, out_frame + 1, fps, speed_ramp_source_offset_s
+        )
     return el, xml_id
 
 
-def _speed_ramp_time_map(ramp: list[tuple[int, float]], out_frames: int, fps: float) -> str:
+def _speed_ramp_time_map(
+    ramp: list[tuple[int, float]], out_frames: int, fps: float, source_offset_s: float = 0.0
+) -> str:
     """Dense (one keyframe per output frame) MLT anim string for
     `timeremap`'s `time_map` property, given piecewise-constant-speed
     segments (`ramp`: `[(at_frame, speed), ...]`, sorted, first at frame
@@ -196,8 +201,13 @@ def _speed_ramp_time_map(ramp: list[tuple[int, float]], out_frames: int, fps: fl
     mathematically-correct endpoints. Root cause not fully understood,
     but sampling every output frame (rather than relying on MLT's own
     interpolation across a long gap) was verified reliable instead - see
-    ROADMAP.md."""
-    segment_start_source_s = [0.0]
+    ROADMAP.md.
+
+    `source_offset_s` (the placement's `source_in:`) shifts every value by
+    a constant: the map's values are absolute source seconds, so starting
+    the ramp N seconds into the source is just starting the first segment
+    at N instead of 0 - no trimmed copy of the source file needed."""
+    segment_start_source_s = [source_offset_s]
     for i in range(len(ramp) - 1):
         at_frame, speed = ramp[i]
         next_at_frame = ramp[i + 1][0]
@@ -221,6 +231,7 @@ def _add_speed_ramp_link(
     preserve_pitch: bool,
     out_frames: int,
     fps: float,
+    source_offset_s: float = 0.0,
 ) -> None:
     """Attaches a `timeremap` **link** (not a filter) to a `<chain>` -
     matches kdenlive's own construction exactly
@@ -234,7 +245,7 @@ def _add_speed_ramp_link(
     writes)."""
     link_el = ET.SubElement(chain_el, "link", {"id": "link0"})
     _prop(link_el, "mlt_service", "timeremap")
-    _prop(link_el, "time_map", _speed_ramp_time_map(ramp, out_frames, fps))
+    _prop(link_el, "time_map", _speed_ramp_time_map(ramp, out_frames, fps, source_offset_s))
     _prop(link_el, "pitch", int(preserve_pitch))
     _prop(link_el, "image_mode", image_mode)
 
@@ -869,6 +880,7 @@ def _build_track(
             preserve_pitch=placement.preserve_pitch,
             speed_ramp=placement.speed_ramp,
             speed_ramp_image_mode=placement.speed_ramp_image_mode,
+            speed_ramp_source_offset_s=placement.speed_ramp_source_offset_s,
             fps=project.fps.fps,
         )
         root.append(el)

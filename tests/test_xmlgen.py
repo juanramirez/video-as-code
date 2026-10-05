@@ -189,3 +189,32 @@ def test_deterministic_output(tmp_path: Path, assets_dir: Path):
     text1 = out1.read_text().replace(str(tmp_path / "a"), "")
     text2 = out2.read_text().replace(str(tmp_path / "b"), "")
     assert text1 == text2
+
+
+def test_speed_ramp_source_in_offsets_time_map(tmp_path: Path, assets_dir: Path):
+    """`source_in:` with `speed_ramp:` shifts every `time_map` value by
+    that many source seconds (values are absolute source seconds), so the
+    first output frame reads at source_in instead of 0."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, duration: 1.0, source_in: 1.0, speed_ramp: [{{at: 0, speed: 1.0}}, {{at: 0.4, speed: 2.0}}]}}
+""",
+        encoding="utf-8",
+    )
+    out_path = tmp_path / "project.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), out_path)
+    link = ET.parse(out_path).getroot().find(".//link")
+    time_map = next(p.text for p in link.findall("property") if p.get("name") == "time_map")
+    values = dict(kv.split("=") for kv in time_map.split(";"))
+    assert float(values["0"]) == 1.0
+    assert abs(float(values["10"]) - 1.4) < 1e-6  # 0.4s at 1x
+    assert abs(float(values["15"]) - 1.8) < 1e-6  # then 0.2s at 2x

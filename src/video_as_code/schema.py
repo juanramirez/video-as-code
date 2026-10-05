@@ -378,7 +378,19 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
 
     source_in = float(item["source_in"]) if item.get("source_in") is not None else None
     source_out = float(item["source_out"]) if item.get("source_out") is not None else None
-    if (source_in is None) != (source_out is None):
+    if item.get("speed_ramp") is not None and source_in is not None and source_out is None:
+        # `source_in:` alone + `speed_ramp:` + `duration:`/`out:` - the ramp
+        # starts reading the source at `source_in` real seconds instead of
+        # at 0 (see ClipPlacementSpec.source_in). No `source_out:` here: with
+        # a ramp, where the source runs out is already fully determined by
+        # duration + the ramp's own segments, so a second, independent
+        # bound could only ever disagree with it. `in:` stays rejected
+        # (speed_ramp_in_not_supported, below) - `source_in` is the one way
+        # to offset a ramp, in real source seconds.
+        if source_in < 0:
+            errors.append(msg("validation.source_in_out_invalid", ctx=ctx, source_in=source_in, source_out="-"))
+            source_in = None
+    elif (source_in is None) != (source_out is None):
         errors.append(msg("validation.source_in_out_incomplete", ctx=ctx))
         source_in = source_out = None
     elif source_in is not None:
@@ -852,24 +864,27 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 errors.append(msg("validation.speed_ramp_on_image", ctx=ctx, clip=placement.clip))
                 speed_ramp = None
 
+            ramp_source_offset_s = 0.0
             if speed_ramp is not None:
-                # Note: `source_in`/`source_out` combined with `speed_ramp`
-                # is already rejected earlier - speed_ramp requires an
-                # explicit out:/duration: (below), and source_in/
-                # source_out reject being combined with in:/out:/
-                # duration: (see the source_in_out_conflicts check), so
-                # the two are mutually exclusive by construction, no
-                # separate check needed here.
-                # Deliberately narrow v0.7 scope (see
-                # ClipPlacementSpec.speed_ramp): always starts at the
-                # source's own beginning (in_s forced to 0 - already
-                # validated in _parse_clip_placement that `in:` isn't
-                # set alongside a ramp), and needs an explicit
-                # out:/duration: - no auto-inferred "use all available
-                # source" default like flat `speed:` gets, since that
-                # would need solving for where a multi-segment ramp
-                # runs out of source material rather than a single
-                # division.
+                # Note: the `source_in`+`source_out` PAIR combined with
+                # `speed_ramp` is already rejected earlier - speed_ramp
+                # requires an explicit out:/duration: (below), and the
+                # pair rejects being combined with in:/out:/duration: (see
+                # the source_in_out_conflicts check). `source_in` ALONE is
+                # the one supported way to offset a ramp (see
+                # _parse_clip_placement): it only shifts where in the real
+                # source the ramp starts reading - see xmlgen.py's
+                # _speed_ramp_time_map.
+                # Still narrow scope otherwise (see
+                # ClipPlacementSpec.speed_ramp): the placement's own range
+                # always starts at 0 (in_s forced to 0 - already validated
+                # in _parse_clip_placement that `in:` isn't set alongside a
+                # ramp), and needs an explicit out:/duration: - no
+                # auto-inferred "use all available source" default like
+                # flat `speed:` gets, since that would need solving for
+                # where a multi-segment ramp runs out of source material
+                # rather than a single division.
+                ramp_source_offset_s = placement.source_in or 0.0
                 in_s = 0.0
                 if placement.out is not None:
                     out_s = placement.out
@@ -887,7 +902,9 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 for i, (at, kf_speed) in enumerate(speed_ramp):
                     segment_end_s = speed_ramp[i + 1][0] if i + 1 < len(speed_ramp) else out_s
                     source_consumed_s += max(segment_end_s - at, 0.0) * kf_speed
-                available_source_s = fps.frames_to_seconds(bin_clip.duration_frames)
+                # The ramp starts reading at source_in, so whatever comes
+                # before it isn't available to consume.
+                available_source_s = fps.frames_to_seconds(bin_clip.duration_frames) - ramp_source_offset_s
                 if source_consumed_s > available_source_s + 1e-6:
                     errors.append(
                         msg(
@@ -1056,6 +1073,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     preserve_pitch=placement.preserve_pitch,
                     speed_ramp=speed_ramp_frames,
                     speed_ramp_image_mode=placement.speed_ramp_image_mode,
+                    speed_ramp_source_offset_s=ramp_source_offset_s,
                     rect=rect,
                     position_keyframes=position_keyframes_frames,
                     crop=placement.crop,

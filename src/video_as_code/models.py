@@ -55,9 +55,10 @@ class ClipPlacementSpec:
     # the real source file," dividing by `speed` internally so the
     # resulting warped duration comes out right without the caller
     # doing that math by hand. Both or neither; mutually exclusive with
-    # `in:`/`out:`/`duration:` and with `speed_ramp:` (which has its
-    # own, different "always starts at the source's own beginning"
-    # convention - see `speed_ramp`).
+    # `in:`/`out:`/`duration:`. Exception: with `speed_ramp:`,
+    # `source_in:` ALONE (plus `duration:`/`out:`) is allowed and means
+    # "start the ramp this many real seconds into the source" - see
+    # `speed_ramp`.
     source_in: Optional[float] = None
     source_out: Optional[float] = None
     fade_in: Optional[float] = None
@@ -122,8 +123,11 @@ class ClipPlacementSpec:
     # holds flat from that keyframe to the next (or to the clip's own
     # end for the last one) - a ramp is several flat segments in
     # sequence, not a smoothly-eased curve. Deliberately narrow v0.7
-    # scope: always starts at the source's own beginning (`in:` isn't
-    # supported alongside it), and needs an explicit `out:`/`duration:`
+    # scope: starts reading at the source's own beginning unless
+    # `source_in:` is set ALONE (no `source_out:` - duration + the ramp
+    # already decide where reading stops), which offsets where the ramp
+    # starts reading in real source seconds; `in:` isn't supported
+    # alongside it. Needs an explicit `out:`/`duration:`
     # (no auto-inferred "use all available source" default like flat
     # `speed:` gets, since that would need solving for where a
     # multi-segment ramp runs out of source material rather than a
@@ -352,6 +356,9 @@ class ResolvedPlacement:
     # frame-based (seconds already resolved to frames), first always 0.
     speed_ramp: Optional[list[tuple[int, float]]] = None
     speed_ramp_image_mode: str = "nearest"
+    # Real source seconds the ramp starts reading from (the placement's
+    # `source_in:`, 0 when unset) - see ClipPlacementSpec.speed_ramp.
+    speed_ramp_source_offset_s: float = 0.0
     rect: Optional[tuple[float, float, float, float]] = None  # x y w h in pixels
     # Animated PiP - see ClipPlacementSpec. `[(at_frame, x, y, w, h), ...]`.
     position_keyframes: Optional[list[tuple[int, float, float, float, float]]] = None

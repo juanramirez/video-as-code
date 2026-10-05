@@ -2491,6 +2491,70 @@ timeline:
     assert r3 > b3 + 50 and g3 > b3 + 50, f"expected yellow (high r+g, low b) near the end, got {(r3, g3, b3)}"
 
 
+
+def test_melt_respects_speed_ramp_source_in(tmp_path: Path, melt):
+    """`source_in:` + `speed_ramp:` through a real render: the same
+    red/green/blue/yellow source as test_melt_respects_speed_ramp (1s
+    each), ramped at a flat 2x for 1s of output starting at source 1.0s,
+    should show green then blue - never the red of the source's first
+    second. Proves MLT's timeremap reads `time_map` values as absolute
+    source seconds (an offset map), with no trimmed copy of the file."""
+    source = tmp_path / "source.mp4"
+    segments = []
+    for i, color in enumerate(["red", "green", "blue", "yellow"]):
+        seg = tmp_path / f"seg_{i}.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "lavfi", "-i", f"color=c={color}:size=160x120:rate=25:duration=1",
+                "-pix_fmt", "yuv420p", str(seg),
+            ],
+            check=True,
+        )
+        segments.append(seg)
+    concat_list = tmp_path / "concat.txt"
+    concat_list.write_text("".join(f"file '{seg}'\n" for seg in segments), encoding="utf-8")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", str(concat_list),
+         "-pix_fmt", "yuv420p", str(source)],
+        check=True,
+    )
+
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 160, height: 120}}
+bin:
+  - id: clip
+    path: {source}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: clip
+          start: 0
+          duration: 1.0
+          source_in: 1.0
+          speed_ramp:
+            - {{at: 0, speed: 2.0}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(resolved, kdenlive_path)
+
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    assert rendered.exists() and rendered.stat().st_size > 0
+
+    r0, g0, b0 = _mean_rgb(rendered, timestamp=0.1)
+    r1, g1, b1 = _mean_rgb(rendered, timestamp=0.7)
+    assert g0 > r0 + 50 and g0 > b0 + 50, f"expected green at the start (source 1.0s+), got {(r0, g0, b0)}"
+    assert b1 > r1 + 50 and b1 > g1 + 50, f"expected blue later (source 2.0s+), got {(r1, g1, b1)}"
+
+
 def test_melt_respects_freeze_at(tmp_path: Path, melt):
     """Empirical check for `freeze_at:`/`freeze_after:` (v0.8, MLT's own
     `freeze` filter - matches kdenlive's own "Freeze" effect exactly)
