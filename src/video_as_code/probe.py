@@ -4,6 +4,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -41,6 +42,24 @@ def find_melt() -> str | None:
     with), or None if it isn't on PATH. Kdenlive ships it as `melt-7` on
     some distributions (e.g. its own snap package)."""
     return shutil.which("melt") or shutil.which("melt-7")
+
+
+def melt_env(base: dict[str, str] | None = None) -> dict[str, str]:
+    """Environment to run `melt` with: the caller's own (or `base`), plus
+    `LC_ALL=C`.
+
+    MLT parses numeric property values with the C library's locale-aware
+    conversions at runtime, so under a comma-decimal locale (e.g.
+    `LC_NUMERIC=es_ES.UTF-8`) a value like "2.5" is read as 2 - even
+    though the generated XML declares `<mlt LC_NUMERIC="C">`. Confirmed by
+    real renders (2026-10-06): under es_ES, `gain: 2.5` sounded exactly
+    like 2.0 and `gain: 1.5` like 1.0, and the AUDIO of a sped-up clip
+    (timewarp, e.g. `speed: 1.08`) played at 1.0x, while video speed was
+    unaffected - silently, with no error. Forcing the C locale for the
+    melt process makes every decimal in the XML mean what it says."""
+    env = dict(os.environ if base is None else base)
+    env["LC_ALL"] = "C"
+    return env
 
 
 @functools.lru_cache(maxsize=None)

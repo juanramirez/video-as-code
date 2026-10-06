@@ -58,6 +58,9 @@ def _find_melt() -> tuple[str, dict] | None:
         env = {
             "LD_LIBRARY_PATH": str(local_libdir),
             "MLT_REPOSITORY": str(local_libdir / "mlt-7"),
+            # same reason as probe.melt_env: decimals get truncated under a
+            # comma-decimal locale
+            "LC_ALL": "C",
         }
         data_dir = _LOCAL_MLT_BUILD / "share" / "mlt-7"
         if data_dir.exists():
@@ -66,7 +69,7 @@ def _find_melt() -> tuple[str, dict] | None:
 
     exe = shutil.which("melt") or shutil.which("melt-7")
     if exe:
-        return exe, {}
+        return exe, {"LC_ALL": "C"}
 
     for base in sorted(Path("/snap/kdenlive").glob("*")):
         melt_bin = base / "usr" / "bin" / "melt-7"
@@ -76,6 +79,7 @@ def _find_melt() -> tuple[str, dict] | None:
                 "LD_LIBRARY_PATH": str(libdir),
                 "MLT_REPOSITORY": str(libdir / "mlt-7"),
                 "MLT_DATA": str(base / "usr" / "share" / "mlt-7"),
+                "LC_ALL": "C",
             }
             return str(melt_bin), env
     return None

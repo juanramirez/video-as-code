@@ -117,6 +117,9 @@ def cmd_render(args: argparse.Namespace) -> int:
             [melt, str(kdenlive_path), "-consumer", f"avformat:{output}"],
             capture_output=True,
             text=True,
+            # C locale, or decimals like `gain: 2.5`/`speed: 1.08` get
+            # truncated under a comma-decimal locale - see probe.melt_env
+            env=probe.melt_env(),
         )
         if result.returncode != 0:
             print(msg("cli.render_failed", path=output, stderr=result.stderr.strip()), file=sys.stderr)

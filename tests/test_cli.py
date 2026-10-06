@@ -3,7 +3,10 @@ YAML and renders it straight to a video via a real `melt`, instead of
 leaving that second step to the user."""
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from video_as_code import cli, i18n, probe
 
@@ -98,3 +101,78 @@ def test_render_keep_kdenlive(tmp_path: Path, assets_dir: Path, melt, monkeypatc
     assert rc == 0
     assert output.exists() and output.stat().st_size > 0
     assert expected_kdenlive.exists() and expected_kdenlive.stat().st_size > 0
+
+
+def test_render_runs_melt_under_c_locale(tmp_path: Path, assets_dir: Path, monkeypatch):
+    """`render` must hand melt `LC_ALL=C` whatever the caller's own locale
+    is - see probe.melt_env for what goes wrong otherwise."""
+    monkeypatch.setattr(probe, "find_melt", lambda: "melt")
+    monkeypatch.setenv("LC_NUMERIC", "es_ES.UTF-8")
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["env"] = kwargs.get("env")
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(cli.subprocess, "run", fake_run)
+    yaml_path = _write_simple_project(tmp_path, assets_dir)
+
+    rc = cli.main(["render", str(yaml_path), "-o", str(tmp_path / "out.mp4")])
+
+    assert rc == 0
+    assert seen["env"]["LC_ALL"] == "C"
+
+
+def _es_locale_available() -> bool:
+    try:
+        out = subprocess.run(["locale", "-a"], capture_output=True, text=True).stdout.lower()
+    except OSError:
+        return False
+    return "es_es.utf8" in out or "es_es.utf-8" in out
+
+
+def _max_volume_db(path: Path) -> float:
+    result = subprocess.run(
+        ["ffmpeg", "-i", str(path), "-af", "volumedetect", "-vn", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    line = next(l for l in result.stderr.splitlines() if "max_volume" in l)
+    return float(line.split("max_volume:")[1].split("dB")[0])
+
+
+@pytest.mark.skipif(not _es_locale_available(), reason="needs the es_ES.UTF-8 locale installed")
+def test_render_honors_decimal_gain_under_comma_decimal_locale(tmp_path: Path, assets_dir: Path, melt, monkeypatch):
+    """End-to-end regression for the locale bug: rendered from a shell
+    whose LC_NUMERIC uses a decimal comma, `gain: 1.5` must still come out
+    ~3.5 dB louder than `gain: 1.0` - without the fix, MLT read "1.5" as 1
+    and both renders were identical."""
+    exe, extra_env = melt
+    monkeypatch.setattr(probe, "find_melt", lambda: exe)
+    for k, v in extra_env.items():
+        if k != "LC_ALL":  # the point is that `render` itself must set it
+            monkeypatch.setenv(k, v)
+    monkeypatch.delenv("LC_ALL", raising=False)
+    monkeypatch.setenv("LC_NUMERIC", "es_ES.UTF-8")
+
+    levels = {}
+    for gain in ("1.0", "1.5"):
+        yaml_path = tmp_path / f"p_{gain}.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / "tone.mp3"}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, out: 2, gain: {gain}}}
+""",
+            encoding="utf-8",
+        )
+        output = tmp_path / f"out_{gain}.mp4"
+        assert cli.main(["render", str(yaml_path), "-o", str(output)]) == 0
+        levels[gain] = _max_volume_db(output)
+
+    assert levels["1.5"] - levels["1.0"] > 2.5, levels
