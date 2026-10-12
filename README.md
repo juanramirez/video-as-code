@@ -30,7 +30,10 @@ video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
 video-as-code validate project.yaml                     # validate without building
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
 video-as-code render project.yaml [-o output.mp4]       # build + render straight to video via melt
+video-as-code fetch project.yaml [--verify]             # download source: clips from the shared album
 ```
+
+`build` and `render` also take `--fetch`, to run `fetch` first.
 
 `video-as-code render` needs `melt` (the MLT engine kdenlive itself renders with) on
 PATH — it's not bundled with `video-as-code`. It's equivalent to running
@@ -65,6 +68,38 @@ and a title clip): `video-as-code build examples/simple/project.yaml`. See
 
 See `docs/making-a-video.md` for a short step-by-step howto of this
 whole flow.
+
+### `video-as-code fetch`: assets from a Google Photos shared album
+
+If the material for a video lives in a Google Photos album, share it by
+link and point the project at it; bin clips can then name an album item
+by its **original file name** instead of a local `path:`:
+
+```yaml
+project:
+  # ...
+  sources:
+    album: https://photos.app.goo.gl/...   # the album's share link
+    dir: assets                            # where to download (default: assets)
+bin:
+  - id: slide          # the readable name the timeline uses, as always
+    source: PXL_20250830_085416309.mp4
+```
+
+`video-as-code fetch` downloads what's missing into `dir`, at original
+quality, and records each item in `sources.lock.yaml` next to the YAML
+(album item id, size, sha256 - machine-written, meant to be committed,
+never edited by hand) so later fetches go straight to it. `build`/`render`
+never download on their own: a `source:` clip that isn't on disk yet is a
+validation error pointing at `fetch` (or `--fetch`). Add `.fetch_cache/`
+(file names already looked up in the album) to your `.gitignore`.
+
+Two things to keep in mind: anyone with the share link can see the whole
+album, so keep projects that contain one in a private repository; and
+this reads the album's public web page rather than an official API (the
+Google Photos APIs no longer allow re-downloading a user's media
+unattended), so a change on Google's side can break it until
+`gphotos.py` is updated.
 
 ### `video-as-code reconstruct`: recovering a YAML from a rendered video
 

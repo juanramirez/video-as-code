@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 
-from . import i18n, probe, reverse, trackpack, xmlgen
+from . import fetch, i18n, probe, reverse, trackpack, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve
@@ -26,9 +26,31 @@ def _dump_yaml(data: dict) -> str:
     return yaml.dump(data, Dumper=dumper, sort_keys=False, allow_unicode=True, default_flow_style=False)
 
 
+def _run_fetch(yaml_path: Path, verify: bool = False) -> bool:
+    """Shared by `fetch` and `build`/`render --fetch`; False (after
+    printing why) if anything couldn't be downloaded."""
+
+    def _progress(text: str) -> None:
+        print(text, file=sys.stderr)
+
+    try:
+        result = fetch.fetch(yaml_path, on_progress=_progress, verify=verify)
+    except (KdenliveAsCodeError, OSError) as exc:
+        print(str(exc), file=sys.stderr)
+        return False
+    print(msg("cli.fetch_done", downloaded=len(result.downloaded), up_to_date=len(result.up_to_date)))
+    return True
+
+
+def cmd_fetch(args: argparse.Namespace) -> int:
+    return 0 if _run_fetch(Path(args.project), verify=args.verify) else 1
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     yaml_path = Path(args.project)
     output = Path(args.output) if args.output else yaml_path.with_suffix(".kdenlive")
+    if args.fetch and not _run_fetch(yaml_path):
+        return 1
     try:
         resolved = load_and_resolve(yaml_path)
     except KdenliveAsCodeError as exc:
@@ -89,6 +111,8 @@ def cmd_import(args: argparse.Namespace) -> int:
 def cmd_render(args: argparse.Namespace) -> int:
     yaml_path = Path(args.project)
     output = Path(args.output) if args.output else yaml_path.with_suffix(".mp4")
+    if args.fetch and not _run_fetch(yaml_path):
+        return 1
 
     try:
         resolved = load_and_resolve(yaml_path)
@@ -178,6 +202,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_build.add_argument("project", help=msg("cli.help.project_path"))
     p_build.add_argument("-o", "--output", help=msg("cli.help.build_output"))
     p_build.add_argument("--pack-tracks", action="store_true", help=msg("cli.help.pack_tracks"))
+    p_build.add_argument("--fetch", action="store_true", help=msg("cli.help.fetch_first"))
     p_build.set_defaults(func=cmd_build)
 
     p_validate = sub.add_parser("validate", help=msg("cli.help.validate"))
@@ -193,7 +218,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_render.add_argument("project", help=msg("cli.help.project_path"))
     p_render.add_argument("-o", "--output", help=msg("cli.help.render_output"))
     p_render.add_argument("-k", "--keep-kdenlive", action="store_true", help=msg("cli.help.keep_kdenlive"))
+    p_render.add_argument("--fetch", action="store_true", help=msg("cli.help.fetch_first"))
     p_render.set_defaults(func=cmd_render)
+
+    p_fetch = sub.add_parser("fetch", help=msg("cli.help.fetch"))
+    p_fetch.add_argument("project", help=msg("cli.help.project_path"))
+    p_fetch.add_argument("--verify", action="store_true", help=msg("cli.help.fetch_verify"))
+    p_fetch.set_defaults(func=cmd_fetch)
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
     p_reconstruct.add_argument("video", help=msg("cli.help.reconstruct_video"))
