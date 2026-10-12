@@ -34,6 +34,33 @@ class ProjectSpec:
     sources_dir: str = "assets"
 
 
+@dataclass(frozen=True)
+class DeriveSpec:
+    """A bin clip's `derive:`: its file is GENERATED with ffmpeg from
+    another file (trimmed, reversed, re-timed, cropped, scaled, made
+    louder) instead of being stored - so a hand-made cut of an album
+    video can be regenerated after `fetch` rather than kept around. See
+    derive.py for how and when it's generated and where it's cached.
+
+    Exactly one input: `source` (an album item's original file name, like
+    BinClipSpec.source - `fetch` downloads it even if no other bin clip
+    uses it), `path` (a local file, relative to the YAML) or `clip`
+    (another bin clip's id, which may itself be derived). Then, applied in
+    this order: `trim` (source seconds [start, end)), `crop` (x, y, w, h,
+    source pixels), `scale` (w, h; -1 keeps the aspect ratio), `fps`,
+    `reverse` (picture and sound), `volume` (audio gain factor)."""
+
+    source: Optional[str] = None
+    path: Optional[Path] = None
+    clip: Optional[str] = None
+    trim: Optional[tuple[float, float]] = None
+    crop: Optional[tuple[int, int, int, int]] = None
+    scale: Optional[tuple[int, int]] = None
+    fps: Optional[float] = None
+    reverse: bool = False
+    volume: Optional[float] = None
+
+
 @dataclass
 class BinClipSpec:
     id: str
@@ -45,6 +72,10 @@ class BinClipSpec:
     # `video-as-code fetch` downloads it to <sources_dir>/<source>, which is
     # what `path` then points at; the bin `id` stays the human-readable name.
     source: Optional[str] = None
+    # Instead of `path:`/`source:`: generate the file with ffmpeg from
+    # another one (see DeriveSpec). `path` then points at the generated
+    # file, cached under <sources_dir>/.derived/ (see derive.py).
+    derive: Optional[DeriveSpec] = None
     # title-only fields (type: title), ignored otherwise:
     text: Optional[str] = None
     font: str = "Sans"

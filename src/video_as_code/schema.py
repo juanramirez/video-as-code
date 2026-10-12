@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from . import derive as derive_mod
 from . import probe, titles
 from .errors import ValidationErrors
 from .i18n import msg
@@ -27,6 +28,7 @@ from .models import (
     AffineTransitionSpec,
     BinClipSpec,
     ClipPlacementSpec,
+    DeriveSpec,
     GuideSpec,
     ProjectDoc,
     ProjectSpec,
@@ -75,6 +77,7 @@ def load_yaml(path: str | Path) -> ProjectDoc:
         errors.append(msg("validation.bin_not_list"))
         bin_data = []
     bin_clips = [c for c in (_parse_bin_clip(item, source_dir, project, errors) for item in bin_data) if c]
+    bin_clips = _resolve_derive_paths(bin_clips, source_dir / project.sources_dir / derive_mod.DERIVED_DIR, errors)
 
     timeline_data = data.get("timeline", {})
     tracks_data = timeline_data.get("tracks", []) if isinstance(timeline_data, dict) else []
@@ -215,6 +218,17 @@ def _parse_bin_clip(item: Any, source_dir: Path, project: ProjectSpec, errors: l
             background=tuple(item.get("background", (0, 0, 0, 0))),
         )
 
+    if item.get("derive") is not None:
+        if "path" in item or item.get("source") is not None:
+            errors.append(msg("validation.derive_and_path", id=item.get("id")))
+            return None
+        spec = _parse_derive(item["derive"], str(item.get("id")), source_dir, project, errors)
+        if spec is None:
+            return None
+        # `path` is filled in by _resolve_derive_paths once every bin clip
+        # is parsed (a `clip:` input may be declared further down).
+        return BinClipSpec(id=str(item["id"]), path=None, type=clip_type, folder=folder, derive=spec)
+
     if item.get("source") is not None:
         # See BinClipSpec.source: an item of the project's shared album,
         # downloaded by `fetch` under its original file name.
@@ -242,6 +256,158 @@ def _parse_bin_clip(item: Any, source_dir: Path, project: ProjectSpec, errors: l
     raw_path = Path(item["path"])
     resolved = raw_path if raw_path.is_absolute() else (source_dir / raw_path)
     return BinClipSpec(id=str(item["id"]), path=resolved, type=clip_type, folder=folder)
+
+
+def _number_pair(value: Any) -> tuple[float, float] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 2:
+        return None
+    if not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in value):
+        return None
+    return float(value[0]), float(value[1])
+
+
+def _parse_derive(
+    data: Any, clip_id: str, source_dir: Path, project: ProjectSpec, errors: list[str]
+) -> DeriveSpec | None:
+    """A bin clip's `derive:` map (see models.DeriveSpec). Only checks the
+    spec itself; whether its input exists is validate_and_resolve's job."""
+    if not isinstance(data, dict):
+        errors.append(msg("validation.derive_not_a_map", id=clip_id, value=data))
+        return None
+    n_errors = len(errors)
+    known = {"source", "path", "clip", "trim", "crop", "scale", "fps", "reverse", "volume"}
+    unknown = set(data) - known
+    if unknown:
+        errors.append(msg("validation.derive_unknown_keys", id=clip_id, keys=", ".join(sorted(unknown))))
+
+    inputs = [k for k in ("source", "path", "clip") if data.get(k) is not None]
+    if len(inputs) != 1:
+        errors.append(msg("validation.derive_one_input", id=clip_id))
+        return None
+    source = path = clip = None
+    if inputs[0] == "source":
+        source = str(data["source"])
+        if not project.album_url:
+            errors.append(msg("validation.bin_source_without_album", id=clip_id))
+        elif Path(source).name != source or source in ("", ".", ".."):
+            errors.append(msg("validation.bin_source_not_a_name", id=clip_id, source=source))
+    elif inputs[0] == "path":
+        raw_path = Path(str(data["path"]))
+        path = raw_path if raw_path.is_absolute() else source_dir / raw_path
+    else:
+        clip = str(data["clip"])
+
+    trim = None
+    if data.get("trim") is not None:
+        trim = _number_pair(data["trim"])
+        if trim is None or trim[0] < 0 or trim[1] <= trim[0]:
+            errors.append(msg("validation.derive_trim_invalid", id=clip_id, value=data["trim"]))
+    crop = None
+    if data.get("crop") is not None:
+        raw = data["crop"]
+        try:
+            crop = tuple(int(raw[k]) for k in ("x", "y", "w", "h"))
+        except (TypeError, KeyError, ValueError):
+            crop = None
+        if crop is None or crop[0] < 0 or crop[1] < 0 or crop[2] <= 0 or crop[3] <= 0:
+            errors.append(msg("validation.derive_crop_invalid", id=clip_id, value=raw))
+    scale = None
+    if data.get("scale") is not None:
+        pair = _number_pair(data["scale"])
+        scale = (int(pair[0]), int(pair[1])) if pair else None
+        # -1 on one side keeps the aspect ratio (ffmpeg's own convention)
+        if scale is None or any(v == 0 or v < -1 for v in scale) or scale == (-1, -1):
+            errors.append(msg("validation.derive_scale_invalid", id=clip_id, value=data["scale"]))
+    fps = data.get("fps")
+    if fps is not None and (isinstance(fps, bool) or not isinstance(fps, (int, float)) or fps <= 0):
+        errors.append(msg("validation.derive_fps_invalid", id=clip_id, value=fps))
+    reverse = data.get("reverse", False)
+    if not isinstance(reverse, bool):
+        errors.append(msg("validation.derive_reverse_invalid", id=clip_id, value=reverse))
+    volume = data.get("volume")
+    if volume is not None and (isinstance(volume, bool) or not isinstance(volume, (int, float)) or volume < 0):
+        errors.append(msg("validation.derive_volume_invalid", id=clip_id, value=volume))
+    if len(errors) > n_errors:
+        return None
+    if not (trim or crop or scale or fps or reverse or volume is not None):
+        errors.append(msg("validation.derive_does_nothing", id=clip_id))
+        return None
+    return DeriveSpec(
+        source=source,
+        path=path,
+        clip=clip,
+        trim=trim,
+        crop=crop,
+        scale=scale,
+        fps=float(fps) if fps is not None else None,
+        reverse=reverse,
+        volume=float(volume) if volume is not None else None,
+    )
+
+
+def derive_input_path(clip: BinClipSpec, sources_root: Path, by_id: dict[str, BinClipSpec]) -> Path | None:
+    """Where a derived clip's input file lives (None for an unknown or
+    unresolved `clip:` reference)."""
+    spec = clip.derive
+    if spec.source is not None:
+        return sources_root / spec.source
+    if spec.path is not None:
+        return spec.path
+    ref = by_id.get(spec.clip)
+    return ref.path if ref is not None else None
+
+
+def _resolve_derive_paths(bin_clips: list[BinClipSpec], derived_dir: Path, errors: list[str]) -> list[BinClipSpec]:
+    """Fills in `path` (the generated file, see derive.output_path) for
+    every derived bin clip. Separate from parsing because a `clip:` input
+    can be any bin clip, declared before or after, and may itself be
+    derived - so they're resolved depth-first, rejecting cycles."""
+    by_id = {c.id: c for c in bin_clips}
+    sources_root = derived_dir.parent
+    resolving: set[str] = set()
+
+    def resolve(clip_id: str) -> BinClipSpec | None:
+        clip = by_id[clip_id]
+        if clip.derive is None or clip.path is not None:
+            return clip
+        if clip_id in resolving:
+            errors.append(msg("validation.derive_cycle", id=clip_id))
+            return None
+        resolving.add(clip_id)
+        try:
+            spec = clip.derive
+            if spec.clip is not None:
+                if spec.clip not in by_id:
+                    errors.append(msg("validation.derive_unknown_clip", id=clip_id, clip=spec.clip))
+                    return None
+                ref = resolve(spec.clip)
+                if ref is None:
+                    return None
+                if ref.type == "title" or ref.path is None:
+                    errors.append(msg("validation.derive_from_title", id=clip_id, clip=spec.clip))
+                    return None
+                input_path, input_ref = ref.path, f"clip:{ref.path.name}"
+            elif spec.source is not None:
+                input_path, input_ref = sources_root / spec.source, f"source:{spec.source}"
+            else:
+                input_path, input_ref = spec.path, f"path:{spec.path.name}"
+            resolved = replace(clip, path=derive_mod.output_path(clip_id, spec, input_path, input_ref, derived_dir))
+            by_id[clip_id] = resolved
+            return resolved
+        finally:
+            resolving.discard(clip_id)
+
+    result = []
+    for clip in bin_clips:
+        if clip.derive is None:
+            result.append(clip)
+            continue
+        # (with a duplicate id this resolves the last one declared; the
+        # duplicate itself is reported by validate_and_resolve)
+        resolved = resolve(clip.id)
+        if resolved is not None:
+            result.append(resolved)
+    return result
 
 
 def _boomerang_source_duration_s(placement: ClipPlacementSpec) -> float | None:
