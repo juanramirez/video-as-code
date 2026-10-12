@@ -304,6 +304,51 @@ def _expand_boomerangs(
     return expanded
 
 
+def _trim_boomerang_holds(
+    clips: list[ClipPlacementSpec],
+    resolved_bin: dict[str, ResolvedBinClip],
+    fps: FrameRate,
+    cache_dir: Path,
+    errors: list[str],
+) -> list[ClipPlacementSpec]:
+    """Applies ClipPlacementSpec.boomerang_trim_hold to every (forward, reverse) pair that
+    _expand_boomerangs produced on one track: measures how long the window's last picture is held
+    and moves both halves' `source_out` back by half of that, then re-derives the reverse half's
+    `start` from the forward half's new length (in frames, exactly like _expand_boomerangs does -
+    see its docstring for why). Runs here rather than in _expand_boomerangs because measuring the
+    hold needs the bin clip's resolved path, which parsing doesn't have yet."""
+    adjusted = list(clips)
+    for i in range(len(adjusted) - 1):
+        forward, reverse = adjusted[i], adjusted[i + 1]
+        if reverse._boomerang_reverse_of is None or forward._boomerang_reverse_of is not None:
+            continue
+        if not forward.boomerang_trim_hold or forward.source_in is None or forward.source_out is None:
+            continue
+        bin_clip = resolved_bin.get(forward.clip)
+        if bin_clip is None or bin_clip.kind in ("image", "title"):
+            continue  # unknown clip: reported by the main loop; stills have no frames to hold
+        try:
+            hold_s = probe.detect_trailing_hold_seconds(
+                bin_clip.path, forward.source_in, forward.source_out, cache_dir
+            )
+        except probe.ProbeError as exc:
+            errors.append(str(exc))
+            continue
+        if hold_s < probe.HOLD_MIN_S:
+            continue
+        new_out = forward.source_out - hold_s / 2
+        forward = replace(forward, source_out=new_out)
+        speed = abs(forward.speed) if forward.speed else 1.0
+        own_frames = fps.seconds_to_frames(abs(new_out - forward.source_in) / speed)
+        reverse = replace(
+            reverse,
+            source_out=new_out,
+            start=fps.frames_to_seconds(fps.seconds_to_frames(forward.start) + own_frames),
+        )
+        adjusted[i], adjusted[i + 1] = forward, reverse
+    return adjusted
+
+
 def _parse_track(item: Any, idx: int, errors: list[str], fps: FrameRate) -> TrackSpec | None:
     if not isinstance(item, dict) or "type" not in item:
         errors.append(msg("validation.track_missing_type", idx=idx, item=item))
@@ -375,6 +420,11 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
     if not isinstance(boomerang, bool):
         errors.append(msg("validation.boomerang_invalid", ctx=ctx, boomerang=boomerang))
         boomerang = False
+
+    boomerang_trim_hold = item.get("boomerang_trim_hold", True)
+    if not isinstance(boomerang_trim_hold, bool):
+        errors.append(msg("validation.boomerang_trim_hold_invalid", ctx=ctx, value=boomerang_trim_hold))
+        boomerang_trim_hold = True
 
     source_in = float(item["source_in"]) if item.get("source_in") is not None else None
     source_out = float(item["source_out"]) if item.get("source_out") is not None else None
@@ -627,6 +677,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         gain=float(item["gain"]) if item.get("gain") is not None else None,
         mute=mute,
         boomerang=boomerang,
+        boomerang_trim_hold=boomerang_trim_hold,
         speed=speed,
         preserve_pitch=bool(item.get("preserve_pitch", False)),
         speed_ramp=speed_ramp,
@@ -791,7 +842,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
     resolved_tracks: list[ResolvedTrack] = []
     for t_idx, track in enumerate(doc.tracks):
         placements: list[ResolvedPlacement] = []
-        for c_idx, placement in enumerate(track.clips):
+        track_clips = _trim_boomerang_holds(track.clips, resolved_bin, fps, boomerang_cache_dir, errors)
+        for c_idx, placement in enumerate(track_clips):
             ctx = f"timeline.tracks[{t_idx}]({track.name}).clips[{c_idx}]"
             bin_clip = resolved_bin.get(placement.clip)
             if bin_clip is None:

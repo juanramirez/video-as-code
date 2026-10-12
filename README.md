@@ -122,7 +122,8 @@ Verified by the test suite (`pytest`, 171 tests, all passing):
   volume fades on audio, per-clip mute, audio pan/balance, speed changes
   (timewarp, forward or reverse, and multi-segment speed ramps via
   `timeremap`), a `boomerang:` shorthand that auto-expands a clip into a
-  forward-then-reverse repeat, source-seconds trimming (`source_in:`/`source_out:`),
+  forward-then-reverse repeat (halving a held last frame at the turnaround,
+  `boomerang_trim_hold:`), source-seconds trimming (`source_in:`/`source_out:`),
   dissolve/luma-wipe/affine (zoom, slide)/iris/flip/glitch/delaygrab/
   cairogradient transitions, chroma-key compositing, burned-in text
   overlays, Ken Burns pan+zoom, focus-pull (blur outside a rect),

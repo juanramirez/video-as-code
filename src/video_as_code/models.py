@@ -109,6 +109,17 @@ class ClipPlacementSpec:
     # the source file, and is mutually exclusive with `speed_ramp`
     # (reversing a multi-segment ramp isn't attempted this round).
     boomerang: bool = False
+    # Only meaningful with `boomerang: true`. The forward half ends on the window's last picture and the
+    # reverse half starts on that same picture, so if the source HOLDS its last frame (a gif's long final
+    # delay, a video's frozen tail) the turnaround shows it twice as long as the source ever did - a
+    # visible "stall" in the middle of the repeat. With this on (the default), validate_and_resolve
+    # measures that hold (probe.detect_trailing_hold_seconds) and moves `source_out` of BOTH halves back
+    # by half of it, so the turnaround shows the held picture for exactly its original length once.
+    # Note this makes the placement shorter on the timeline than its own source_in/source_out/speed
+    # say (by hold / 2 / speed per half); nothing after it moves (starts are explicit), so leave room
+    # for it or re-fit the following clips. Holds under probe.HOLD_MIN_S (0.1s) are left alone.
+    # Only applies to the `source_in:`+`source_out:` form; set `boomerang_trim_hold: false` to opt out.
+    boomerang_trim_hold: bool = True
     # Internal only (never set from YAML - schema.py's _expand_boomerangs
     # sets this on the placement it synthesizes for `boomerang:`'s reverse
     # half): tells validate_and_resolve to substitute this placement's bin

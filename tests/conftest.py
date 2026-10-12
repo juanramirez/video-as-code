@@ -34,6 +34,24 @@ def assets_dir(tmp_path_factory) -> Path:
         ["ffmpeg", *common, "-f", "lavfi", "-i", "color=c=blue:size=320x240", "-frames:v", "1", str(d / "photo2.png")],
         check=True,
     )
+    # really moving footage at boomerang_trim_hold's thumbnail scale (testsrc's clip.mp4 isn't: only
+    # its small seconds counter changes, which a 32x18 thumbnail averages away)
+    subprocess.run(
+        ["ffmpeg", *common, "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25:duration=3", "-pix_fmt", "yuv420p", str(d / "moving.mp4")],
+        check=True,
+    )
+    # 1.0s gif whose LAST picture (green) is held for 0.6s, after two 0.2s ones (red, blue) - for
+    # boomerang_trim_hold (see ClipPlacementSpec.boomerang_trim_hold)
+    subprocess.run(
+        [
+            "ffmpeg", *common,
+            "-f", "lavfi", "-i", "color=c=red:size=320x240:rate=10:duration=0.2",
+            "-f", "lavfi", "-i", "color=c=blue:size=320x240:rate=10:duration=0.2",
+            "-f", "lavfi", "-i", "color=c=green:size=320x240:rate=10:duration=0.6",
+            "-filter_complex", "[0][1][2]concat=n=3:v=1:a=0", str(d / "held.gif"),
+        ],
+        check=True,
+    )
     return d
 
 

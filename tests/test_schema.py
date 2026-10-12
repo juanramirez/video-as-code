@@ -1472,6 +1472,64 @@ timeline:
     assert reverse.bin_clip.path.exists()
 
 
+def _held_gif_boomerang_yaml(assets_dir: Path, extra: str = "") -> str:
+    return f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "held.gif"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, source_in: 0, source_out: 1.0, mute: true, boomerang: true{extra}}}
+"""
+
+
+def test_boomerang_trims_half_of_a_held_last_frame(tmp_path: Path, assets_dir: Path):
+    # held.gif holds its last picture for 0.6s: without trimming, the turnaround would show it for
+    # 1.2s (end of forward + start of reverse). Trimming 0.3s off source_out on BOTH halves leaves
+    # 0.3 + 0.3 = 0.6s at the turnaround - the hold's original length, shown once.
+    path = _write_yaml(tmp_path, _held_gif_boomerang_yaml(assets_dir))
+    forward, reverse = load_and_resolve(path).tracks[0].placements
+    # 1.0 - 0.3 = 0.7s = 17.5 frames at 25fps (one frame of tolerance for the 30fps sampling grid)
+    assert forward.length_frames == pytest.approx(17.5, abs=1)
+    assert reverse.length_frames == forward.length_frames
+    # the reverse half still starts exactly where the (now shorter) forward half ends
+    assert reverse.start_frame == forward.start_frame + forward.length_frames
+
+
+def test_boomerang_trim_hold_can_be_turned_off(tmp_path: Path, assets_dir: Path):
+    path = _write_yaml(tmp_path, _held_gif_boomerang_yaml(assets_dir, ", boomerang_trim_hold: false"))
+    forward, reverse = load_and_resolve(path).tracks[0].placements
+    assert forward.length_frames == 25  # the full 1.0s window, untouched
+    assert reverse.start_frame == forward.start_frame + forward.length_frames
+
+
+def test_boomerang_trim_hold_leaves_moving_footage_alone(tmp_path: Path, assets_dir: Path):
+    # moving.mp4 is testsrc2: it changes every frame, so there's no hold to trim
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "moving.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, source_in: 0, source_out: 1, boomerang: true}}
+"""
+    forward, _ = load_and_resolve(_write_yaml(tmp_path, yaml_text)).tracks[0].placements
+    assert forward.length_frames == 25
+
+
+def test_boomerang_trim_hold_invalid_type_rejected(tmp_path: Path, assets_dir: Path):
+    path = _write_yaml(tmp_path, _held_gif_boomerang_yaml(assets_dir, ", boomerang_trim_hold: maybe"))
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "boomerang_trim_hold" in str(exc.value)
+
+
 def test_boomerang_reverse_uses_same_speed_as_forward_when_unset(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

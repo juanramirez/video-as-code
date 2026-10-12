@@ -105,6 +105,7 @@ _EN: dict[str, str] = {
     ),
     "validation.mute_invalid": "{ctx}: 'mute' must be true or false, got {mute!r}",
     "validation.boomerang_invalid": "{ctx}: 'boomerang' must be true or false, got {boomerang!r}",
+    "validation.boomerang_trim_hold_invalid": "{ctx}: 'boomerang_trim_hold' must be true or false, got {value!r}",
     "validation.boomerang_conflicts_with_speed_ramp": (
         "{ctx}: 'boomerang' cannot be combined with 'speed_ramp' - reversing a multi-segment "
         "ramp isn't supported"
@@ -350,6 +351,7 @@ _ES: dict[str, str] = {
     ),
     "validation.mute_invalid": "{ctx}: 'mute' debe ser true o false, se recibió {mute!r}",
     "validation.boomerang_invalid": "{ctx}: 'boomerang' debe ser true o false, se recibió {boomerang!r}",
+    "validation.boomerang_trim_hold_invalid": "{ctx}: 'boomerang_trim_hold' debe ser true o false, se recibió {value!r}",
     "validation.boomerang_conflicts_with_speed_ramp": (
         "{ctx}: 'boomerang' no se puede combinar con 'speed_ramp' - invertir una rampa "
         "multi-segmento no está soportado"
