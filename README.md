@@ -101,6 +101,36 @@ Google Photos APIs no longer allow re-downloading a user's media
 unattended), so a change on Google's side can break it until
 `gphotos.py` is updated.
 
+#### `derive:`: clips generated from another file
+
+A cut, a reversed gif or a louder copy doesn't need to be stored: describe
+it and it's generated with ffmpeg.
+
+```yaml
+bin:
+  - id: jump
+    derive:
+      source: PXL_20250830_085416309.mp4   # or path: a local file, or clip: another bin id
+      trim: [12, 16]                        # source seconds
+      fps: 30
+  - id: jump_back
+    derive: {clip: jump, reverse: true}
+```
+
+Operations, applied in this order: `trim: [start, end]`, `crop: {x, y,
+w, h}` (source pixels), `scale: [w, h]` (`-1` on one side keeps the aspect
+ratio), `fps:`, `reverse: true` (picture and sound) and `volume:` (audio
+gain factor). A gif stays a gif, a still image becomes a `.png`, audio an
+`.m4a` and video an `.mp4` (h264 + aac, keeping the sound if there is any).
+
+The result is cached under `<dir>/.derived/` with the spec's hash in its
+name: `build`/`render`/`validate` generate it once, offline, whenever the
+input is on disk (and again only if the spec or the input itself
+changes), and `fetch` downloads album inputs and generates right away. An
+album item used only as a `derive:` input is still downloaded. The cache
+can always be deleted and rebuilt, so `<dir>/.derived/` belongs in your
+`.gitignore` too.
+
 ### `video-as-code reconstruct`: recovering a YAML from a rendered video
 
 ```bash
