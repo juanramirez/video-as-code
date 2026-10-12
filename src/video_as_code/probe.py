@@ -133,3 +133,81 @@ def render_reversed_segment(path: Path, in_s: float, out_s: float, cache_dir: Pa
         raise ProbeError(msg("probe.ffmpeg_reverse_timeout", path=path)) from exc
     tmp_path.replace(cache_path)
     return cache_path
+
+
+# Sampling grid for `detect_trailing_hold_seconds`: frames are compared as tiny grayscale thumbnails
+# (averaging away compression noise - a genuinely frozen frame re-encoded by h264 still differs by a
+# fraction of a level per pixel), resampled at a fixed rate so a gif's variable frame delays and a
+# video's real frame rate end up on the same time grid.
+HOLD_SAMPLE_FPS = 30
+_HOLD_THUMB_W, _HOLD_THUMB_H = 32, 18
+# Mean absolute difference (0-255 gray levels, per thumbnail pixel) at or under which a sampled frame
+# counts as "the same picture" as the window's last one. Calibrated on real-world boomerang clips:
+# held gif frames come out at 0.0, while consecutive frames of even a slow-moving video differ by ~1-2.
+HOLD_DIFF_THRESHOLD = 1.0
+# Shortest hold `boomerang_trim_hold` acts on. A source that keeps moving to the end still "holds" its
+# last frame for one source frame, which resampling to HOLD_SAMPLE_FPS can stretch to ~0.08s (seen on a
+# 25fps testsrc) - doubling that at the turnaround is invisible. The holds worth halving (gif final
+# delays, frozen video tails) measured 0.2-0.75s on real-world clips.
+HOLD_MIN_S = 0.1
+
+
+def detect_trailing_hold_seconds(path: Path, in_s: float, out_s: float, cache_dir: Path) -> float:
+    """How long the LAST picture of [in_s, out_s) from `path` stays on screen unchanged, in source
+    seconds (0.0 if it changes right up to the end, or if the whole window is one still picture -
+    nothing to trim there). Used by `boomerang:` (see ClipPlacementSpec.boomerang_trim_hold): the
+    forward half ends on that picture and the reverse half starts on it, so a held last frame (a gif's
+    long final delay, a video's frozen tail) shows twice as long at the turnaround as it did in the
+    source.
+
+    Measured from where the last change happens to `out_s` itself, not to the end of the sampled
+    frames: ffmpeg's fps filter emits a gif's last frame for its FULL delay even when `out_s` cuts it
+    short, so counting sampled frames alone would overestimate the hold. Cached (JSON, keyed by source
+    path + mtime + window) next to the reversed derivatives, since decoding is the slow part."""
+    if not ffmpeg_available():
+        raise ProbeError(msg("probe.ffmpeg_unavailable", path=path))
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    resolved = path.resolve()
+    key = f"hold|{resolved}|{resolved.stat().st_mtime_ns}|{in_s:.6f}|{out_s:.6f}|{HOLD_DIFF_THRESHOLD}"
+    cache_path = cache_dir / f"{hashlib.sha1(key.encode()).hexdigest()[:16]}.hold.json"
+    if cache_path.exists():
+        try:
+            return float(json.loads(cache_path.read_text())["hold_s"])
+        except (ValueError, KeyError):
+            pass  # corrupt cache entry: recompute and overwrite below
+    try:
+        raw = subprocess.run(
+            [
+                "ffmpeg", "-loglevel", "error",
+                "-i", str(path),
+                "-vf",
+                f"trim=start={in_s:.6f}:end={out_s:.6f},setpts=PTS-STARTPTS,fps={HOLD_SAMPLE_FPS},"
+                f"scale={_HOLD_THUMB_W}:{_HOLD_THUMB_H},format=gray",
+                "-an", "-f", "rawvideo", "-",
+            ],
+            capture_output=True,
+            timeout=120,
+            check=True,
+        ).stdout
+    except subprocess.CalledProcessError as exc:
+        raise ProbeError(
+            msg("probe.ffmpeg_hold_failed", path=path, stderr=exc.stderr.decode(errors="replace").strip())
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        raise ProbeError(msg("probe.ffmpeg_hold_timeout", path=path)) from exc
+
+    size = _HOLD_THUMB_W * _HOLD_THUMB_H
+    frames = [raw[i:i + size] for i in range(0, len(raw) - size + 1, size)]
+    hold_s = 0.0
+    if frames:
+        last = frames[-1]
+        same = 0
+        for frame in reversed(frames):
+            if sum(abs(a - b) for a, b in zip(frame, last)) / size > HOLD_DIFF_THRESHOLD:
+                break
+            same += 1
+        if same < len(frames):  # an all-same window is a still picture: leave it alone
+            last_change_s = (len(frames) - same) / HOLD_SAMPLE_FPS
+            hold_s = max(0.0, (out_s - in_s) - last_change_s)
+    cache_path.write_text(json.dumps({"hold_s": hold_s}))
+    return hold_s
