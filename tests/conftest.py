@@ -3,6 +3,7 @@ repo) and optional lookup of a real `melt` binary to validate the output
 against the actual MLT engine."""
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -83,6 +84,16 @@ def _find_melt() -> tuple[str, dict] | None:
         data_dir = _LOCAL_MLT_BUILD / "share" / "mlt-7"
         if data_dir.exists():
             env["MLT_DATA"] = str(data_dir)
+        # A from-source MLT only looks for frei0r plugins in its own default
+        # dirs (e.g. /usr/lib/frei0r-1), not in Debian/Ubuntu's multiarch
+        # /usr/lib/<triplet>/frei0r-1 - so without this, every frei0r-backed
+        # transition/filter (iris, flip, glitch, cairogradient, delaygrab,
+        # chroma key) silently renders as a no-op and those tests fail.
+        # A FREI0R_PATH already set by the caller wins.
+        if "FREI0R_PATH" not in os.environ:
+            frei0r_dirs = sorted(Path("/usr/lib").glob("*/frei0r-1"))
+            if frei0r_dirs:
+                env["FREI0R_PATH"] = ":".join(str(d) for d in frei0r_dirs)
         return str(local_bin), env
 
     exe = shutil.which("melt") or shutil.which("melt-7")
