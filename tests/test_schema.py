@@ -1668,3 +1668,54 @@ timeline:
 """
     path = _write_yaml(tmp_path, yaml_text)
     load_and_resolve(path)  # must not raise ValidationErrors
+
+
+def _source_yaml(bin_entry: str, sources: str = "{album: 'https://photos.app.goo.gl/x'}") -> str:
+    return f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240, sources: {sources}}}
+bin:
+  - {bin_entry}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0}}
+"""
+
+
+def test_bin_source_resolves_under_the_sources_dir(tmp_path: Path, assets_dir: Path):
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "PXL_1.mp4").write_bytes((assets_dir / "clip.mp4").read_bytes())
+    path = _write_yaml(tmp_path, _source_yaml("{id: clip, source: PXL_1.mp4}"))
+    placement = load_and_resolve(path).tracks[0].placements[0]
+    assert placement.bin_clip.path == tmp_path / "assets" / "PXL_1.mp4"
+
+
+def test_bin_source_honors_a_custom_sources_dir(tmp_path: Path, assets_dir: Path):
+    (tmp_path / "media").mkdir()
+    (tmp_path / "media" / "PXL_1.mp4").write_bytes((assets_dir / "clip.mp4").read_bytes())
+    yaml_text = _source_yaml("{id: clip, source: PXL_1.mp4}", "{album: 'https://photos.app.goo.gl/x', dir: media}")
+    placement = load_and_resolve(_write_yaml(tmp_path, yaml_text)).tracks[0].placements[0]
+    assert placement.bin_clip.path == tmp_path / "media" / "PXL_1.mp4"
+
+
+def test_bin_source_not_downloaded_yet_points_at_fetch(tmp_path: Path):
+    path = _write_yaml(tmp_path, _source_yaml("{id: clip, source: PXL_1.mp4}"))
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "fetch" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "bin_entry, sources, needle",
+    [
+        ("{id: clip, source: PXL_1.mp4, path: a.mp4}", "{album: 'https://photos.app.goo.gl/x'}", "path"),
+        ("{id: clip, source: PXL_1.mp4}", "{}", "sources.album"),
+        ("{id: clip, source: ../PXL_1.mp4}", "{album: 'https://photos.app.goo.gl/x'}", "../PXL_1.mp4"),
+        ("{id: clip, source: PXL_1.mp4}", "[album]", "project.sources"),
+    ],
+)
+def test_bin_source_invalid(tmp_path: Path, bin_entry: str, sources: str, needle: str):
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, _source_yaml(bin_entry, sources)))
+    assert needle in str(exc.value)

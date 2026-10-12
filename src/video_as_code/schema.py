@@ -74,7 +74,7 @@ def load_yaml(path: str | Path) -> ProjectDoc:
     if not isinstance(bin_data, list):
         errors.append(msg("validation.bin_not_list"))
         bin_data = []
-    bin_clips = [c for c in (_parse_bin_clip(item, source_dir, errors) for item in bin_data) if c]
+    bin_clips = [c for c in (_parse_bin_clip(item, source_dir, project, errors) for item in bin_data) if c]
 
     timeline_data = data.get("timeline", {})
     tracks_data = timeline_data.get("tracks", []) if isinstance(timeline_data, dict) else []
@@ -160,6 +160,10 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
     colorspace = int(data.get("colorspace", 709))
     if colorspace <= 0:
         errors.append(msg("validation.colorspace_invalid", colorspace=colorspace))
+    sources = data.get("sources") or {}
+    if not isinstance(sources, dict):
+        errors.append(msg("validation.sources_invalid", sources=sources))
+        sources = {}
     return ProjectSpec(
         id=str(data["id"]),
         title=str(data["title"]),
@@ -169,10 +173,12 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
         colorspace=colorspace,
         default_image_duration=float(data.get("default_image_duration", 4.0)),
         notes=str(data["notes"]) if data.get("notes") is not None else None,
+        album_url=str(sources["album"]) if sources.get("album") else None,
+        sources_dir=str(sources.get("dir", "assets")),
     )
 
 
-def _parse_bin_clip(item: Any, source_dir: Path, errors: list[str]) -> BinClipSpec | None:
+def _parse_bin_clip(item: Any, source_dir: Path, project: ProjectSpec, errors: list[str]) -> BinClipSpec | None:
     if not isinstance(item, dict) or "id" not in item:
         errors.append(msg("validation.bin_entry_invalid", item=item))
         return None
@@ -207,6 +213,27 @@ def _parse_bin_clip(item: Any, source_dir: Path, errors: list[str]) -> BinClipSp
             font_size=font_size,
             font_color=tuple(item.get("color", (255, 255, 255, 255))),
             background=tuple(item.get("background", (0, 0, 0, 0))),
+        )
+
+    if item.get("source") is not None:
+        # See BinClipSpec.source: an item of the project's shared album,
+        # downloaded by `fetch` under its original file name.
+        source = str(item["source"])
+        if "path" in item:
+            errors.append(msg("validation.bin_source_and_path", id=item.get("id")))
+            return None
+        if not project.album_url:
+            errors.append(msg("validation.bin_source_without_album", id=item.get("id")))
+            return None
+        if Path(source).name != source or source in ("", ".", ".."):
+            errors.append(msg("validation.bin_source_not_a_name", id=item.get("id"), source=source))
+            return None
+        return BinClipSpec(
+            id=str(item["id"]),
+            path=source_dir / project.sources_dir / source,
+            type=clip_type,
+            folder=folder,
+            source=source,
         )
 
     if "path" not in item:
@@ -784,7 +811,10 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             continue
         bin_by_id[clip.id] = clip
         if clip.type != "title" and not clip.path.exists():
-            errors.append(msg("validation.bin_missing_file", id=clip.id, path=clip.path))
+            if clip.source is not None:
+                errors.append(msg("validation.bin_source_not_fetched", id=clip.id, path=clip.path))
+            else:
+                errors.append(msg("validation.bin_missing_file", id=clip.id, path=clip.path))
 
     if errors:
         # No point continuing without valid assets (probing would fail in a chain).

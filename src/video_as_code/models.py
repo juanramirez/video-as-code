@@ -26,6 +26,12 @@ class ProjectSpec:
     colorspace: int = 709
     default_image_duration: float = 4.0
     notes: Optional[str] = None
+    # `project.sources`: where bin clips with `source:` come from (see
+    # BinClipSpec.source). `album_url` is a Google Photos shared-album link
+    # (gphotos.py); `sources_dir` is where `fetch` puts what it downloads,
+    # relative to the YAML.
+    album_url: Optional[str] = None
+    sources_dir: str = "assets"
 
 
 @dataclass
@@ -34,6 +40,11 @@ class BinClipSpec:
     path: Optional[Path]  # None for type: title - schema.py generates and fills it in
     type: Optional[str] = None  # overrides the extension-based autodetection
     folder: Optional[str] = None  # bin folder name (root-level only), None = no folder
+    # Instead of `path:`: the item's ORIGINAL file name in the project's
+    # shared album (`project.sources.album`), e.g. "PXL_20250830_085416309.mp4".
+    # `video-as-code fetch` downloads it to <sources_dir>/<source>, which is
+    # what `path` then points at; the bin `id` stays the human-readable name.
+    source: Optional[str] = None
     # title-only fields (type: title), ignored otherwise:
     text: Optional[str] = None
     font: str = "Sans"
