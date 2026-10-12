@@ -1,12 +1,17 @@
 """`derive:` bin clips (models.DeriveSpec, derive.py)."""
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
+from video_as_code import derive
 from video_as_code.errors import ValidationErrors
-from video_as_code.schema import load_yaml
+from video_as_code.schema import load_and_resolve, load_yaml
 
 ALBUM = "{album: 'https://photos.app.goo.gl/x'}"
 
@@ -108,3 +113,144 @@ def test_derive_source_needs_an_album(tmp_path: Path):
     with pytest.raises(ValidationErrors) as exc:
         load_yaml(_project(tmp_path, ["{id: d, derive: {source: VID_1.mp4, fps: 30}}"], sources="{}"))
     assert "sources.album" in str(exc.value)
+
+
+# --- generation -------------------------------------------------------------
+
+
+def _probe(path: Path) -> dict:
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-print_format", "json", "-show_format", "-show_streams", str(path)],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    return json.loads(out)
+
+
+def _first_pixel(path: Path) -> tuple[int, int, int]:
+    raw = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-i", str(path), "-frames:v", "1", "-vf", "scale=1:1",
+         "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    return raw[0], raw[1], raw[2]
+
+
+@pytest.fixture
+def ffmpeg_calls(monkeypatch):
+    """Counts derive.generate runs (i.e. real ffmpeg invocations)."""
+    calls = []
+    real = derive.generate
+
+    def counting(clip_id, *args):
+        calls.append(clip_id)
+        return real(clip_id, *args)
+
+    monkeypatch.setattr(derive, "generate", counting)
+    return calls
+
+
+def test_derive_trim_keeps_sound_and_is_cached(tmp_path: Path, assets_dir: Path, ffmpeg_calls):
+    project = _project(tmp_path, [f"{{id: cut, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0.5, 2.0]}}}}"])
+    load_and_resolve(project)
+    info = _probe(_bin(project)["cut"].path)
+    assert float(info["format"]["duration"]) == pytest.approx(1.5, abs=0.1)
+    assert {s["codec_type"] for s in info["streams"]} == {"video", "audio"}
+    assert ffmpeg_calls == ["cut"]
+    load_and_resolve(project)  # unchanged spec and input: nothing regenerated
+    assert ffmpeg_calls == ["cut"]
+
+
+def test_derive_spec_change_regenerates_and_drops_the_old_file(tmp_path: Path, assets_dir: Path, ffmpeg_calls):
+    entry = "{{id: cut, derive: {{path: {p}, trim: [0, {end}]}}}}"
+    first = _project(tmp_path, [entry.format(p=assets_dir / "av.mp4", end=1)])
+    load_and_resolve(first)
+    old = _bin(first)["cut"].path
+    second = _project(tmp_path, [entry.format(p=assets_dir / "av.mp4", end=2)])
+    load_and_resolve(second)
+    new = _bin(second)["cut"].path
+    assert ffmpeg_calls == ["cut", "cut"]
+    assert new.exists() and not old.exists()
+    assert float(_probe(new)["format"]["duration"]) == pytest.approx(2.0, abs=0.1)
+
+
+def test_derive_input_change_regenerates_but_an_identical_copy_doesnt(tmp_path: Path, assets_dir: Path, ffmpeg_calls):
+    src = tmp_path / "in.mp4"
+    shutil.copy(assets_dir / "av.mp4", src)
+    project = _project(tmp_path, ["{id: cut, derive: {path: in.mp4, trim: [0, 1]}}"])
+    load_and_resolve(project)
+    shutil.copy(assets_dir / "av.mp4", src)  # same bytes, new mtime (like a re-download)
+    os.utime(src, ns=(1, 1))
+    load_and_resolve(project)
+    assert ffmpeg_calls == ["cut"]
+    shutil.copy(assets_dir / "moving.mp4", src)  # different content
+    load_and_resolve(project)
+    assert ffmpeg_calls == ["cut", "cut"]
+
+
+def test_derive_reverse_gif(tmp_path: Path, assets_dir: Path):
+    # held.gif goes red -> blue -> green: reversed, it starts green
+    project = _project(tmp_path, [f"{{id: back, derive: {{path: {assets_dir / 'held.gif'}, reverse: true}}}}"])
+    load_and_resolve(project)
+    out = _bin(project)["back"].path
+    assert out.suffix == ".gif"
+    r, g, b = _first_pixel(out)
+    assert g > 100 and r < 80 and b < 80
+    assert _first_pixel(assets_dir / "held.gif")[0] > 150  # (and the original starts red)
+
+
+def test_derive_crop_scale_fps_on_a_silent_video(tmp_path: Path, assets_dir: Path):
+    crop = "{x: 10, y: 10, w: 200, h: 100}"
+    project = _project(
+        tmp_path,
+        [f"{{id: small, derive: {{path: {assets_dir / 'clip.mp4'}, crop: {crop}, scale: [100, -1], fps: 10}}}}"],
+    )
+    load_and_resolve(project)
+    info = _probe(_bin(project)["small"].path)
+    (video,) = info["streams"]  # no audio stream invented for a silent input
+    assert (video["width"], video["height"]) == (100, 50)
+    assert video["r_frame_rate"] == "10/1"
+
+
+def test_derive_volume_on_audio(tmp_path: Path, assets_dir: Path):
+    project = _project(tmp_path, [f"{{id: quiet, derive: {{path: {assets_dir / 'tone.mp3'}, volume: 0.5}}}}"])
+    load_and_resolve(project)
+    out = _bin(project)["quiet"].path
+    assert out.suffix == ".m4a"
+    assert float(_probe(out)["format"]["duration"]) == pytest.approx(5.0, abs=0.1)
+
+
+def test_derive_chain_generates_inputs_first(tmp_path: Path, assets_dir: Path, ffmpeg_calls):
+    project = _project(
+        tmp_path,
+        [
+            "{id: loud, derive: {clip: cut, volume: 2}}",
+            f"{{id: cut, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0, 1]}}}}",
+        ],
+    )
+    load_and_resolve(project)
+    assert ffmpeg_calls == ["cut", "loud"]
+    assert float(_probe(_bin(project)["loud"].path)["format"]["duration"]) == pytest.approx(1.0, abs=0.1)
+
+
+def test_derive_source_not_fetched_points_at_fetch(tmp_path: Path):
+    project = _project(tmp_path, ["{id: cut, derive: {source: VID_1.mp4, trim: [0, 1]}}"])
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(project)
+    assert "fetch" in str(exc.value)
+
+
+def test_derive_missing_local_input(tmp_path: Path):
+    project = _project(tmp_path, ["{id: cut, derive: {path: nope.mp4, trim: [0, 1]}}"])
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(project)
+    assert "nope.mp4" in str(exc.value)
+
+
+def test_derived_clip_is_usable_on_the_timeline(tmp_path: Path, assets_dir: Path):
+    project = _project(
+        tmp_path,
+        [f"{{id: cut, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0, 2]}}}}"],
+        clips="{clip: cut, start: 0}",
+    )
+    (placement,) = load_and_resolve(project).tracks[0].placements
+    assert placement.out_frame - placement.in_frame + 1 == pytest.approx(50, abs=1)  # 2s at 25fps

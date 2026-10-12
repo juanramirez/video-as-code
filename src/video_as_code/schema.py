@@ -970,12 +970,17 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
     fps = resolve_fps(doc.project.fps)
 
     # --- assets: existence on disk -----------------------------------------
+    # Derived clips (see derive.py) are generated here if missing or stale
+    # and their input is on disk; a missing input is reported by ensure_all.
+    derive_mod.ensure_all(doc.bin, doc.source_path.parent / doc.project.sources_dir, errors)
     bin_by_id: dict[str, BinClipSpec] = {}
     for clip in doc.bin:
         if clip.id in bin_by_id:
             errors.append(msg("validation.bin_duplicate_id", id=clip.id))
             continue
         bin_by_id[clip.id] = clip
+        if clip.derive is not None:
+            continue  # ensure_all already made sure it exists, or said why not
         if clip.type != "title" and not clip.path.exists():
             if clip.source is not None:
                 errors.append(msg("validation.bin_source_not_fetched", id=clip.id, path=clip.path))

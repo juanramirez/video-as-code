@@ -53,6 +53,16 @@ def assets_dir(tmp_path_factory) -> Path:
         ],
         check=True,
     )
+    # 3s video WITH sound (the other clips are silent) - for derive:'s audio handling
+    subprocess.run(
+        [
+            "ffmpeg", *common,
+            "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25:duration=3",
+            "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+            "-pix_fmt", "yuv420p", "-shortest", str(d / "av.mp4"),
+        ],
+        check=True,
+    )
     return d
 
 

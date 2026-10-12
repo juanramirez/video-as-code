@@ -8,15 +8,26 @@ generation - while an unchanged spec keeps pointing at the same file.
 The extension follows the input's kind: a gif stays a gif, a still image
 becomes a .png (lossless, whatever it was), audio becomes .m4a and
 anything else (video) .mp4.
+
+When: `validate_and_resolve` (so `build`/`render`/`validate`) generates
+whatever is missing or stale as long as its input is on disk - offline,
+once; `fetch` does the same right after downloading. Each output has a
+`<file>.input.json` sidecar recording the input it came from (see
+is_current), and older generations of the same clip are removed.
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import re
+import subprocess
 from pathlib import Path
+from typing import Callable, Optional
 
 from . import probe
-from .models import DeriveSpec
+from .errors import KdenliveAsCodeError
+from .i18n import msg
+from .models import BinClipSpec, DeriveSpec
 
 DERIVED_DIR = ".derived"
 
@@ -51,3 +62,220 @@ def output_suffix(input_path: Path) -> str:
 
 def output_path(clip_id: str, spec: DeriveSpec, input_path: Path, input_ref: str, derived_dir: Path) -> Path:
     return derived_dir / f"{clip_id}-{spec_key(spec, input_ref)}{output_suffix(input_path)}"
+
+
+# --- generation ---------------------------------------------------------------
+
+_FFMPEG_TIMEOUT_S = 1800
+
+
+class DeriveError(KdenliveAsCodeError):
+    pass
+
+
+def _sidecar(output: Path) -> Path:
+    return output.with_name(output.name + ".input.json")
+
+
+def _identity(input_path: Path) -> dict:
+    stat = input_path.stat()
+    return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+
+
+def is_current(output: Path, input_path: Path) -> bool:
+    """Whether `output` was generated from `input_path` as it is now. The
+    spec itself is already in the file name (see spec_key), so only the
+    input can have changed: same size and mtime is taken as unchanged; if
+    only the mtime moved (e.g. `fetch` downloaded the same file again),
+    the sha256 recorded at generation time decides, so an identical
+    re-download doesn't trigger a regeneration."""
+    sidecar = _sidecar(output)
+    if not output.exists() or not sidecar.exists():
+        return False
+    try:
+        recorded = json.loads(sidecar.read_text(encoding="utf-8"))
+    except ValueError:
+        return False
+    now = _identity(input_path)
+    if recorded.get("size") != now["size"]:
+        return False
+    if recorded.get("mtime_ns") == now["mtime_ns"]:
+        return True
+    if recorded.get("sha256") and recorded["sha256"] == _sha256(input_path):
+        sidecar.write_text(json.dumps({**recorded, **now}), encoding="utf-8")
+        return True
+    return False
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        while chunk := fh.read(1 << 20):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _has_audio(path: Path) -> bool:
+    if not probe.ffprobe_available():
+        return True  # can't tell: the optional mapping (0:a:0?) copes with none
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", str(path)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    return bool(result.stdout.strip())
+
+
+def build_command(spec: DeriveSpec, input_path: Path, output: Path, has_audio: bool) -> list[str]:
+    """The ffmpeg command line generating `output` (whose extension picks
+    the output kind, see output_suffix) from `input_path`."""
+    cmd = ["ffmpeg", "-y", "-loglevel", "error"]
+    if spec.trim:
+        # Seeking before -i is fast (it doesn't decode up to the start) and,
+        # since the output is re-encoded anyway, still frame-accurate.
+        start, end = spec.trim
+        cmd += ["-ss", f"{start:.6f}", "-t", f"{end - start:.6f}"]
+    cmd += ["-i", str(input_path)]
+
+    kind = output.suffix.lower()
+    vf: list[str] = []
+    if spec.crop:
+        x, y, w, h = spec.crop
+        vf.append(f"crop={w}:{h}:{x}:{y}")
+    if spec.scale:
+        w, h = spec.scale
+        # h264 + yuv420p need even dimensions: -2 is ffmpeg's "keep the
+        # aspect ratio, rounded to even" (plain -1 may give an odd size)
+        if kind == ".mp4":
+            w, h = (-2 if w == -1 else w), (-2 if h == -1 else h)
+        vf.append(f"scale={w}:{h}")
+    if spec.fps:
+        vf.append(f"fps={spec.fps:g}")
+    if spec.reverse:
+        vf.append("reverse")
+    af: list[str] = []
+    if spec.reverse:
+        af.append("areverse")
+    if spec.volume is not None:
+        af.append(f"volume={spec.volume:g}")
+
+    if kind == ".m4a":
+        cmd += ["-vn"]
+        if af:
+            cmd += ["-af", ",".join(af)]
+        cmd += ["-c:a", "aac", "-b:a", "192k"]
+    elif kind == ".gif":
+        # A per-clip palette keeps a gif's colors close to the input's
+        # (ffmpeg's default 256-color palette visibly bands photos).
+        chain = ",".join(vf) + "," if vf else ""
+        cmd += [
+            "-filter_complex", f"[0:v]{chain}split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse",
+            "-an", "-loop", "0",
+        ]
+    elif kind == ".png":
+        if vf:
+            cmd += ["-vf", ",".join(vf)]
+        cmd += ["-frames:v", "1"]
+    else:  # .mp4
+        vf.append("scale=trunc(iw/2)*2:trunc(ih/2)*2")
+        cmd += ["-map", "0:v:0", "-vf", ",".join(vf)]
+        cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p"]
+        if has_audio:
+            cmd += ["-map", "0:a:0?"]
+            if af:
+                cmd += ["-af", ",".join(af)]
+            cmd += ["-c:a", "aac", "-b:a", "192k"]
+        else:
+            cmd += ["-an"]
+        cmd += ["-movflags", "+faststart"]
+    cmd.append(str(output))
+    return cmd
+
+
+def generate(clip_id: str, spec: DeriveSpec, input_path: Path, output: Path) -> None:
+    """Runs ffmpeg into a temporary file next to `output` and renames it
+    into place only once complete (an interrupted run never leaves a file
+    that looks finished), records the input's identity for is_current,
+    and removes this clip's older generations (other spec hashes)."""
+    if not probe.ffmpeg_available():
+        raise DeriveError(msg("derive.ffmpeg_unavailable", id=clip_id))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # the extension must stay last: ffmpeg picks the output format from it
+    tmp = output.with_name(f"{output.stem}.part{output.suffix}")
+    cmd = build_command(spec, input_path, tmp, _has_audio(input_path))
+    try:
+        subprocess.run(cmd, capture_output=True, check=True, timeout=_FFMPEG_TIMEOUT_S)
+    except subprocess.CalledProcessError as exc:
+        tmp.unlink(missing_ok=True)
+        raise DeriveError(
+            msg("derive.ffmpeg_failed", id=clip_id, stderr=exc.stderr.decode(errors="replace").strip())
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        tmp.unlink(missing_ok=True)
+        raise DeriveError(msg("derive.ffmpeg_timeout", id=clip_id)) from exc
+    tmp.replace(output)
+    _sidecar(output).write_text(
+        json.dumps({"input": input_path.name, **_identity(input_path), "sha256": _sha256(input_path)}),
+        encoding="utf-8",
+    )
+    # (matched on the exact "<id>-<10 hex>." shape, so clip "a" never
+    # touches clip "a-b"'s files)
+    own = re.compile(rf"{re.escape(clip_id)}-[0-9a-f]{{10}}\.")
+    for old in output.parent.iterdir():
+        if own.match(old.name) and old.name not in (output.name, _sidecar(output).name):
+            old.unlink(missing_ok=True)
+
+
+def ensure_all(
+    bin_clips: list[BinClipSpec],
+    sources_root: Path,
+    errors: list[str],
+    on_generate: Optional[Callable[[str], None]] = None,
+) -> list[str]:
+    """Generates every derived clip whose file is missing or stale, inputs
+    first (a `clip:` input may itself be derived). A missing input is
+    appended to `errors` - pointing at `fetch` when it's an album item -
+    and so is an ffmpeg failure; everything else still gets generated.
+    Returns the ids generated."""
+    by_id = {c.id: c for c in bin_clips}
+    done: dict[str, bool] = {}  # id -> its file is ready
+    generated: list[str] = []
+
+    def ready(clip: BinClipSpec) -> bool:
+        if clip.derive is None:
+            return True
+        if clip.id in done:
+            return done[clip.id]
+        done[clip.id] = False  # (cycles were already rejected at parse time)
+        spec = clip.derive
+        if spec.clip is not None:
+            ref = by_id[spec.clip]
+            if not ready(ref):
+                return False
+            input_path = ref.path
+        elif spec.source is not None:
+            input_path = sources_root / spec.source
+        else:
+            input_path = spec.path
+        if not input_path.exists():
+            if spec.source is not None:
+                errors.append(msg("validation.derive_input_not_fetched", id=clip.id, path=input_path))
+            elif spec.clip is None:
+                errors.append(msg("validation.derive_input_missing", id=clip.id, path=input_path))
+            return False
+        if not is_current(clip.path, input_path):
+            if on_generate:
+                on_generate(clip.id)
+            try:
+                generate(clip.id, spec, input_path, clip.path)
+            except DeriveError as exc:
+                errors.append(str(exc))
+                return False
+            generated.append(clip.id)
+        done[clip.id] = True
+        return True
+
+    for clip in bin_clips:
+        ready(clip)
+    return generated
