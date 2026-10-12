@@ -14,6 +14,11 @@ name (one HEAD request each - the album listing doesn't include names),
 so candidates are tried closest-capture-time-first (see
 gphotos.rank_by_name_time) a few at a time, and every name learned is
 cached in `.fetch_cache/names.json` so it's never asked twice.
+
+`derive:` clips (derive.py) take part too: an album item one of them is
+derived from is downloaded like any `source:` clip (even if nothing else
+uses it), and once downloads are done every derived clip whose input is
+on disk is generated, so a fetched project builds without further work.
 """
 from __future__ import annotations
 
@@ -25,9 +30,10 @@ from typing import Callable, Optional
 
 import yaml
 
-from . import gphotos
+from . import derive, gphotos
 from .errors import KdenliveAsCodeError
 from .i18n import msg
+from .models import ProjectDoc
 from .schema import load_yaml
 
 LOCK_NAME = "sources.lock.yaml"
@@ -45,6 +51,7 @@ class FetchError(KdenliveAsCodeError):
 class FetchResult:
     downloaded: list[str] = field(default_factory=list)
     up_to_date: list[str] = field(default_factory=list)
+    derived: list[str] = field(default_factory=list)  # bin ids of the derive: clips (re)generated
 
 
 def _read_lock(path: Path) -> dict:
@@ -117,15 +124,48 @@ def fetch(
 ) -> FetchResult:
     """Downloads every `source:` bin clip of `yaml_path` that isn't on disk
     (or, with `verify`, whose sha256 doesn't match the lock) and updates
-    the lock. Raises FetchError listing the names the album doesn't have."""
+    the lock, then generates the derive: clips. Raises FetchError listing
+    the names the album doesn't have and any derive: clip that failed."""
     report = on_progress or (lambda text: None)
     doc = load_yaml(yaml_path)
-    wanted = {clip.source: clip.path for clip in doc.bin if clip.source is not None}
-    result = FetchResult()
-    if not wanted:
-        return result
-
     base_dir = doc.source_path.parent
+    sources_root = base_dir / doc.project.sources_dir
+    wanted = {clip.source: clip.path for clip in doc.bin if clip.source is not None}
+    for clip in doc.bin:
+        if clip.derive is not None and clip.derive.source is not None:
+            wanted.setdefault(clip.derive.source, sources_root / clip.derive.source)
+    result = FetchResult()
+    missing: list[str] = []
+    if wanted:
+        missing = _download(doc, base_dir, wanted, result, report, verify)
+
+    failures = [msg("fetch.not_in_album", names=", ".join(missing))] if missing else []
+    if any(clip.derive is not None for clip in doc.bin):
+        derive_errors: list[str] = []
+        result.derived = derive.ensure_all(
+            doc.bin, sources_root, derive_errors, on_generate=lambda clip_id: report(msg("fetch.deriving", id=clip_id))
+        )
+        # a derive: clip whose album input is missing was already reported above
+        not_downloaded = {
+            msg("validation.derive_input_not_fetched", id=clip.id, path=sources_root / clip.derive.source)
+            for clip in doc.bin
+            if clip.derive is not None and clip.derive.source in missing
+        }
+        failures += [e for e in derive_errors if e not in not_downloaded]
+    if failures:
+        raise FetchError("\n".join(failures))
+    return result
+
+
+def _download(
+    doc: ProjectDoc,
+    base_dir: Path,
+    wanted: dict[str, Path],
+    result: FetchResult,
+    report: Callable[[str], None],
+    verify: bool,
+) -> list[str]:
+    """The download half of `fetch`; returns the names the album doesn't have."""
     lock_path = base_dir / LOCK_NAME
     lock = _read_lock(lock_path)
     entries: dict[str, dict] = dict(lock.get("items") or {})
@@ -154,9 +194,7 @@ def fetch(
         _write_lock(lock_path, entries)  # after each one: an interrupted fetch keeps its progress
 
     _write_lock(lock_path, entries)
-    if missing:
-        raise FetchError(msg("fetch.not_in_album", names=", ".join(missing)))
-    return result
+    return missing
 
 
 def _matches(path: Path, entry: dict, verify: bool) -> bool:

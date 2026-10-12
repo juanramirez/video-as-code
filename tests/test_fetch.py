@@ -174,3 +174,38 @@ timeline:
     assert "fetch" in capsys.readouterr().err
     assert cli.main(["build", "--fetch", str(project)]) == 0
     assert (tmp_path / "project.kdenlive").exists()
+
+
+def _derive_project(tmp_path: Path, derive_source: str) -> Path:
+    path = tmp_path / "project.yaml"
+    path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240, sources: {{album: 'https://photos.app.goo.gl/x'}}}}
+bin:
+  - {{id: cut, derive: {{source: {derive_source}, trim: [0, 1]}}}}
+timeline:
+  tracks: []
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_fetch_downloads_derive_inputs_and_generates_them(tmp_path: Path, assets_dir: Path, monkeypatch):
+    # VID_1.mp4 is only used as a derive: input, never directly
+    FakeAlbum({"VID_1.mp4": (assets_dir / "av.mp4").read_bytes()}).install(monkeypatch)
+    project = _derive_project(tmp_path, "VID_1.mp4")
+    result = fetch.fetch(project)
+    assert result.downloaded == ["VID_1.mp4"] and result.derived == ["cut"]
+    assert "VID_1.mp4" in _lock(tmp_path)
+    (generated,) = (tmp_path / "assets" / ".derived").glob("cut-*.mp4")
+    assert generated.stat().st_size > 0
+    again = fetch.fetch(project)  # nothing to download or regenerate
+    assert (again.downloaded, again.derived) == ([], [])
+
+
+def test_fetch_reports_a_missing_derive_input_once(tmp_path: Path, monkeypatch):
+    FakeAlbum({}).install(monkeypatch)
+    with pytest.raises(fetch.FetchError) as exc:
+        fetch.fetch(_derive_project(tmp_path, "VID_404.mp4"))
+    assert str(exc.value).count("VID_404.mp4") == 1

@@ -38,7 +38,14 @@ def _run_fetch(yaml_path: Path, verify: bool = False) -> bool:
     except (KdenliveAsCodeError, OSError) as exc:
         print(str(exc), file=sys.stderr)
         return False
-    print(msg("cli.fetch_done", downloaded=len(result.downloaded), up_to_date=len(result.up_to_date)))
+    print(
+        msg(
+            "cli.fetch_done",
+            downloaded=len(result.downloaded),
+            up_to_date=len(result.up_to_date),
+            derived=len(result.derived),
+        )
+    )
     return True
 
 
