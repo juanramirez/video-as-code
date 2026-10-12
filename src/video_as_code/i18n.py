@@ -27,6 +27,13 @@ _EN: dict[str, str] = {
     "probe.ffmpeg_reverse_timeout": "ffmpeg did not respond in time pre-rendering a reversed segment of '{path}'",
     "probe.ffmpeg_hold_failed": "ffmpeg failed measuring how long the last frame of '{path}' is held: {stderr}",
     "probe.ffmpeg_hold_timeout": "ffmpeg did not respond in time measuring how long the last frame of '{path}' is held",
+    "gphotos.page_unrecognized": (
+        "Couldn't read the shared album's page: Google Photos may have changed its format "
+        "(see gphotos.py's docstring)"
+    ),
+    "gphotos.request_failed": "Request to Google Photos failed ({url}): {exc}",
+    "gphotos.not_a_shared_album": "'{url}' isn't a shared album link (no ?key= in it)",
+    "gphotos.no_filename": "Google Photos didn't say what item {media_id}'s original file name is",
     "validation.yaml_missing": "YAML file not found: {path}",
     "validation.yaml_invalid": "Invalid YAML in {path}: {exc}",
     "validation.project_section_missing": "Missing 'project:' section (or it isn't a map) in {path}",
@@ -273,6 +280,13 @@ _ES: dict[str, str] = {
     "probe.ffmpeg_reverse_timeout": "ffmpeg no respondió a tiempo generando un tramo invertido de '{path}'",
     "probe.ffmpeg_hold_failed": "ffmpeg falló midiendo cuánto se mantiene el último fotograma de '{path}': {stderr}",
     "probe.ffmpeg_hold_timeout": "ffmpeg no respondió a tiempo midiendo cuánto se mantiene el último fotograma de '{path}'",
+    "gphotos.page_unrecognized": (
+        "No se pudo leer la página del álbum compartido: puede que Google Fotos haya cambiado "
+        "su formato (ver el docstring de gphotos.py)"
+    ),
+    "gphotos.request_failed": "Falló la petición a Google Fotos ({url}): {exc}",
+    "gphotos.not_a_shared_album": "'{url}' no es un enlace de álbum compartido (no lleva ?key=)",
+    "gphotos.no_filename": "Google Fotos no indicó el nombre original del elemento {media_id}",
     "validation.yaml_missing": "No existe el archivo YAML: {path}",
     "validation.yaml_invalid": "YAML inválido en {path}: {exc}",
     "validation.project_section_missing": "Falta la sección 'project:' (o no es un mapa) en {path}",
