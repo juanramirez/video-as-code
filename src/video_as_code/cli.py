@@ -10,10 +10,10 @@ from typing import Optional
 
 import yaml
 
-from . import fetch, fetch_resolve, i18n, probe, reverse, trackpack, xmlgen
+from . import fetch, fetch_resolve, i18n, probe, reverse, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
-from .schema import load_and_resolve
+from .schema import load_and_resolve, load_yaml
 
 
 def _yaml_str_representer(dumper: yaml.Dumper, data: str):
@@ -40,6 +40,9 @@ def _run_fetch(yaml_path: Path, verify: bool = False, interactive: Optional[bool
 
     def _progress(text: str) -> None:
         print(text, file=sys.stderr)
+
+    if interactive and not _offer_upscaler(yaml_path):
+        return False
 
     skipped: set[str] = set()
     while True:
@@ -69,6 +72,40 @@ def _run_fetch(yaml_path: Path, verify: bool = False, interactive: Optional[bool
         )
     )
     return True
+
+
+def _offer_upscaler(yaml_path: Path) -> bool:
+    """Before a fetch in a terminal: if some derive: clip needs Real-ESRGAN
+    (`upscale:`) and it isn't installed, offer to download it. False only
+    if the download was accepted and failed (declining just lets those
+    clips fail later, with the message saying how to install it)."""
+    try:
+        doc = load_yaml(yaml_path)
+    except (KdenliveAsCodeError, OSError):
+        return True  # fetch itself will report it
+    needing = [c for c in doc.bin if c.derive is not None and c.derive.upscale]
+    if not needing or upscale.find_binary() is not None or not upscale.can_install():
+        return True
+    answer = input(
+        msg("upscale.ask_install", n=len(needing), mb=upscale.RELEASE_SIZE_MB, path=upscale.install_dir())
+    )
+    if answer.strip().lower() not in ("", "y", "yes", "s", "si", "sí"):
+        return True
+    try:
+        upscale.install(report=lambda text: print(text, file=sys.stderr))
+    except KdenliveAsCodeError as exc:
+        print(str(exc), file=sys.stderr)
+        return False
+    return True
+
+
+def cmd_install_upscaler(args: argparse.Namespace) -> int:
+    try:
+        upscale.install(report=lambda text: print(text, file=sys.stderr))
+    except KdenliveAsCodeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -254,6 +291,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_fetch.add_argument("project", help=msg("cli.help.project_path"))
     p_fetch.add_argument("--verify", action="store_true", help=msg("cli.help.fetch_verify"))
     p_fetch.set_defaults(func=cmd_fetch)
+
+    p_upscaler = sub.add_parser("install-upscaler", help=msg("cli.help.install_upscaler"))
+    p_upscaler.set_defaults(func=cmd_install_upscaler)
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
     p_reconstruct.add_argument("video", help=msg("cli.help.reconstruct_video"))

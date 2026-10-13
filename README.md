@@ -155,8 +155,22 @@ bin:
 Operations, applied in this order: `trim: [start, end]`, `crop: {x, y,
 w, h}` (source pixels), `scale: [w, h]` (`-1` on one side keeps the aspect
 ratio), `fps:`, `reverse: true` (picture and sound) and `volume:` (audio
-gain factor). A gif stays a gif, a still image becomes a `.png`, audio an
-`.m4a` and video an `.mp4` (h264 + aac, keeping the sound if there is any).
+gain factor) and, last, `upscale: 4`. A gif stays a gif, a still image
+becomes a `.png`, audio an `.m4a` and video an `.mp4` (h264 + aac, keeping
+the sound if there is any).
+
+`upscale: 4` enlarges a still or a gif x4 with Real-ESRGAN, an AI upscaler
+that invents plausible detail rather than stretching pixels - for small
+album items (Google Photos' own animations are ~800x600) that would look
+blurry full screen. It runs `realesrgan-ncnn-vulkan` on any Vulkan
+device, an integrated GPU included, but slowly there - a minute or two
+per frame - so it's limited to stills and gifs (a gif's repeated frames
+are upscaled once, and its per-frame delays are kept). `fetch` offers to
+download it when a project needs it (or run `video-as-code
+install-upscaler`: a pinned release, checked against its sha256, into
+`~/.local/share/video-as-code/realesrgan/`); `VIDEO_AS_CODE_REALESRGAN`
+points at another copy. Gifs need Pillow (`pip install
+'video-as-code[upscale]'`).
 
 The result is cached under `<dir>/.derived/` with the spec's hash in its
 name: `build`/`render`/`validate` generate it once, offline, whenever the

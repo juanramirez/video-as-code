@@ -20,6 +20,7 @@ import yaml
 
 from . import derive as derive_mod
 from . import probe, sources_lock, titles
+from . import upscale as upscale_mod
 from .errors import ValidationErrors
 from .i18n import msg
 from .lumas import AVAILABLE_LUMAS
@@ -324,7 +325,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_not_a_map", id=clip_id, value=data))
         return None
     n_errors = len(errors)
-    known = {"source", "path", "clip", "trim", "crop", "scale", "fps", "reverse", "volume"}
+    known = {"source", "path", "clip", "trim", "crop", "scale", "fps", "reverse", "volume", "upscale"}
     unknown = set(data) - known
     if unknown:
         errors.append(msg("validation.derive_unknown_keys", id=clip_id, keys=", ".join(sorted(unknown))))
@@ -376,9 +377,13 @@ def _parse_derive(
     volume = data.get("volume")
     if volume is not None and (isinstance(volume, bool) or not isinstance(volume, (int, float)) or volume < 0):
         errors.append(msg("validation.derive_volume_invalid", id=clip_id, value=volume))
+    upscale = data.get("upscale")
+    # x4 only: it's what the realesrgan-x4plus model does (see upscale.py)
+    if upscale is not None and (isinstance(upscale, bool) or upscale != upscale_mod.FACTOR):
+        errors.append(msg("validation.derive_upscale_invalid", id=clip_id, value=upscale, factor=upscale_mod.FACTOR))
     if len(errors) > n_errors:
         return None
-    if not (trim or crop or scale or fps or reverse or volume is not None):
+    if not (trim or crop or scale or fps or reverse or volume is not None or upscale):
         errors.append(msg("validation.derive_does_nothing", id=clip_id))
         return None
     return DeriveSpec(
@@ -391,6 +396,7 @@ def _parse_derive(
         fps=float(fps) if fps is not None else None,
         reverse=reverse,
         volume=float(volume) if volume is not None else None,
+        upscale=int(upscale) if upscale is not None else None,
     )
 
 

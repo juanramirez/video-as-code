@@ -48,7 +48,9 @@ class DeriveSpec:
     (another bin clip's id, which may itself be derived). Then, applied in
     this order: `trim` (source seconds [start, end)), `crop` (x, y, w, h,
     source pixels), `scale` (w, h; -1 keeps the aspect ratio), `fps`,
-    `reverse` (picture and sound), `volume` (audio gain factor)."""
+    `reverse` (picture and sound), `volume` (audio gain factor) and, last,
+    `upscale` (4: enlarge a still or gif x4 with Real-ESRGAN, see
+    upscale.py - slow, so stills and gifs only)."""
 
     source: Optional[str] = None
     path: Optional[Path] = None
@@ -59,6 +61,7 @@ class DeriveSpec:
     fps: Optional[float] = None
     reverse: bool = False
     volume: Optional[float] = None
+    upscale: Optional[int] = None
 
 
 @dataclass

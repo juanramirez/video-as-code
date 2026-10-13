@@ -190,7 +190,11 @@ def fetch(
     if any(clip.derive is not None for clip in doc.bin):
         derive_errors: list[str] = []
         result.derived = derive.ensure_all(
-            doc.bin, sources_root, derive_errors, on_generate=lambda clip_id: report(msg("fetch.deriving", id=clip_id))
+            doc.bin,
+            sources_root,
+            derive_errors,
+            on_generate=lambda clip_id: report(msg("fetch.deriving", id=clip_id)),
+            on_progress=report,
         )
         # a derive: clip whose album input is missing was already reported above
         not_downloaded = {

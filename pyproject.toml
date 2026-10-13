@@ -16,6 +16,9 @@ reconstruct = [
     "numpy>=1.21",
     "Pillow>=9.0",
 ]
+upscale = [
+    "Pillow>=9.0",
+]
 
 [project.scripts]
 video-as-code = "video_as_code.cli:main"

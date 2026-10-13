@@ -1169,10 +1169,14 @@ whole video can be built from a fresh checkout anywhere.
   out as intended leaves the file untouched - and `fetch` runs again for
   what's still missing. Outside a terminal it fails as before, listing
   everything (`fetch_resolve.py`, `tests/test_fetch_resolve.py`).
-- **`derive:` upscaling with Real-ESRGAN** — **in progress**: an
+- **`derive:` upscaling with Real-ESRGAN** — **implemented** (2026-10-13): an
   `upscale: 4` operation, so a low-resolution album item (Google Photos'
   own animations are ~800x600) is enlarged when generated instead of
-  kept as a hand-upscaled file. `realesrgan-ncnn-vulkan` (realesrgan-x4plus
+  kept as a hand-upscaled file (`upscale.py`, `tests/test_upscale.py`,
+  with a stand-in for the real program). Checked for real on an 850x640,
+  3-frame gif: 3400x2560 out, delays kept exactly, 10.5 min on an
+  integrated GPU - and smoother than the earlier hand-made upscale, whose
+  skin tones had visible colour banding. `realesrgan-ncnn-vulkan` (realesrgan-x4plus
   model) runs on any Vulkan device, an integrated GPU included - slowly
   there (a minute or two per frame), which is fine for stills and short
   gifs, so those are what it covers; repeated gif frames are upscaled

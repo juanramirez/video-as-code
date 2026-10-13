@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from . import probe
+from . import upscale as upscale_mod
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .models import BinClipSpec, DeriveSpec
@@ -46,6 +47,8 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         "reverse": spec.reverse,
         "volume": spec.volume,
     }
+    if spec.upscale:  # (only when set: older specs keep their keys, and files)
+        canonical["upscale"] = spec.upscale
     return hashlib.sha1(json.dumps(canonical, sort_keys=True).encode()).hexdigest()[:10]
 
 
@@ -193,27 +196,58 @@ def build_command(spec: DeriveSpec, input_path: Path, output: Path, has_audio: b
     return cmd
 
 
-def generate(clip_id: str, spec: DeriveSpec, input_path: Path, output: Path) -> None:
-    """Runs ffmpeg into a temporary file next to `output` and renames it
-    into place only once complete (an interrupted run never leaves a file
-    that looks finished), records the input's identity for is_current,
-    and removes this clip's older generations (other spec hashes)."""
+def _ffmpeg_ops(spec: DeriveSpec) -> bool:
+    return bool(spec.trim or spec.crop or spec.scale or spec.fps or spec.reverse or spec.volume is not None)
+
+
+def _run_ffmpeg(clip_id: str, spec: DeriveSpec, input_path: Path, output: Path) -> None:
+    cmd = build_command(spec, input_path, output, _has_audio(input_path))
+    try:
+        subprocess.run(cmd, capture_output=True, check=True, timeout=_FFMPEG_TIMEOUT_S)
+    except subprocess.CalledProcessError as exc:
+        output.unlink(missing_ok=True)
+        raise DeriveError(
+            msg("derive.ffmpeg_failed", id=clip_id, stderr=exc.stderr.decode(errors="replace").strip())
+        ) from exc
+    except subprocess.TimeoutExpired as exc:
+        output.unlink(missing_ok=True)
+        raise DeriveError(msg("derive.ffmpeg_timeout", id=clip_id)) from exc
+
+
+def generate(
+    clip_id: str,
+    spec: DeriveSpec,
+    input_path: Path,
+    output: Path,
+    on_progress: Optional[Callable[[str], None]] = None,
+) -> None:
+    """Runs ffmpeg (and, for `upscale`, Real-ESRGAN after it) into a
+    temporary file next to `output` and renames it into place only once
+    complete (an interrupted run never leaves a file that looks
+    finished), records the input's identity for is_current, and removes
+    this clip's older generations (other spec hashes)."""
     if not probe.ffmpeg_available():
         raise DeriveError(msg("derive.ffmpeg_unavailable", id=clip_id))
     output.parent.mkdir(parents=True, exist_ok=True)
     # the extension must stay last: ffmpeg picks the output format from it
     tmp = output.with_name(f"{output.stem}.part{output.suffix}")
-    cmd = build_command(spec, input_path, tmp, _has_audio(input_path))
-    try:
-        subprocess.run(cmd, capture_output=True, check=True, timeout=_FFMPEG_TIMEOUT_S)
-    except subprocess.CalledProcessError as exc:
-        tmp.unlink(missing_ok=True)
-        raise DeriveError(
-            msg("derive.ffmpeg_failed", id=clip_id, stderr=exc.stderr.decode(errors="replace").strip())
-        ) from exc
-    except subprocess.TimeoutExpired as exc:
-        tmp.unlink(missing_ok=True)
-        raise DeriveError(msg("derive.ffmpeg_timeout", id=clip_id)) from exc
+    if spec.upscale:
+        if output.suffix.lower() not in (".png", ".gif"):
+            raise DeriveError(msg("derive.upscale_stills_only", id=clip_id))
+        upscale_input = input_path
+        if _ffmpeg_ops(spec):  # the other operations first, on the small picture
+            upscale_input = output.with_name(f"{output.stem}.pre{output.suffix}")
+            _run_ffmpeg(clip_id, spec, input_path, upscale_input)
+        try:
+            upscale_mod.upscale(clip_id, upscale_input, tmp, on_progress)
+        except (upscale_mod.UpscaleError, subprocess.SubprocessError, OSError) as exc:
+            tmp.unlink(missing_ok=True)
+            raise DeriveError(str(exc)) from exc
+        finally:
+            if upscale_input != input_path:
+                upscale_input.unlink(missing_ok=True)
+    else:
+        _run_ffmpeg(clip_id, spec, input_path, tmp)
     tmp.replace(output)
     _sidecar(output).write_text(
         json.dumps({"input": input_path.name, **_identity(input_path), "sha256": _sha256(input_path)}),
@@ -232,6 +266,7 @@ def ensure_all(
     sources_root: Path,
     errors: list[str],
     on_generate: Optional[Callable[[str], None]] = None,
+    on_progress: Optional[Callable[[str], None]] = None,
 ) -> list[str]:
     """Generates every derived clip whose file is missing or stale, inputs
     first (a `clip:` input may itself be derived). A missing input is
@@ -268,7 +303,7 @@ def ensure_all(
             if on_generate:
                 on_generate(clip.id)
             try:
-                generate(clip.id, spec, input_path, clip.path)
+                generate(clip.id, spec, input_path, clip.path, on_progress)
             except DeriveError as exc:
                 errors.append(str(exc))
                 return False
