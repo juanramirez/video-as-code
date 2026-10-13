@@ -325,7 +325,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_not_a_map", id=clip_id, value=data))
         return None
     n_errors = len(errors)
-    known = {"source", "path", "clip", "trim", "crop", "scale", "fps", "reverse", "volume", "upscale"}
+    known = {"source", "path", "clip", "trim", "cut", "crop", "scale", "fps", "reverse", "volume", "upscale"}
     unknown = set(data) - known
     if unknown:
         errors.append(msg("validation.derive_unknown_keys", id=clip_id, keys=", ".join(sorted(unknown))))
@@ -352,6 +352,17 @@ def _parse_derive(
         trim = _number_pair(data["trim"])
         if trim is None or trim[0] < 0 or trim[1] <= trim[0]:
             errors.append(msg("validation.derive_trim_invalid", id=clip_id, value=data["trim"]))
+    cut = None
+    if data.get("cut") is not None:
+        # [[start, end], ...]: ranges to remove, in the input's seconds,
+        # in order and not overlapping
+        pairs = [_number_pair(r) for r in data["cut"]] if isinstance(data["cut"], list) else [None]
+        ok = bool(pairs) and all(p is not None and 0 <= p[0] < p[1] for p in pairs)
+        ok = ok and all(a[1] <= b[0] for a, b in zip(pairs, pairs[1:]))
+        if ok:
+            cut = tuple(pairs)
+        else:
+            errors.append(msg("validation.derive_cut_invalid", id=clip_id, value=data["cut"]))
     crop = None
     if data.get("crop") is not None:
         raw = data["crop"]
@@ -383,7 +394,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_upscale_invalid", id=clip_id, value=upscale, factor=upscale_mod.FACTOR))
     if len(errors) > n_errors:
         return None
-    if not (trim or crop or scale or fps or reverse or volume is not None or upscale):
+    if not (trim or cut or crop or scale or fps or reverse or volume is not None or upscale):
         errors.append(msg("validation.derive_does_nothing", id=clip_id))
         return None
     return DeriveSpec(
@@ -391,6 +402,7 @@ def _parse_derive(
         path=path,
         clip=clip,
         trim=trim,
+        cut=cut,
         crop=crop,
         scale=scale,
         fps=float(fps) if fps is not None else None,

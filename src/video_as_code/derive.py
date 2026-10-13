@@ -17,6 +17,7 @@ is_current), and older generations of the same clip are removed.
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import re
@@ -47,7 +48,10 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         "reverse": spec.reverse,
         "volume": spec.volume,
     }
-    if spec.upscale:  # (only when set: older specs keep their keys, and files)
+    # (newer operations only when set: older specs keep their keys, and files)
+    if spec.cut:
+        canonical["cut"] = [list(r) for r in spec.cut]
+    if spec.upscale:
         canonical["upscale"] = spec.upscale
     return hashlib.sha1(json.dumps(canonical, sort_keys=True).encode()).hexdigest()[:10]
 
@@ -196,12 +200,51 @@ def build_command(spec: DeriveSpec, input_path: Path, output: Path, has_audio: b
     return cmd
 
 
+def _kept_ranges(spec: DeriveSpec) -> list[tuple[float, Optional[float]]]:
+    """The input's [start, end) ranges that survive `trim` and `cut`, in
+    order (end None: to the input's end)."""
+    start, end = spec.trim if spec.trim else (0.0, None)
+    kept: list[tuple[float, Optional[float]]] = []
+    for a, b in spec.cut or ():
+        if end is not None and a >= end:
+            break
+        if a > start:
+            kept.append((start, a))
+        start = max(start, b)
+    if end is None or start < end:
+        kept.append((start, end))
+    return kept
+
+
+def build_cut_command(spec: DeriveSpec, input_path: Path, output: Path, has_audio: bool) -> list[str]:
+    """`trim` + `cut` as their own lossless pass (FFV1 + PCM in Matroska):
+    each kept range trimmed and the pieces concatenated, picture and sound
+    alike. (ffmpeg's aselect would be the one-pass way, but it doesn't
+    drop anything on ffmpeg 8 - checked: even `aselect=0` keeps it all.)
+    The other operations then run on this, as on any input."""
+    parts: list[str] = []
+    labels: list[str] = []
+    for i, (a, b) in enumerate(_kept_ranges(spec)):
+        bounds = f"start={a:.6f}" + (f":end={b:.6f}" if b is not None else "")
+        parts.append(f"[0:v]trim={bounds},setpts=PTS-STARTPTS[v{i}]")
+        labels.append(f"[v{i}]")
+        if has_audio:
+            parts.append(f"[0:a]atrim={bounds},asetpts=PTS-STARTPTS[a{i}]")
+            labels.append(f"[a{i}]")
+    n = len(_kept_ranges(spec))
+    graph = ";".join(parts) + ";" + "".join(labels) + f"concat=n={n}:v=1:a={1 if has_audio else 0}"
+    graph += "[v][a]" if has_audio else "[v]"
+    cmd = ["ffmpeg", "-y", "-loglevel", "error", "-i", str(input_path), "-filter_complex", graph, "-map", "[v]"]
+    if has_audio:
+        cmd += ["-map", "[a]", "-c:a", "pcm_s16le"]
+    return cmd + ["-c:v", "ffv1", str(output)]
+
+
 def _ffmpeg_ops(spec: DeriveSpec) -> bool:
-    return bool(spec.trim or spec.crop or spec.scale or spec.fps or spec.reverse or spec.volume is not None)
+    return bool(spec.trim or spec.cut or spec.crop or spec.scale or spec.fps or spec.reverse or spec.volume is not None)
 
 
-def _run_ffmpeg(clip_id: str, spec: DeriveSpec, input_path: Path, output: Path) -> None:
-    cmd = build_command(spec, input_path, output, _has_audio(input_path))
+def _run(clip_id: str, cmd: list[str], output: Path) -> None:
     try:
         subprocess.run(cmd, capture_output=True, check=True, timeout=_FFMPEG_TIMEOUT_S)
     except subprocess.CalledProcessError as exc:
@@ -214,6 +257,10 @@ def _run_ffmpeg(clip_id: str, spec: DeriveSpec, input_path: Path, output: Path) 
         raise DeriveError(msg("derive.ffmpeg_timeout", id=clip_id)) from exc
 
 
+def _run_ffmpeg(clip_id: str, spec: DeriveSpec, input_path: Path, output: Path) -> None:
+    _run(clip_id, build_command(spec, input_path, output, _has_audio(input_path)), output)
+
+
 def generate(
     clip_id: str,
     spec: DeriveSpec,
@@ -221,33 +268,44 @@ def generate(
     output: Path,
     on_progress: Optional[Callable[[str], None]] = None,
 ) -> None:
-    """Runs ffmpeg (and, for `upscale`, Real-ESRGAN after it) into a
-    temporary file next to `output` and renames it into place only once
-    complete (an interrupted run never leaves a file that looks
-    finished), records the input's identity for is_current, and removes
-    this clip's older generations (other spec hashes)."""
+    """Generates `output` from `input_path` in up to three passes - `trim` +
+    `cut` into a lossless intermediate when there's a `cut`
+    (build_cut_command), then ffmpeg's operations, then `upscale`
+    (Real-ESRGAN) - into a temporary file next to `output`, renamed into
+    place only once complete (an interrupted run never leaves a file that
+    looks finished). Then records the input's identity for is_current and
+    removes this clip's older generations (other spec hashes)."""
     if not probe.ffmpeg_available():
         raise DeriveError(msg("derive.ffmpeg_unavailable", id=clip_id))
     output.parent.mkdir(parents=True, exist_ok=True)
     # the extension must stay last: ffmpeg picks the output format from it
     tmp = output.with_name(f"{output.stem}.part{output.suffix}")
-    if spec.upscale:
-        if output.suffix.lower() not in (".png", ".gif"):
-            raise DeriveError(msg("derive.upscale_stills_only", id=clip_id))
-        upscale_input = input_path
-        if _ffmpeg_ops(spec):  # the other operations first, on the small picture
-            upscale_input = output.with_name(f"{output.stem}.pre{output.suffix}")
-            _run_ffmpeg(clip_id, spec, input_path, upscale_input)
-        try:
-            upscale_mod.upscale(clip_id, upscale_input, tmp, on_progress)
-        except (upscale_mod.UpscaleError, subprocess.SubprocessError, OSError) as exc:
-            tmp.unlink(missing_ok=True)
-            raise DeriveError(str(exc)) from exc
-        finally:
-            if upscale_input != input_path:
-                upscale_input.unlink(missing_ok=True)
-    else:
-        _run_ffmpeg(clip_id, spec, input_path, tmp)
+    intermediates: list[Path] = []
+    source = input_path
+    try:
+        if spec.cut:
+            cut_file = output.with_name(f"{output.stem}.cut.mkv")
+            intermediates.append(cut_file)
+            _run(clip_id, build_cut_command(spec, input_path, cut_file, _has_audio(input_path)), cut_file)
+            source, spec = cut_file, dataclasses.replace(spec, trim=None, cut=None)
+        if spec.upscale:
+            if output.suffix.lower() not in (".png", ".gif"):
+                raise DeriveError(msg("derive.upscale_stills_only", id=clip_id))
+            if _ffmpeg_ops(spec):  # the other operations first, on the small picture
+                pre = output.with_name(f"{output.stem}.pre{output.suffix}")
+                intermediates.append(pre)
+                _run_ffmpeg(clip_id, spec, source, pre)
+                source = pre
+            try:
+                upscale_mod.upscale(clip_id, source, tmp, on_progress)
+            except (upscale_mod.UpscaleError, subprocess.SubprocessError, OSError) as exc:
+                tmp.unlink(missing_ok=True)
+                raise DeriveError(str(exc)) from exc
+        else:
+            _run_ffmpeg(clip_id, spec, source, tmp)
+    finally:
+        for path in intermediates:
+            path.unlink(missing_ok=True)
     tmp.replace(output)
     _sidecar(output).write_text(
         json.dumps({"input": input_path.name, **_identity(input_path), "sha256": _sha256(input_path)}),

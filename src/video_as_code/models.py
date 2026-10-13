@@ -46,7 +46,9 @@ class DeriveSpec:
     BinClipSpec.source - `fetch` downloads it even if no other bin clip
     uses it), `path` (a local file, relative to the YAML) or `clip`
     (another bin clip's id, which may itself be derived). Then, applied in
-    this order: `trim` (source seconds [start, end)), `crop` (x, y, w, h,
+    this order: `trim` (source seconds [start, end)) and `cut` (source
+    seconds [start, end) ranges REMOVED from the middle, picture and sound
+    alike; both in the input's own seconds), `crop` (x, y, w, h,
     source pixels), `scale` (w, h; -1 keeps the aspect ratio), `fps`,
     `reverse` (picture and sound), `volume` (audio gain factor) and, last,
     `upscale` (4: enlarge a still or gif x4 with Real-ESRGAN, see
@@ -56,6 +58,7 @@ class DeriveSpec:
     path: Optional[Path] = None
     clip: Optional[str] = None
     trim: Optional[tuple[float, float]] = None
+    cut: Optional[tuple[tuple[float, float], ...]] = None
     crop: Optional[tuple[int, int, int, int]] = None
     scale: Optional[tuple[int, int]] = None
     fps: Optional[float] = None

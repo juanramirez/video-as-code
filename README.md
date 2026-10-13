@@ -152,7 +152,9 @@ bin:
     derive: {clip: jump, reverse: true}
 ```
 
-Operations, applied in this order: `trim: [start, end]`, `crop: {x, y,
+Operations, applied in this order: `trim: [start, end]` and `cut:
+[[start, end], ...]` (ranges removed from the middle, picture and sound
+alike - both in the input's own seconds), `crop: {x, y,
 w, h}` (source pixels), `scale: [w, h]` (`-1` on one side keeps the aspect
 ratio), `fps:`, `reverse: true` (picture and sound) and `volume:` (audio
 gain factor) and, last, `upscale: 4`. A gif stays a gif, a still image

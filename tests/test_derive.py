@@ -96,6 +96,9 @@ def test_derive_from_another_clip_follows_it(tmp_path: Path):
         (["{id: d, derive: {path: a.mp4, fps: 0}}"], "derive.fps"),
         (["{id: d, derive: {path: a.mp4, reverse: maybe}}"], "derive.reverse"),
         (["{id: d, derive: {path: a.mp4, volume: -1}}"], "derive.volume"),
+        (["{id: d, derive: {path: a.mp4, cut: [[2, 1]]}}"], "derive.cut"),
+        (["{id: d, derive: {path: a.mp4, cut: [[3, 4], [1, 2]]}}"], "derive.cut"),
+        (["{id: d, derive: {path: a.mp4, cut: [1, 2]}}"], "derive.cut"),
         (["{id: d, derive: {path: a.mp4}}"], "no operation"),
         (["{id: d, derive: {clip: nope, fps: 30}}"], "nope"),
         (["{id: t, type: title, text: Hi}", "{id: d, derive: {clip: t, fps: 30}}"], "title"),
@@ -198,6 +201,24 @@ def test_derive_reverse_gif(tmp_path: Path, assets_dir: Path):
     assert _first_pixel(assets_dir / "held.gif")[0] > 150  # (and the original starts red)
 
 
+def test_derive_cut_removes_a_range_from_picture_and_sound(tmp_path: Path, assets_dir: Path):
+    total = float(_probe(assets_dir / "av.mp4")["format"]["duration"])
+    project = _project(tmp_path, [f"{{id: short, derive: {{path: {assets_dir / 'av.mp4'}, cut: [[0.5, 1.0]]}}}}"])
+    load_and_resolve(project)
+    info = _probe(_bin(project)["short"].path)
+    assert float(info["format"]["duration"]) == pytest.approx(total - 0.5, abs=0.1)
+    for stream in info["streams"]:  # picture and sound shortened alike, still in step
+        assert float(stream["duration"]) == pytest.approx(total - 0.5, abs=0.1)
+
+
+def test_derive_cut_and_trim_both_count_in_the_inputs_seconds(tmp_path: Path, assets_dir: Path):
+    project = _project(
+        tmp_path, [f"{{id: short, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0.25, 2.0], cut: [[0.5, 1.0]]}}}}"]
+    )
+    load_and_resolve(project)
+    assert float(_probe(_bin(project)["short"].path)["format"]["duration"]) == pytest.approx(1.25, abs=0.1)
+
+
 def test_derive_crop_scale_fps_on_a_silent_video(tmp_path: Path, assets_dir: Path):
     crop = "{x: 10, y: 10, w: 200, h: 100}"
     project = _project(
@@ -254,3 +275,4 @@ def test_derived_clip_is_usable_on_the_timeline(tmp_path: Path, assets_dir: Path
     )
     (placement,) = load_and_resolve(project).tracks[0].placements
     assert placement.out_frame - placement.in_frame + 1 == pytest.approx(50, abs=1)  # 2s at 25fps
+
