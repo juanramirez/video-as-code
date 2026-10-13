@@ -22,7 +22,9 @@ downloaded again.
 
 What can't be fetched doesn't stop the rest: each failure (an album
 name that isn't there, a download that broke, a clip none of whose links
-work) becomes a Problem, and FetchError carries them all at the end.
+work) becomes a Problem, and FetchError carries them all at the end - so
+the CLI can walk the user through fixing them (fetch_resolve.py) and
+fetch again, which then only does what's still missing.
 
 `derive:` clips (derive.py) take part too: an album item one of them is
 derived from is downloaded like any `source:` clip (even if nothing else
@@ -297,12 +299,13 @@ def _download_links(
     """The `url:` half of `fetch`; returns why each clip none of whose
     links could be downloaded failed, by bin id. Editing a clip's `url:`
     so that the link it was downloaded from is no longer listed downloads
-    it again."""
+    it again - unless its file was put there by hand (use_local_file)."""
     entries = sources_lock.read_links(base_dir)
     failures: dict[str, str] = {}
     for clip in clips:
         entry = entries.get(clip.id) or {}
-        if entry.get("url") in clip.url and clip.path.is_file() and _matches(clip.path, entry, verify):
+        known = entry.get("url") in clip.url or entry.get("local")
+        if known and clip.path.is_file() and _matches(clip.path, entry, verify):
             result.up_to_date.append(clip.id)
             continue
         errors: list[str] = []
@@ -334,6 +337,37 @@ def _download_links(
         sources_lock.write(base_dir, links=entries)
         result.downloaded.append(clip.id)
     return failures
+
+
+def use_local_file(yaml_path: Path, problem: Problem, file: Path) -> Path:
+    """Puts a copy of `file` where `fetch` would have downloaded what
+    `problem` is about, and records it in the lock as `local: true` (no
+    album item / link behind it), so later fetches on this machine take it
+    as is - while on any other machine, where it isn't on disk, they try
+    the album or links again (and fail, until it's fixed for real).
+    Returns where it was copied to."""
+    doc = load_yaml(yaml_path)
+    base_dir = doc.source_path.parent
+    sources_root = base_dir / doc.project.sources_dir
+    sources_root.mkdir(parents=True, exist_ok=True)
+    entry = {"size": file.stat().st_size, "sha256": gphotos.sha256_of(file), "local": True}
+    if problem.source is not None:
+        # under its original name: fetch's _local_copy then moves it to
+        # each clip's dated local name if the lock knows the date
+        entries = sources_lock.read(base_dir)
+        old = entries.get(problem.source) or {}
+        dest = sources_root / problem.source
+        entries[problem.source] = {**({"taken": old["taken"]} if old.get("taken") else {}), **entry}
+        shutil.copy2(file, dest)
+        sources_lock.write(base_dir, entries)
+        return dest
+    clip = next(c for c in doc.bin if c.id == problem.link_clip)
+    dest = sources_root / (clip.local_name or f"{clip.id}{file.suffix.lower()}")
+    shutil.copy2(file, dest)
+    entries = sources_lock.read_links(base_dir)
+    entries[clip.id] = {"ext": dest.suffix.lower(), **entry}
+    sources_lock.write(base_dir, links=entries)
+    return dest
 
 
 def _local_copy(sources_root: Path, name: str, entry: dict, dest: Path) -> Optional[Path]:

@@ -119,6 +119,16 @@ as "anyone with the link", so both links yield the same audio. Timings
 cut to the music depend on it: YouTube's other audio streams can start
 tens of milliseconds off.
 
+When something can't be fetched - a name the album doesn't have, a
+download that broke, a clip none of whose links work - `fetch` still
+gets everything else, and then, in a terminal, asks about each problem:
+retry it, give a link to download it from instead, name the album item
+it really is, use a file from this machine (only there: elsewhere it'll
+still be missing) or skip it. A link or a new name is written straight
+into the YAML (a text edit that keeps comments and layout), and `fetch`
+runs again for what's still missing. Outside a terminal it just fails,
+listing everything that went wrong.
+
 Two things to keep in mind: anyone with the share link can see the whole
 album, so keep projects that contain one in a private repository; and
 this reads the album's public web page rather than an official API (the

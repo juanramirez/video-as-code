@@ -6,10 +6,11 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 import yaml
 
-from . import fetch, i18n, probe, reverse, trackpack, xmlgen
+from . import fetch, fetch_resolve, i18n, probe, reverse, trackpack, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve
@@ -26,18 +27,39 @@ def _dump_yaml(data: dict) -> str:
     return yaml.dump(data, Dumper=dumper, sort_keys=False, allow_unicode=True, default_flow_style=False)
 
 
-def _run_fetch(yaml_path: Path, verify: bool = False) -> bool:
+def _run_fetch(yaml_path: Path, verify: bool = False, interactive: Optional[bool] = None) -> bool:
     """Shared by `fetch` and `build`/`render --fetch`; False (after
-    printing why) if anything couldn't be downloaded."""
+    printing why) if anything couldn't be downloaded.
+
+    In a terminal (or with `interactive`), what couldn't be fetched is
+    then put to the user one by one (fetch_resolve.py) and fetch runs
+    again with their fixes, until nothing's left that they haven't
+    skipped. Elsewhere (scripts, CI) it just fails, listing it all."""
+    if interactive is None:
+        interactive = sys.stdin.isatty() and sys.stdout.isatty()
 
     def _progress(text: str) -> None:
         print(text, file=sys.stderr)
 
-    try:
-        result = fetch.fetch(yaml_path, on_progress=_progress, verify=verify)
-    except (KdenliveAsCodeError, OSError) as exc:
-        print(str(exc), file=sys.stderr)
-        return False
+    skipped: set[str] = set()
+    while True:
+        try:
+            result = fetch.fetch(yaml_path, on_progress=_progress, verify=verify)
+            break
+        except fetch.FetchError as exc:
+            print(str(exc), file=sys.stderr)
+            pending = [p for p in exc.problems if fetch_resolve.key(p) not in skipped]
+            # (a failure with no Problem - a derive: that broke - can't be
+            # fixed from here: once only those are left, this gives up)
+            if not interactive or not pending:
+                return False
+            outcome = fetch_resolve.resolve(yaml_path, pending)
+            skipped |= outcome.skipped
+            if not outcome.changed:
+                return False
+        except (KdenliveAsCodeError, OSError) as exc:
+            print(str(exc), file=sys.stderr)
+            return False
     print(
         msg(
             "cli.fetch_done",
