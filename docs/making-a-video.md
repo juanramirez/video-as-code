@@ -23,6 +23,20 @@ that's faster than writing one from scratch. Both forms can be mixed in
 the same project (a `scenes:` block compiles down into `timeline.tracks:`
 before anything else runs).
 
+If the material lives in a Google Photos album, bin clips can name album
+items by their original file name (`source:`) instead of a local
+`path:`, and trims/crops/reversals of them can be described with
+`derive:` instead of kept as hand-made files. Then, before validating:
+
+```bash
+video-as-code fetch project.yaml
+```
+
+Downloads the album items that aren't on disk yet (as `<capture
+date>_<id><ext>`) and generates the `derive:` clips. Only needed when
+something new comes from the album; `build`/`render --fetch` do the same
+first. See `README.md`'s *`video-as-code fetch`* section.
+
 ## 2. Validate
 
 ```bash
