@@ -1134,3 +1134,48 @@ Two quick wins alongside it:
   True multi-item titles (independently positioned/styled text boxes)
   stay out of scope, as planned - still a real schema redesign, still
   in BACKLOG.md.
+
+## v0.11 — in progress
+
+Headline: a video's material no longer has to live on one machine. Bin
+clips name where each file comes from - an item of the project's shared
+Google Photos album (`source:`), a link (`url:`) or another clip turned
+into it (`derive:`) - and `video-as-code fetch` gets everything, so the
+whole video can be built from a fresh checkout anywhere.
+
+- **`url:` clips** — **implemented** (2026-10-13): for what isn't in the
+  album (typically the music), one or more links tried in order until
+  one works (`links.py`). YouTube links give the audio only, through the
+  external `yt-dlp`, preferring YouTube's own m4a stream as served - the
+  opus/webm stream was measured ~36 ms off, enough to put cuts timed to
+  the music off; the m4a one matched a previously downloaded copy at
+  0 ms over a whole song. Google Drive links (shared "anyone with the
+  link") and plain http(s) give the file as is, which is what makes a
+  Drive copy a stable fallback for when `yt-dlp` breaks (it does, each
+  time YouTube changes; `VIDEO_AS_CODE_YT_DLP` points at a newer one).
+  Stored as `<id><ext>`; the lock's new `links:` section records which
+  link each came from, its size and sha256
+  (`tests/test_links.py`, `tests/test_fetch.py`).
+- **`fetch` asks what to do about what it couldn't get** — **implemented**
+  (2026-10-13). First, a failure no longer stops the rest: an album name
+  that isn't there, a download or album listing that broke, a clip none
+  of whose links work - each becomes a `Problem`, and everything else is
+  still fetched. Then, in a terminal, each problem is put to the user:
+  retry, give a link instead, name the album item it really is, use a
+  local file (this machine only, recorded as `local: true` in the lock)
+  or skip. A link or a new name is written straight into the project
+  YAML as a text edit that keeps comments and layout (never parse +
+  re-dump), checked by parsing the result - an edit that doesn't come
+  out as intended leaves the file untouched - and `fetch` runs again for
+  what's still missing. Outside a terminal it fails as before, listing
+  everything (`fetch_resolve.py`, `tests/test_fetch_resolve.py`).
+- **`derive:` upscaling with Real-ESRGAN** — **in progress**: an
+  `upscale: 4` operation, so a low-resolution album item (Google Photos'
+  own animations are ~800x600) is enlarged when generated instead of
+  kept as a hand-upscaled file. `realesrgan-ncnn-vulkan` (realesrgan-x4plus
+  model) runs on any Vulkan device, an integrated GPU included - slowly
+  there (a minute or two per frame), which is fine for stills and short
+  gifs, so those are what it covers; repeated gif frames are upscaled
+  once, and the gif is reassembled with its original per-frame delays.
+  `fetch` offers to download the program (a pinned release, checked
+  against its sha256) when a project needs it and it isn't installed.
