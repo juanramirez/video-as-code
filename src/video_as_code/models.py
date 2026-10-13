@@ -69,9 +69,13 @@ class BinClipSpec:
     folder: Optional[str] = None  # bin folder name (root-level only), None = no folder
     # Instead of `path:`: the item's ORIGINAL file name in the project's
     # shared album (`project.sources.album`), e.g. "PXL_20250830_085416309.mp4".
-    # `video-as-code fetch` downloads it to <sources_dir>/<source>, which is
-    # what `path` then points at; the bin `id` stays the human-readable name.
+    # `video-as-code fetch` downloads it to <sources_dir>/<local name> -
+    # `<capture date>_<id><ext>` by default, see sources_lock.local_name -
+    # which is what `path` then points at.
     source: Optional[str] = None
+    # Only with `source:`: the local file name to store it under, instead
+    # of the default `<capture date>_<id><ext>` (see sources_lock.local_name).
+    local_name: Optional[str] = None
     # Instead of `path:`/`source:`: generate the file with ffmpeg from
     # another one (see DeriveSpec). `path` then points at the generated
     # file, cached under <sources_dir>/.derived/ (see derive.py).

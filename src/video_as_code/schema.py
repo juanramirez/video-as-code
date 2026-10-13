@@ -19,7 +19,7 @@ from typing import Any
 import yaml
 
 from . import derive as derive_mod
-from . import probe, titles
+from . import probe, sources_lock, titles
 from .errors import ValidationErrors
 from .i18n import msg
 from .lumas import AVAILABLE_LUMAS
@@ -76,7 +76,8 @@ def load_yaml(path: str | Path) -> ProjectDoc:
     if not isinstance(bin_data, list):
         errors.append(msg("validation.bin_not_list"))
         bin_data = []
-    bin_clips = [c for c in (_parse_bin_clip(item, source_dir, project, errors) for item in bin_data) if c]
+    lock = sources_lock.read(source_dir)
+    bin_clips = [c for c in (_parse_bin_clip(item, source_dir, project, lock, errors) for item in bin_data) if c]
     bin_clips = _resolve_derive_paths(bin_clips, source_dir / project.sources_dir / derive_mod.DERIVED_DIR, errors)
 
     timeline_data = data.get("timeline", {})
@@ -181,7 +182,9 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
     )
 
 
-def _parse_bin_clip(item: Any, source_dir: Path, project: ProjectSpec, errors: list[str]) -> BinClipSpec | None:
+def _parse_bin_clip(
+    item: Any, source_dir: Path, project: ProjectSpec, lock: dict[str, dict], errors: list[str]
+) -> BinClipSpec | None:
     if not isinstance(item, dict) or "id" not in item:
         errors.append(msg("validation.bin_entry_invalid", item=item))
         return None
@@ -242,14 +245,28 @@ def _parse_bin_clip(item: Any, source_dir: Path, project: ProjectSpec, errors: l
         if Path(source).name != source or source in ("", ".", ".."):
             errors.append(msg("validation.bin_source_not_a_name", id=item.get("id"), source=source))
             return None
+        override = str(item["local_name"]) if item.get("local_name") is not None else None
+        if override is not None:
+            if Path(override).name != override or override in ("", ".", ".."):
+                errors.append(msg("validation.local_name_not_a_name", id=item.get("id"), name=override))
+                return None
+            # the extension decides how the file is probed and played
+            if Path(override).suffix.lower() != Path(source).suffix.lower():
+                errors.append(msg("validation.local_name_extension", id=item.get("id"), name=override, source=source))
+                return None
+        local = sources_lock.local_name(str(item["id"]), source, lock.get(source), override)
         return BinClipSpec(
             id=str(item["id"]),
-            path=source_dir / project.sources_dir / source,
+            path=source_dir / project.sources_dir / local,
             type=clip_type,
             folder=folder,
             source=source,
+            local_name=override,
         )
 
+    if item.get("local_name") is not None:
+        errors.append(msg("validation.local_name_without_source", id=item.get("id")))
+        return None
     if "path" not in item:
         errors.append(msg("validation.bin_entry_invalid", item=item))
         return None

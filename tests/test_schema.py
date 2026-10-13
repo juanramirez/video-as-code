@@ -1719,3 +1719,35 @@ def test_bin_source_invalid(tmp_path: Path, bin_entry: str, sources: str, needle
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(_write_yaml(tmp_path, _source_yaml(bin_entry, sources)))
     assert needle in str(exc.value)
+
+
+def test_bin_source_local_name_comes_from_the_lock(tmp_path: Path, assets_dir: Path):
+    (tmp_path / "sources.lock.yaml").write_text(
+        "items:\n  PXL_1.MP4: {media_id: m, size: 1, sha256: x, taken: '2025-08-30T10:54:33'}\n"
+    )
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "20250830_clip.mp4").write_bytes((assets_dir / "clip.mp4").read_bytes())
+    placement = load_and_resolve(_write_yaml(tmp_path, _source_yaml("{id: clip, source: PXL_1.MP4}"))).tracks[0].placements[0]
+    assert placement.bin_clip.path == tmp_path / "assets" / "20250830_clip.mp4"
+
+
+def test_bin_source_local_name_override(tmp_path: Path, assets_dir: Path):
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "mine.mp4").write_bytes((assets_dir / "clip.mp4").read_bytes())
+    yaml_text = _source_yaml("{id: clip, source: PXL_1.mp4, local_name: mine.mp4}")
+    placement = load_and_resolve(_write_yaml(tmp_path, yaml_text)).tracks[0].placements[0]
+    assert placement.bin_clip.path == tmp_path / "assets" / "mine.mp4"
+
+
+@pytest.mark.parametrize(
+    "bin_entry, needle",
+    [
+        ("{id: clip, source: PXL_1.mp4, local_name: sub/x.mp4}", "sub/x.mp4"),
+        ("{id: clip, source: PXL_1.mp4, local_name: x.mov}", "extension"),
+        ("{id: clip, path: a.mp4, local_name: x.mp4}", "local_name"),
+    ],
+)
+def test_bin_local_name_invalid(tmp_path: Path, bin_entry: str, needle: str):
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, _source_yaml(bin_entry)))
+    assert needle in str(exc.value)

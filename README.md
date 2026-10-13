@@ -87,9 +87,12 @@ bin:
 ```
 
 `video-as-code fetch` downloads what's missing into `dir`, at original
-quality, and records each item in `sources.lock.yaml` next to the YAML
-(album item id, size, sha256 - machine-written, meant to be committed,
-never edited by hand) so later fetches go straight to it. `build`/`render`
+quality, as `<capture date>_<id><ext>` (`20250830_slide.mp4` above; set
+`local_name:` on the clip for a different one), and records each item in
+`sources.lock.yaml` next to the YAML (album item id, size, sha256,
+capture time - machine-written, meant to be committed, never edited by
+hand) so later fetches go straight to it. Renaming a clip's `id` renames
+its local file on the next `fetch` instead of downloading it again. `build`/`render`
 never download on their own: a `source:` clip that isn't on disk yet is a
 validation error pointing at `fetch` (or `--fetch`). Add `.fetch_cache/`
 (file names already looked up in the album) to your `.gitignore`.
