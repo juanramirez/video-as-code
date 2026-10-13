@@ -218,3 +218,24 @@ melt 7.32.0, not assumed.
   ROADMAP.md) if a future extreme-slow-motion case ever needs smoother
   interpolation than `timeremap`'s own `image_mode: nearest`/`blend`
   choice provides.
+
+## Other rendering engines
+
+- **libopenshot as a second engine, combined with melt** (raised
+  2026-10-13): libopenshot (OpenShot's C++ library, with Python bindings)
+  has its own effects and keyframe model, some of which melt lacks. Two
+  shapes, very different in size:
+  - *Per-clip effects through `derive:`* (the likely first step): a
+    `derive:` operation that runs a clip through libopenshot with an
+    effect applied and hands the result to melt as an ordinary clip -
+    the same "generate a file, cache it under `.derived/`" path `upscale:`
+    (Real-ESRGAN) and ffmpeg's operations already take. melt keeps doing
+    the composition (tracks, transitions, fades, speed, titles), so
+    both engines' effects can end up in one video without the two
+    timeline models having to agree on anything.
+  - *A full alternative backend*: translating the whole timeline model
+    to libopenshot's timeline as well as to MLT XML, and keeping both
+    translations in step. Large; only worth it if melt turns out to be
+    the limit for something structural, not for a missing effect.
+  Open question before either: which effects, concretely, melt doesn't
+  have and libopenshot does - that decides whether this is worth doing.
