@@ -26,14 +26,16 @@ before anything else runs).
 If the material lives in a Google Photos album, bin clips can name album
 items by their original file name (`source:`) instead of a local
 `path:`, and trims/crops/reversals of them can be described with
-`derive:` instead of kept as hand-made files. Then, before validating:
+`derive:` instead of kept as hand-made files; what isn't in the album
+(the music, say) can name links to download it from (`url:`). Then,
+before validating:
 
 ```bash
 video-as-code fetch project.yaml
 ```
 
 Downloads the album items that aren't on disk yet (as `<capture
-date>_<id><ext>`) and generates the `derive:` clips. Only needed when
+date>_<id><ext>`) and the `url:` clips, and generates the `derive:` clips. Only needed when
 something new comes from the album; `build`/`render --fetch` do the same
 first. See `README.md`'s *`video-as-code fetch`* section.
 

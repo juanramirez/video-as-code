@@ -73,8 +73,14 @@ class BinClipSpec:
     # `<capture date>_<id><ext>` by default, see sources_lock.local_name -
     # which is what `path` then points at.
     source: Optional[str] = None
-    # Only with `source:`: the local file name to store it under, instead
-    # of the default `<capture date>_<id><ext>` (see sources_lock.local_name).
+    # Instead of `path:`/`source:`: links to download the file from, tried
+    # in order until one works (see links.py: YouTube gives its audio,
+    # Google Drive and plain http(s) the file as is) - for what isn't in
+    # the album, like the music. `fetch` stores it as `<id><ext>` (the
+    # downloaded file's extension, recorded in the lock).
+    url: Optional[list[str]] = None
+    # Only with `source:`/`url:`: the local file name to store it under,
+    # instead of the default (see sources_lock.local_name/link_local_name).
     local_name: Optional[str] = None
     # Instead of `path:`/`source:`: generate the file with ffmpeg from
     # another one (see DeriveSpec). `path` then points at the generated

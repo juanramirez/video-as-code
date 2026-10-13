@@ -15,6 +15,11 @@ so candidates are tried closest-capture-time-first (see
 gphotos.rank_by_name_time) a few at a time, and every name learned is
 cached in `.fetch_cache/names.json` so it's never asked twice.
 
+`url:` clips (links.py) are downloaded too, each from the first of its
+links that works, and recorded in the lock's `links:` section; one that's
+on disk, matches the lock and came from one of its current links isn't
+downloaded again.
+
 `derive:` clips (derive.py) take part too: an album item one of them is
 derived from is downloaded like any `source:` clip (even if nothing else
 uses it), and once downloads are done every derived clip whose input is
@@ -29,10 +34,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import derive, gphotos, sources_lock
+from . import derive, gphotos, links, sources_lock
 from .errors import KdenliveAsCodeError
 from .i18n import msg
-from .models import ProjectDoc
+from .models import BinClipSpec, ProjectDoc
 from .schema import load_yaml
 
 LOCK_NAME = sources_lock.LOCK_NAME
@@ -133,6 +138,9 @@ def fetch(
         missing = _download(doc, base_dir, sources_root, jobs, result, report, verify)
 
     failures = [msg("fetch.not_in_album", names=", ".join(missing))] if missing else []
+    link_clips = [clip for clip in doc.bin if clip.url is not None]
+    if link_clips:
+        failures += _download_links(base_dir, sources_root, link_clips, result, report, verify)
     if any(clip.derive is not None for clip in doc.bin):
         derive_errors: list[str] = []
         result.derived = derive.ensure_all(
@@ -222,6 +230,55 @@ def _download(
 
     sources_lock.write(base_dir, entries)
     return missing
+
+
+def _download_links(
+    base_dir: Path,
+    sources_root: Path,
+    clips: list[BinClipSpec],
+    result: FetchResult,
+    report: Callable[[str], None],
+    verify: bool,
+) -> list[str]:
+    """The `url:` half of `fetch`; returns an error per clip none of whose
+    links could be downloaded. Editing a clip's `url:` so that the link it
+    was downloaded from is no longer listed downloads it again."""
+    entries = sources_lock.read_links(base_dir)
+    failures: list[str] = []
+    for clip in clips:
+        entry = entries.get(clip.id) or {}
+        if entry.get("url") in clip.url and clip.path.is_file() and _matches(clip.path, entry, verify):
+            result.up_to_date.append(clip.id)
+            continue
+        errors: list[str] = []
+        got: Optional[Path] = None
+        for url in clip.url:
+            report(msg("fetch.link_downloading", id=clip.id, url=url))
+            try:
+                got = links.download(url, sources_root, clip.id)
+                break
+            except links.LinkError as exc:
+                errors.append(str(exc))
+                if url != clip.url[-1]:
+                    report(msg("fetch.link_failed", id=clip.id, error=exc))
+        if got is None:
+            failures.append(msg("fetch.links_failed", id=clip.id, errors="\n  ".join(errors)))
+            continue
+        if clip.local_name:
+            if Path(clip.local_name).suffix.lower() != got.suffix:
+                got.unlink()
+                failures.append(msg("fetch.link_local_name_extension", id=clip.id, name=clip.local_name, ext=got.suffix))
+                continue
+            got = got.replace(sources_root / clip.local_name)
+        elif clip.path != got and clip.path.is_file():
+            clip.path.unlink()  # an earlier download with another extension (e.g. from the fallback link)
+        sha256 = gphotos.sha256_of(got)
+        if entry.get("sha256") and entry["sha256"] != sha256:
+            report(msg("fetch.link_changed", id=clip.id))
+        entries[clip.id] = {"url": url, "ext": got.suffix, "size": got.stat().st_size, "sha256": sha256}
+        sources_lock.write(base_dir, links=entries)
+        result.downloaded.append(clip.id)
+    return failures
 
 
 def _local_copy(sources_root: Path, name: str, entry: dict, dest: Path) -> Optional[Path]:

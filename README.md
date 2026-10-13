@@ -30,7 +30,7 @@ video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
 video-as-code validate project.yaml                     # validate without building
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
 video-as-code render project.yaml [-o output.mp4]       # build + render straight to video via melt
-video-as-code fetch project.yaml [--verify]             # download source: clips from the shared album
+video-as-code fetch project.yaml [--verify]             # download source:/url: clips
 ```
 
 `build` and `render` also take `--fetch`, to run `fetch` first.
@@ -96,6 +96,28 @@ its local file on the next `fetch` instead of downloading it again. `build`/`ren
 never download on their own: a `source:` clip that isn't on disk yet is a
 validation error pointing at `fetch` (or `--fetch`). Add `.fetch_cache/`
 (file names already looked up in the album) to your `.gitignore`.
+
+What isn't in the album - typically the music - can come from links
+instead, tried in order until one works:
+
+```yaml
+  - id: music
+    url:
+      - https://www.youtube.com/watch?v=...          # YouTube: the audio only
+      - https://drive.google.com/file/d/.../view     # fallback: the same file on Drive
+```
+
+`fetch` stores it as `<id><ext>` (`music.m4a`; `local_name:` works here
+too) and records which link it came from, with its size and sha256, in
+the lock's `links:` section. From YouTube it takes the m4a audio stream
+as served, through the external `yt-dlp` - which breaks every time
+YouTube changes, so keep it current (a distro's package usually isn't;
+`VIDEO_AS_CODE_YT_DLP` sets the command to run, e.g.
+`"python3 ~/bin/yt-dlp --js-runtimes node"`). That fragility is what the
+fallback is for: upload the very file YouTube gave you to Drive, shared
+as "anyone with the link", so both links yield the same audio. Timings
+cut to the music depend on it: YouTube's other audio streams can start
+tens of milliseconds off.
 
 Two things to keep in mind: anyone with the share link can see the whole
 album, so keep projects that contain one in a private repository; and

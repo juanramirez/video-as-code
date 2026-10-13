@@ -77,7 +77,10 @@ def load_yaml(path: str | Path) -> ProjectDoc:
         errors.append(msg("validation.bin_not_list"))
         bin_data = []
     lock = sources_lock.read(source_dir)
-    bin_clips = [c for c in (_parse_bin_clip(item, source_dir, project, lock, errors) for item in bin_data) if c]
+    links_lock = sources_lock.read_links(source_dir)
+    bin_clips = [
+        c for c in (_parse_bin_clip(item, source_dir, project, lock, links_lock, errors) for item in bin_data) if c
+    ]
     bin_clips = _resolve_derive_paths(bin_clips, source_dir / project.sources_dir / derive_mod.DERIVED_DIR, errors)
 
     timeline_data = data.get("timeline", {})
@@ -183,7 +186,12 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
 
 
 def _parse_bin_clip(
-    item: Any, source_dir: Path, project: ProjectSpec, lock: dict[str, dict], errors: list[str]
+    item: Any,
+    source_dir: Path,
+    project: ProjectSpec,
+    lock: dict[str, dict],
+    links_lock: dict[str, dict],
+    errors: list[str],
 ) -> BinClipSpec | None:
     if not isinstance(item, dict) or "id" not in item:
         errors.append(msg("validation.bin_entry_invalid", item=item))
@@ -231,6 +239,30 @@ def _parse_bin_clip(
         # `path` is filled in by _resolve_derive_paths once every bin clip
         # is parsed (a `clip:` input may be declared further down).
         return BinClipSpec(id=str(item["id"]), path=None, type=clip_type, folder=folder, derive=spec)
+
+    if item.get("url") is not None:
+        # See BinClipSpec.url: downloaded by `fetch` from the first link
+        # that works, stored as `<id><ext>` (sources_lock.link_local_name).
+        urls = item["url"] if isinstance(item["url"], list) else [item["url"]]
+        if "path" in item or item.get("source") is not None:
+            errors.append(msg("validation.bin_url_and_path", id=item.get("id")))
+            return None
+        if not urls or not all(isinstance(u, str) and u.startswith(("http://", "https://")) for u in urls):
+            errors.append(msg("validation.bin_url_invalid", id=item.get("id"), url=item["url"]))
+            return None
+        override = str(item["local_name"]) if item.get("local_name") is not None else None
+        if override is not None and (Path(override).name != override or override in ("", ".", "..")):
+            errors.append(msg("validation.local_name_not_a_name", id=item.get("id"), name=override))
+            return None
+        local = sources_lock.link_local_name(str(item["id"]), links_lock.get(str(item["id"])), override)
+        return BinClipSpec(
+            id=str(item["id"]),
+            path=source_dir / project.sources_dir / local,
+            type=clip_type,
+            folder=folder,
+            url=[str(u) for u in urls],
+            local_name=override,
+        )
 
     if item.get("source") is not None:
         # See BinClipSpec.source: an item of the project's shared album,
@@ -999,7 +1031,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         if clip.derive is not None:
             continue  # ensure_all already made sure it exists, or said why not
         if clip.type != "title" and not clip.path.exists():
-            if clip.source is not None:
+            if clip.source is not None or clip.url is not None:
                 errors.append(msg("validation.bin_source_not_fetched", id=clip.id, path=clip.path))
             else:
                 errors.append(msg("validation.bin_missing_file", id=clip.id, path=clip.path))

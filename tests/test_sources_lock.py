@@ -43,3 +43,19 @@ def test_write_then_read_round_trips_sorted_with_a_header(tmp_path: Path):
 
 def test_read_without_a_lock_is_empty(tmp_path: Path):
     assert sources_lock.read(tmp_path) == {}
+
+
+def test_writing_one_section_keeps_the_other(tmp_path: Path):
+    items = {"a.jpg": {"media_id": "m1", "size": 1, "sha256": "aa", "taken": "2025-08-30T10:00:00"}}
+    links = {"music": {"url": "https://youtu.be/x", "ext": ".m4a", "size": 3, "sha256": "cc"}}
+    sources_lock.write(tmp_path, items)
+    sources_lock.write(tmp_path, links=links)
+    assert sources_lock.read(tmp_path) == items
+    sources_lock.write(tmp_path, {})
+    assert sources_lock.read_links(tmp_path) == links
+
+
+def test_link_local_name():
+    assert sources_lock.link_local_name("music", {"ext": ".m4a"}) == "music.m4a"
+    assert sources_lock.link_local_name("music", None) == "music"  # not downloaded yet
+    assert sources_lock.link_local_name("music", {"ext": ".m4a"}, "song.m4a") == "song.m4a"

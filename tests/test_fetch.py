@@ -279,3 +279,107 @@ def test_fetch_reports_a_missing_derive_input_once(tmp_path: Path, monkeypatch):
     with pytest.raises(fetch.FetchError) as exc:
         fetch.fetch(_derive_project(tmp_path, "VID_404.mp4"))
     assert str(exc.value).count("VID_404.mp4") == 1
+
+
+class FakeLinks:
+    """links.download replaced: each url either yields `content` with
+    `ext` or fails, as configured."""
+
+    def __init__(self, ok: dict[str, tuple[bytes, str]]):
+        self.ok = ok
+        self.tried: list[str] = []
+
+    def install(self, monkeypatch) -> None:
+        from video_as_code import links
+
+        def download(url, dest_dir, stem):
+            self.tried.append(url)
+            if url not in self.ok:
+                raise links.LinkError(f"can't get {url}")
+            content, ext = self.ok[url]
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            path = dest_dir / f"{stem}{ext}"
+            path.write_bytes(content)
+            return path
+
+        monkeypatch.setattr(links, "download", download)
+
+
+_YT = "https://youtu.be/x"
+_DRIVE = "https://drive.google.com/file/d/F/view"
+
+
+def _links_lock(tmp_path: Path) -> dict:
+    return yaml.safe_load((tmp_path / fetch.LOCK_NAME).read_text())["links"]
+
+
+def test_fetch_downloads_a_url_clip_and_locks_it(tmp_path: Path, monkeypatch):
+    FakeLinks({_YT: (b"SONG", ".m4a")}).install(monkeypatch)
+    result = fetch.fetch(_write_project(tmp_path, f"  - {{id: music, url: '{_YT}'}}"))
+    assert result.downloaded == ["music"]
+    assert (tmp_path / "assets" / "music.m4a").read_bytes() == b"SONG"
+    assert _links_lock(tmp_path)["music"] == {
+        "url": _YT, "ext": ".m4a", "size": 4, "sha256": hashlib.sha256(b"SONG").hexdigest()
+    }
+
+
+def test_fetch_falls_back_to_the_next_link(tmp_path: Path, monkeypatch):
+    fake = FakeLinks({_DRIVE: (b"SONG", ".m4a")})
+    fake.install(monkeypatch)
+    messages: list[str] = []
+    fetch.fetch(_write_project(tmp_path, f"  - {{id: music, url: ['{_YT}', '{_DRIVE}']}}"), on_progress=messages.append)
+    assert fake.tried == [_YT, _DRIVE]
+    assert _links_lock(tmp_path)["music"]["url"] == _DRIVE
+    assert any(_YT in m for m in messages)  # the failed attempt is reported
+
+
+def test_fetch_url_clip_again_needs_no_network(tmp_path: Path, monkeypatch):
+    fake = FakeLinks({_YT: (b"SONG", ".m4a")})
+    fake.install(monkeypatch)
+    project = _write_project(tmp_path, f"  - {{id: music, url: ['{_YT}', '{_DRIVE}']}}")
+    fetch.fetch(project)
+    assert fetch.fetch(project).up_to_date == ["music"]
+    assert fake.tried == [_YT]
+
+
+def test_fetch_downloads_again_when_the_url_changes(tmp_path: Path, monkeypatch):
+    FakeLinks({_YT: (b"SONG", ".m4a"), _DRIVE: (b"OTHER", ".mp3")}).install(monkeypatch)
+    fetch.fetch(_write_project(tmp_path, f"  - {{id: music, url: '{_YT}'}}"))
+    fetch.fetch(_write_project(tmp_path, f"  - {{id: music, url: '{_DRIVE}'}}"))
+    assert sorted(p.name for p in (tmp_path / "assets").iterdir()) == ["music.mp3"]  # the .m4a is gone
+
+
+def test_fetch_reports_a_url_clip_none_of_whose_links_work(tmp_path: Path, monkeypatch):
+    FakeLinks({}).install(monkeypatch)
+    with pytest.raises(fetch.FetchError, match="music"):
+        fetch.fetch(_write_project(tmp_path, f"  - {{id: music, url: ['{_YT}', '{_DRIVE}']}}"))
+
+
+def test_fetch_url_clip_honors_local_name(tmp_path: Path, monkeypatch):
+    FakeLinks({_YT: (b"SONG", ".m4a")}).install(monkeypatch)
+    fetch.fetch(_write_project(tmp_path, f"  - {{id: music, url: '{_YT}', local_name: song.m4a}}"))
+    assert (tmp_path / "assets" / "song.m4a").read_bytes() == b"SONG"
+
+
+def test_url_clip_not_fetched_points_at_fetch(tmp_path: Path):
+    from video_as_code.errors import ValidationErrors
+    from video_as_code.schema import load_and_resolve
+
+    with pytest.raises(ValidationErrors, match="fetch"):
+        load_and_resolve(_write_project(tmp_path, f"  - {{id: music, url: '{_YT}'}}"))
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        f"  - {{id: music, url: '{_YT}', path: song.mp3}}",
+        "  - {id: music, url: 'ftp://x/song.mp3'}",
+        "  - {id: music, url: []}",
+    ],
+)
+def test_invalid_url_clips(tmp_path: Path, line: str):
+    from video_as_code.errors import ValidationErrors
+    from video_as_code.schema import load_yaml
+
+    with pytest.raises(ValidationErrors, match="'url'"):
+        load_yaml(_write_project(tmp_path, line))
