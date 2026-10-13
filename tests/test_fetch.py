@@ -8,6 +8,7 @@ import pytest
 import yaml
 
 from video_as_code import cli, fetch, gphotos
+from video_as_code.i18n import msg
 
 
 class FakeAlbum:
@@ -132,6 +133,19 @@ def test_fetch_verify_catches_same_size_corruption(tmp_path: Path, monkeypatch):
     (tmp_path / "assets" / "19700101_c0.jpg").write_bytes(b"ZZZ")
     assert fetch.fetch(project).up_to_date == ["a.jpg"]  # size alone can't tell
     assert fetch.fetch(project, verify=True).downloaded == ["a.jpg"]
+
+
+def test_fetch_reports_an_item_that_changed_in_the_album(tmp_path: Path, monkeypatch):
+    album = FakeAlbum({"a.jpg": b"AAA"})
+    album.install(monkeypatch)
+    project = _project(tmp_path, ["a.jpg"])
+    fetch.fetch(project)
+    (tmp_path / "assets" / "19700101_c0.jpg").unlink()
+    album.files["a.jpg"] = b"BBBB"  # edited in Google Photos since
+    messages: list[str] = []
+    fetch.fetch(project, on_progress=messages.append)
+    assert msg("fetch.changed_in_album", name="a.jpg") in messages
+    assert _lock(tmp_path)["a.jpg"]["sha256"] == hashlib.sha256(b"BBBB").hexdigest()
 
 
 def _write_project(tmp_path: Path, bin_lines: str) -> Path:
