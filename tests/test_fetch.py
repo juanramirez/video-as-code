@@ -383,3 +383,22 @@ def test_invalid_url_clips(tmp_path: Path, line: str):
 
     with pytest.raises(ValidationErrors, match="'url'"):
         load_yaml(_write_project(tmp_path, line))
+
+
+def test_a_broken_download_doesnt_stop_the_others(tmp_path: Path, monkeypatch):
+    album = FakeAlbum({"a.jpg": b"A", "b.jpg": b"B"})
+    album.install(monkeypatch)
+    real_download = gphotos.download
+
+    def flaky(item, dest):
+        if item.base_url.endswith("a.jpg"):
+            raise gphotos.GPhotosError("connection reset")
+        return real_download(item, dest)
+
+    monkeypatch.setattr(gphotos, "download", flaky)
+    project = _write_project(tmp_path, "  - {id: c0, source: a.jpg}\n  - {id: c1, source: b.jpg}")
+    with pytest.raises(fetch.FetchError) as exc:
+        fetch.fetch(project)
+    assert [p.source for p in exc.value.problems] == ["a.jpg"]
+    assert "connection reset" in exc.value.problems[0].reason
+    assert (tmp_path / "assets" / "19700101_c1.jpg").exists()

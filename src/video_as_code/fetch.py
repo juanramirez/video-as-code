@@ -20,6 +20,10 @@ links that works, and recorded in the lock's `links:` section; one that's
 on disk, matches the lock and came from one of its current links isn't
 downloaded again.
 
+What can't be fetched doesn't stop the rest: each failure (an album
+name that isn't there, a download that broke, a clip none of whose links
+work) becomes a Problem, and FetchError carries them all at the end.
+
 `derive:` clips (derive.py) take part too: an album item one of them is
 derived from is downloaded like any `source:` clip (even if nothing else
 uses it), and once downloads are done every derived clip whose input is
@@ -46,8 +50,28 @@ _NAMES_CACHE = Path(".fetch_cache") / "names.json"
 _LOOKUP_BATCH = 8
 
 
+@dataclass
+class Problem:
+    """Something `fetch` couldn't get. Exactly one of `source` (an album
+    item, by original file name) and `link_clip` (the id of a `url:` clip)
+    is set. `clip_ids` are the bin clips that use it - for an album item,
+    `derive:` clips taking it as their input are among them, flagged in
+    `derive_ids` (they can't swap it for a link: derive: only reads the
+    album, a local path or another clip)."""
+
+    reason: str
+    source: Optional[str] = None
+    link_clip: Optional[str] = None
+    clip_ids: list[str] = field(default_factory=list)
+    derive_ids: list[str] = field(default_factory=list)
+
+
 class FetchError(KdenliveAsCodeError):
-    pass
+    def __init__(self, text: str, problems: Optional[list[Problem]] = None):
+        super().__init__(text)
+        # the fixable part of `text`; whatever else it says (a derive: that
+        # failed for some other reason) has no Problem
+        self.problems = problems or []
 
 
 @dataclass
@@ -75,12 +99,21 @@ class _AlbumIndex:
         self._names = _read_names_cache(names_cache_path)  # media id -> original file name
         self._report = report
         self._items: Optional[list[gphotos.AlbumItem]] = None
+        # a listing that failed fails every later job at once, rather than
+        # each one waiting for its own timeout
+        self._listing_error: Optional[gphotos.GPhotosError] = None
 
     @property
     def items(self) -> list[gphotos.AlbumItem]:
+        if self._listing_error is not None:
+            raise self._listing_error
         if self._items is None:
             self._report(msg("fetch.listing_album"))
-            self._items = gphotos.list_album(self._album_url)
+            try:
+                self._items = gphotos.list_album(self._album_url)
+            except gphotos.GPhotosError as exc:
+                self._listing_error = exc
+                raise
             self._report(msg("fetch.album_listed", n=len(self._items)))
         return self._items
 
@@ -116,8 +149,9 @@ def fetch(
 ) -> FetchResult:
     """Downloads every `source:` bin clip of `yaml_path` that isn't on disk
     (or, with `verify`, whose sha256 doesn't match the lock) and updates
-    the lock, then generates the derive: clips. Raises FetchError listing
-    the names the album doesn't have and any derive: clip that failed."""
+    the lock, then generates the derive: clips. Raises FetchError (with its
+    `problems`) listing whatever couldn't be had - after doing everything
+    else."""
     report = on_progress or (lambda text: None)
     doc = load_yaml(yaml_path)
     base_dir = doc.source_path.parent
@@ -133,14 +167,24 @@ def fetch(
             if job not in jobs:
                 jobs.append(job)
     result = FetchResult()
-    missing: list[str] = []
+    problems: list[Problem] = []
+    failed: dict[str, str] = {}
     if jobs:
-        missing = _download(doc, base_dir, sources_root, jobs, result, report, verify)
-
-    failures = [msg("fetch.not_in_album", names=", ".join(missing))] if missing else []
+        failed = _download(doc, base_dir, sources_root, jobs, result, report, verify)
+        for name, reason in failed.items():
+            problems.append(
+                Problem(
+                    reason=reason,
+                    source=name,
+                    clip_ids=[c.id for c in doc.bin if c.source == name or (c.derive and c.derive.source == name)],
+                    derive_ids=[c.id for c in doc.bin if c.derive and c.derive.source == name],
+                )
+            )
     link_clips = [clip for clip in doc.bin if clip.url is not None]
     if link_clips:
-        failures += _download_links(base_dir, sources_root, link_clips, result, report, verify)
+        for clip_id, reason in _download_links(base_dir, sources_root, link_clips, result, report, verify).items():
+            problems.append(Problem(reason=reason, link_clip=clip_id, clip_ids=[clip_id]))
+    failures = [p.reason for p in problems]
     if any(clip.derive is not None for clip in doc.bin):
         derive_errors: list[str] = []
         result.derived = derive.ensure_all(
@@ -150,11 +194,11 @@ def fetch(
         not_downloaded = {
             msg("validation.derive_input_not_fetched", id=clip.id, path=sources_root / clip.derive.source)
             for clip in doc.bin
-            if clip.derive is not None and clip.derive.source in missing
+            if clip.derive is not None and clip.derive.source in failed
         }
         failures += [e for e in derive_errors if e not in not_downloaded]
     if failures:
-        raise FetchError("\n".join(failures))
+        raise FetchError("\n".join(failures), problems)
     return result
 
 
@@ -166,8 +210,9 @@ def _download(
     result: FetchResult,
     report: Callable[[str], None],
     verify: bool,
-) -> list[str]:
-    """The download half of `fetch`; returns the names the album doesn't have.
+) -> dict[str, str]:
+    """The download half of `fetch`; returns why each name that couldn't
+    be had failed (not in the album, or the album/download broke).
 
     A file's local name depends on its capture date (sources_lock.local_name),
     which only the album knows - so it's settled per job once its lock
@@ -188,10 +233,13 @@ def _download(
     for name, clip_id, override in jobs:
         entry = entries.get(name) or {}
         if clip_id is not None and not override and entry.get("media_id") and not entry.get("taken"):
-            item = index.by_media_id(entry["media_id"])
+            try:
+                item = index.by_media_id(entry["media_id"])
+            except gphotos.GPhotosError:
+                break  # no album: the dates stay unknown; the jobs below report it
             if item is not None:
                 entries[name] = {**entry, "taken": sources_lock.taken_local(item.taken_ms, item.tz_offset_ms)}
-    missing: list[str] = []
+    failed: dict[str, str] = {}
     for n, (name, clip_id, override) in enumerate(jobs, start=1):
         entry = entries.get(name) or {}
         dest = dest_of(name, clip_id, override)
@@ -211,17 +259,23 @@ def _download(
             report(msg("fetch.renamed", old=existing.name, new=dest.name))
             result.renamed.append(name)
             continue
-        item = index.by_media_id(entry["media_id"]) if entry.get("media_id") else None
-        if item is None:
-            item = index.find(name)
-        if item is None:
-            missing.append(name)
+        if name in failed:
+            continue  # another clip with the same source already failed it
+        try:
+            item = index.by_media_id(entry["media_id"]) if entry.get("media_id") else None
+            if item is None:
+                item = index.find(name)
+            if item is None:
+                failed[name] = msg("fetch.not_in_album", name=name)
+                continue
+            taken = sources_lock.taken_local(item.taken_ms, item.tz_offset_ms)
+            entries[name] = {**entry, "taken": taken}
+            dest = dest_of(name, clip_id, override)  # now that the date is known
+            report(msg("fetch.downloading", n=n, total=len(jobs), name=dest.name))
+            size, sha256 = gphotos.download(item, dest)
+        except gphotos.GPhotosError as exc:
+            failed[name] = msg("fetch.download_failed", name=name, error=exc)
             continue
-        taken = sources_lock.taken_local(item.taken_ms, item.tz_offset_ms)
-        entries[name] = {**entry, "taken": taken}
-        dest = dest_of(name, clip_id, override)  # now that the date is known
-        report(msg("fetch.downloading", n=n, total=len(jobs), name=dest.name))
-        size, sha256 = gphotos.download(item, dest)
         if entry.get("sha256") and entry["sha256"] != sha256:
             report(msg("fetch.changed_in_album", name=name))
         entries[name] = {"media_id": item.media_id, "size": size, "sha256": sha256, "taken": taken}
@@ -229,7 +283,7 @@ def _download(
         sources_lock.write(base_dir, entries)  # after each one: an interrupted fetch keeps its progress
 
     sources_lock.write(base_dir, entries)
-    return missing
+    return failed
 
 
 def _download_links(
@@ -239,12 +293,13 @@ def _download_links(
     result: FetchResult,
     report: Callable[[str], None],
     verify: bool,
-) -> list[str]:
-    """The `url:` half of `fetch`; returns an error per clip none of whose
-    links could be downloaded. Editing a clip's `url:` so that the link it
-    was downloaded from is no longer listed downloads it again."""
+) -> dict[str, str]:
+    """The `url:` half of `fetch`; returns why each clip none of whose
+    links could be downloaded failed, by bin id. Editing a clip's `url:`
+    so that the link it was downloaded from is no longer listed downloads
+    it again."""
     entries = sources_lock.read_links(base_dir)
-    failures: list[str] = []
+    failures: dict[str, str] = {}
     for clip in clips:
         entry = entries.get(clip.id) or {}
         if entry.get("url") in clip.url and clip.path.is_file() and _matches(clip.path, entry, verify):
@@ -262,12 +317,12 @@ def _download_links(
                 if url != clip.url[-1]:
                     report(msg("fetch.link_failed", id=clip.id, error=exc))
         if got is None:
-            failures.append(msg("fetch.links_failed", id=clip.id, errors="\n  ".join(errors)))
+            failures[clip.id] = msg("fetch.links_failed", id=clip.id, errors="\n  ".join(errors))
             continue
         if clip.local_name:
             if Path(clip.local_name).suffix.lower() != got.suffix:
                 got.unlink()
-                failures.append(msg("fetch.link_local_name_extension", id=clip.id, name=clip.local_name, ext=got.suffix))
+                failures[clip.id] = msg("fetch.link_local_name_extension", id=clip.id, name=clip.local_name, ext=got.suffix)
                 continue
             got = got.replace(sources_root / clip.local_name)
         elif clip.path != got and clip.path.is_file():
