@@ -239,3 +239,39 @@ melt 7.32.0, not assumed.
     the limit for something structural, not for a missing effect.
   Open question before either: which effects, concretely, melt doesn't
   have and libopenshot does - that decides whether this is worth doing.
+- **Other open-source engines and tools, by how they'd fit** (raised
+  2026-10-13, from memory - none tried here yet; each needs checking
+  before it's scoped):
+  - *Full editing engines - alternatives to melt as a backend*:
+    - **GStreamer Editing Services (GES)**, Pitivi's engine: layered
+      timeline, transitions, effects (the same frei0r plugins melt
+      uses), Python bindings. The most serious candidate for a second
+      full backend.
+    - **Plain ffmpeg filtergraphs**: already what `derive:` runs;
+      `xfade` has ~50 transitions and there are hundreds of filters.
+      Light and everywhere, but a complex timeline becomes an unwieldy
+      graph.
+    - **Blender's Video Sequence Editor**: fully scriptable from Python
+      (`bpy`) and renders headless; heavy, but brings node compositing,
+      3D titles and strong keyframe animation.
+  - *Specialised tools - would fit as `derive:` operations, like
+    `upscale:` (Real-ESRGAN)*:
+    - **RIFE**: AI frame interpolation for smooth slow motion - the
+      remedy for the "only a blend-based approximation" slow-motion gap
+      above. Probably the most useful of all for home videos.
+    - **VapourSynth**: Python-scripted video processing - denoising,
+      advanced stabilisation, deinterlacing, interpolation (MVTools).
+    - **Natron**: node-based VFX compositing (keying, rotoscoping,
+      tracking).
+  - *Code-built video, a different style - for titles and motion
+    graphics, generated as clips*:
+    - **Motion Canvas** and **Revideo** (MIT), and **Remotion**
+      (source-available, not fully open source): videos written in
+      TypeScript/React; strong at animated titles and graphics.
+    - **Editly**: declarative JSON videos on top of ffmpeg - close to
+      this project's own idea, worth reading for inspiration more than
+      integrating.
+    - **MoviePy**: Python compositing on ffmpeg; flexible but slow.
+  Likely order if any of it happens: RIFE, then Motion Canvas or Blender
+  for richer titles - all three through `derive:`, no engine change -
+  and GES only if a second full backend is ever wanted.
