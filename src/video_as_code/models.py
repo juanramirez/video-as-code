@@ -45,7 +45,9 @@ class DeriveSpec:
     Exactly one input: `source` (an album item's original file name, like
     BinClipSpec.source - `fetch` downloads it even if no other bin clip
     uses it), `path` (a local file, relative to the YAML) or `clip`
-    (another bin clip's id, which may itself be derived). Then, applied in
+    (another bin clip's id, which may itself be derived). `motion: true`
+    takes, instead of the input itself, the short video a phone's motion
+    photo (Google's `.MP.jpg`) carries inside it. Then, applied in
     this order: `trim` (source seconds [start, end)) and `cut` (source
     seconds [start, end) ranges REMOVED from the middle, picture and sound
     alike; both in the input's own seconds), `crop` (x, y, w, h,
@@ -65,6 +67,7 @@ class DeriveSpec:
     reverse: bool = False
     volume: Optional[float] = None
     upscale: Optional[int] = None
+    motion: bool = False
 
 
 @dataclass

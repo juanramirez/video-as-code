@@ -276,3 +276,43 @@ def test_derived_clip_is_usable_on_the_timeline(tmp_path: Path, assets_dir: Path
     (placement,) = load_and_resolve(project).tracks[0].placements
     assert placement.out_frame - placement.in_frame + 1 == pytest.approx(50, abs=1)  # 2s at 25fps
 
+
+def _motion_photo(path: Path, video: Path, with_xmp: bool) -> Path:
+    """A JPEG with `video` appended, as a phone's motion photo is - with
+    or without the XMP that says where the video starts."""
+    import io
+    import struct
+
+    Image = pytest.importorskip("PIL.Image")
+    buf = io.BytesIO()
+    Image.new("RGB", (32, 24), (10, 20, 30)).save(buf, "JPEG")
+    jpeg = buf.getvalue()
+    tail = video.read_bytes()
+    if with_xmp:
+        xmp = (
+            b'http://ns.adobe.com/xap/1.0/\x00<x:xmpmeta><rdf:li><Container:Item Item:Mime="video/mp4"'
+            b' Item:Semantic="MotionPhoto" Item:Length="' + str(len(tail)).encode() + b'"/></rdf:li></x:xmpmeta>'
+        )
+        jpeg = jpeg[:2] + b"\xff\xe1" + struct.pack(">H", len(xmp) + 2) + xmp + jpeg[2:]
+    path.write_bytes(jpeg + tail)
+    return path
+
+
+@pytest.mark.parametrize("with_xmp", [True, False])
+def test_derive_motion_takes_a_motion_photos_video(tmp_path: Path, assets_dir: Path, with_xmp: bool):
+    photo = _motion_photo(tmp_path / "PXL_1.MP.jpg", assets_dir / "av.mp4", with_xmp)
+    project = _project(tmp_path, [f"{{id: moving, derive: {{path: {photo}, motion: true, fps: 10}}}}"])
+    load_and_resolve(project)
+    clip = _bin(project)["moving"]
+    assert clip.path.suffix == ".mp4"
+    info = _probe(clip.path)
+    assert float(info["format"]["duration"]) == pytest.approx(float(_probe(assets_dir / "av.mp4")["format"]["duration"]), abs=0.15)
+    assert any(s["codec_type"] == "video" and s["r_frame_rate"] == "10/1" for s in info["streams"])
+
+
+def test_derive_motion_on_a_plain_photo_says_so(tmp_path: Path):
+    Image = pytest.importorskip("PIL.Image")
+    photo = tmp_path / "plain.jpg"
+    Image.new("RGB", (32, 24)).save(photo)
+    with pytest.raises(ValidationErrors, match="motion photo"):
+        load_and_resolve(_project(tmp_path, [f"{{id: moving, derive: {{path: {photo}, motion: true}}}}"]))

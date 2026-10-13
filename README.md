@@ -161,6 +161,10 @@ gain factor) and, last, `upscale: 4`. A gif stays a gif, a still image
 becomes a `.png`, audio an `.m4a` and video an `.mp4` (h264 + aac, keeping
 the sound if there is any).
 
+`motion: true` takes the short video a phone's motion photo (Google's
+`.MP.jpg`) carries inside it instead of the photo, so the result is an
+`.mp4`; the other operations then apply to that video.
+
 `upscale: 4` enlarges a still or a gif x4 with Real-ESRGAN, an AI upscaler
 that invents plausible detail rather than stretching pixels - for small
 album items (Google Photos' own animations are ~800x600) that would look

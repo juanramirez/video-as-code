@@ -49,6 +49,8 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         "volume": spec.volume,
     }
     # (newer operations only when set: older specs keep their keys, and files)
+    if spec.motion:
+        canonical["motion"] = True
     if spec.cut:
         canonical["cut"] = [list(r) for r in spec.cut]
     if spec.upscale:
@@ -56,7 +58,9 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
     return hashlib.sha1(json.dumps(canonical, sort_keys=True).encode()).hexdigest()[:10]
 
 
-def output_suffix(input_path: Path) -> str:
+def output_suffix(input_path: Path, spec: Optional[DeriveSpec] = None) -> str:
+    if spec is not None and spec.motion:
+        return ".mp4"  # a motion photo's video, whatever the input's extension
     if input_path.suffix.lower() == ".gif":
         return ".gif"
     kind = probe.guess_type(input_path)
@@ -68,7 +72,7 @@ def output_suffix(input_path: Path) -> str:
 
 
 def output_path(clip_id: str, spec: DeriveSpec, input_path: Path, input_ref: str, derived_dir: Path) -> Path:
-    return derived_dir / f"{clip_id}-{spec_key(spec, input_ref)}{output_suffix(input_path)}"
+    return derived_dir / f"{clip_id}-{spec_key(spec, input_ref)}{output_suffix(input_path, spec)}"
 
 
 # --- generation ---------------------------------------------------------------
@@ -200,6 +204,29 @@ def build_command(spec: DeriveSpec, input_path: Path, output: Path, has_audio: b
     return cmd
 
 
+# A motion photo's embedded video, as its XMP describes it: the Container
+# item with Semantic MotionPhoto (current Pixels) gives its Length from the
+# end of the file; older ones say MicroVideoOffset (also from the end).
+_MOTION_ITEM_RE = re.compile(rb'Item:Mime="video/mp4"\s+Item:Semantic="MotionPhoto"\s+Item:Length="(\d+)"')
+_MICRO_VIDEO_RE = re.compile(rb'MicroVideoOffset="(\d+)"')
+
+
+def extract_motion_video(clip_id: str, photo: Path, output: Path) -> None:
+    """Writes the video inside motion photo `photo` to `output` (an .mp4),
+    found through its XMP or, failing that, the first MP4 header after
+    the JPEG. Raises DeriveError if there's none."""
+    data = photo.read_bytes()
+    head = data[:262144]  # the XMP sits near the start
+    match = _MOTION_ITEM_RE.search(head) or _MICRO_VIDEO_RE.search(head)
+    start = len(data) - int(match.group(1)) if match else None
+    if start is None or data[start + 4:start + 8] != b"ftyp":
+        found = data.find(b"ftyp", data.find(b"\xff\xd9") + 2)
+        start = found - 4 if found >= 4 else None
+    if start is None or data[start + 4:start + 8] != b"ftyp":
+        raise DeriveError(msg("derive.not_a_motion_photo", id=clip_id, path=photo))
+    output.write_bytes(data[start:])
+
+
 def _kept_ranges(spec: DeriveSpec) -> list[tuple[float, Optional[float]]]:
     """The input's [start, end) ranges that survive `trim` and `cut`, in
     order (end None: to the input's end)."""
@@ -268,7 +295,8 @@ def generate(
     output: Path,
     on_progress: Optional[Callable[[str], None]] = None,
 ) -> None:
-    """Generates `output` from `input_path` in up to three passes - `trim` +
+    """Generates `output` from `input_path` in up to four passes - a
+    motion photo's video taken out first (`motion`), then `trim` +
     `cut` into a lossless intermediate when there's a `cut`
     (build_cut_command), then ffmpeg's operations, then `upscale`
     (Real-ESRGAN) - into a temporary file next to `output`, renamed into
@@ -283,6 +311,11 @@ def generate(
     intermediates: list[Path] = []
     source = input_path
     try:
+        if spec.motion:
+            motion_file = output.with_name(f"{output.stem}.motion.mp4")
+            intermediates.append(motion_file)
+            extract_motion_video(clip_id, input_path, motion_file)
+            source, spec = motion_file, dataclasses.replace(spec, motion=False)
         if spec.cut:
             cut_file = output.with_name(f"{output.stem}.cut.mkv")
             intermediates.append(cut_file)
