@@ -166,9 +166,50 @@ def _has_audio(path: Path) -> bool:
     return bool(result.stdout.strip())
 
 
-def build_command(spec: DeriveSpec, input_path: Path, output: Path, has_audio: bool) -> list[str]:
+def video_info(path: Path) -> Optional[tuple[int, int, bool]]:
+    """(width, height, whether its colour matrix is tagged), or None."""
+    if not probe.ffprobe_available():
+        return None
+    result = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,color_space",
+         "-of", "default=noprint_wrappers=1", str(path)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    fields = dict(line.split("=", 1) for line in result.stdout.split() if "=" in line)
+    try:
+        return int(fields["width"]), int(fields["height"]), fields.get("color_space", "unknown") != "unknown"
+    except (KeyError, ValueError):
+        return None
+
+
+def _mlt_matrix(height: int) -> str:
+    """The colour matrix MLT guesses for a video whose matrix ISN'T tagged:
+    by its height (BT.601 below 720 lines, BT.709 from there up)."""
+    return "bt709" if height >= 720 else "bt601"
+
+
+def _output_height(spec: DeriveSpec, size: tuple[int, int]) -> int:
+    w, h = size
+    if spec.crop:
+        w, h = spec.crop[2], spec.crop[3]
+    if spec.scale:
+        sw, sh = spec.scale
+        h = sh if sh != -1 else round(sw * h / w)
+    return h
+
+
+def build_command(
+    spec: DeriveSpec,
+    input_path: Path,
+    output: Path,
+    has_audio: bool,
+    input_info: Optional[tuple[int, int, bool]] = None,
+) -> list[str]:
     """The ffmpeg command line generating `output` (whose extension picks
-    the output kind, see output_suffix) from `input_path`."""
+    the output kind, see output_suffix) from `input_path` - of
+    `input_info` (see video_info), when known, for the colour fix below."""
     cmd = ["ffmpeg", "-y", "-loglevel", "error"]
     if spec.trim:
         # Seeking before -i is fast (it doesn't decode up to the start) and,
@@ -193,6 +234,16 @@ def build_command(spec: DeriveSpec, input_path: Path, output: Path, has_audio: b
         vf.append(f"fps={spec.fps:g}")
     if spec.reverse:
         vf.append("reverse")
+    if kind == ".mp4" and input_info is not None and not input_info[2]:
+        # An UNTAGGED video crossing 720 lines (an HD one scaled down for a
+        # light copy, say) changes MLT's guess of its colour matrix (see
+        # _mlt_matrix): convert, so the result plays as the original did.
+        # (A tagged one - phones tag theirs - keeps its tags through ffmpeg
+        # and plays the same at any size: measured on two MLT versions,
+        # where converting it instead made one of them worse.)
+        before, after = _mlt_matrix(input_info[1]), _mlt_matrix(_output_height(spec, input_info[:2]))
+        if before != after:
+            vf.append(f"scale=in_color_matrix={before}:out_color_matrix={after}")
     af: list[str] = []
     if spec.reverse:
         af.append("areverse")
@@ -315,7 +366,8 @@ def _run(clip_id: str, cmd: list[str], output: Path) -> None:
 
 
 def _run_ffmpeg(clip_id: str, spec: DeriveSpec, input_path: Path, output: Path) -> None:
-    _run(clip_id, build_command(spec, input_path, output, _has_audio(input_path)), output)
+    info = video_info(input_path) if output.suffix.lower() == ".mp4" else None
+    _run(clip_id, build_command(spec, input_path, output, _has_audio(input_path), info), output)
 
 
 def generate(

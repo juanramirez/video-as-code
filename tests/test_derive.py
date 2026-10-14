@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from video_as_code import derive
+from video_as_code.models import DeriveSpec
 from video_as_code.errors import ValidationErrors
 from video_as_code.schema import load_and_resolve, load_yaml
 
@@ -328,3 +329,21 @@ def test_derive_motion_on_a_plain_photo_says_so(tmp_path: Path):
     Image.new("RGB", (32, 24)).save(photo)
     with pytest.raises(ValidationErrors, match="motion photo"):
         load_and_resolve(_project(tmp_path, [f"{{id: moving, derive: {{path: {photo}, motion: true}}}}"]))
+
+
+def test_derive_scaling_an_untagged_hd_video_down_converts_its_colours(tmp_path: Path):
+    # MLT guesses an untagged video's matrix by height (BT.709 from 720 lines up, BT.601 below): a
+    # small copy of an untagged HD video gets its colours converted, so it plays as the original did
+    hd = tmp_path / "hd.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=25:duration=1",
+         "-pix_fmt", "yuv420p", str(hd)],
+        check=True,
+    )
+    assert derive.video_info(hd) == (1280, 720, False)
+    small = derive.build_command(DeriveSpec(path=hd, scale=(480, 270)), hd, tmp_path / "s.mp4", False, (1280, 720, False))
+    assert "scale=in_color_matrix=bt709:out_color_matrix=bt601" in small[small.index("-vf") + 1]
+    same = derive.build_command(DeriveSpec(path=hd, scale=(1920, 1080)), hd, tmp_path / "b.mp4", False, (1280, 720, False))
+    assert "color_matrix" not in same[same.index("-vf") + 1]
+    tagged = derive.build_command(DeriveSpec(path=hd, scale=(480, 270)), hd, tmp_path / "t.mp4", False, (1280, 720, True))
+    assert "color_matrix" not in tagged[tagged.index("-vf") + 1]  # a tagged one keeps its tags instead
