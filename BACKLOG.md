@@ -275,3 +275,33 @@ melt 7.32.0, not assumed.
   Likely order if any of it happens: RIFE, then Motion Canvas or Blender
   for richer titles - all three through `derive:`, no engine change -
   and GES only if a second full backend is ever wanted.
+
+## Disk use of fetched sources
+
+With every source in a shared album (`source:`, `url:`, `derive:`), the
+local sources folder is really a cache of the album - but it isn't
+treated as one yet, and a project with a year of phone videos easily
+takes tens of GB.
+
+- **One local file per album item**: a plain `source:` clip is stored as
+  `<capture date>_<id>.<ext>`, while a `derive:` taking the same item
+  (`derive: {source: ...}`) is looked up - and downloaded - under the
+  item's original name. An item used both ways (a clip plus a louder or
+  trimmed copy of it) is downloaded and kept twice; a preview YAML that
+  turns every video into a light `derive:` copy would download all of
+  them a second time. The derive input should resolve to whatever file
+  `fetch` already has for that item (by name in `sources.lock.yaml`),
+  and only be downloaded under its own name when nothing else uses it.
+- **Prunable derive inputs**: a derive output is cached with its input's
+  identity (`.input.json`), but `validate`/`build` still need the input
+  on disk to call it current. Once generated, the output plus the lock's
+  sha256 for the input is enough to trust it: the input (often a
+  multi-GB original of which a few seconds are used) could then be
+  deleted, and `fetch` would download it again only when the derive spec
+  changes or the cache is cleared. A `fetch --prune` (or a project
+  setting) would drop such inputs right after generating.
+- **A cache-cleaning command**: list, and on request delete, files in
+  the sources folder that no bin clip uses any more (old hand-made cuts
+  and clips dropped from the timeline) and stale outputs in `.derived/`
+  whose spec no longer exists - with a "not in the album" warning for any
+  file that `fetch` couldn't bring back.
