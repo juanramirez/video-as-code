@@ -340,8 +340,9 @@ _EN: dict[str, str] = {
     "cli.help.reconstruct_output": "Output path (default: same name with .yaml extension)",
     "cli.render_missing_melt": (
         "'melt' (the MLT engine kdenlive itself renders with) was not found "
-        "on PATH. Install kdenlive or MLT, or generate the .kdenlive with "
-        "'video-as-code build' and render it yourself."
+        "on PATH (or VIDEO_AS_CODE_MELT doesn't point at it). Install "
+        "kdenlive or MLT, or generate the .kdenlive with 'video-as-code "
+        "build' and render it yourself."
     ),
     "cli.render_failed": "melt failed rendering '{path}': {stderr}",
     "cli.render_done": "Rendered {output} ({frames} frames, {fps:g} fps)",
@@ -683,8 +684,9 @@ _ES: dict[str, str] = {
     "cli.help.reconstruct_output": "Ruta de salida (por defecto: mismo nombre con extensión .yaml)",
     "cli.render_missing_melt": (
         "No se encontró 'melt' (el motor MLT con el que renderiza el propio "
-        "kdenlive) en PATH. Instala kdenlive o MLT, o genera el .kdenlive con "
-        "'video-as-code build' y renderízalo tú mismo."
+        "kdenlive) en PATH (o VIDEO_AS_CODE_MELT no apunta a él). Instala "
+        "kdenlive o MLT, o genera el .kdenlive con 'video-as-code build' y "
+        "renderízalo tú mismo."
     ),
     "cli.render_failed": "melt falló renderizando '{path}': {stderr}",
     "cli.render_done": "Renderizado {output} ({frames} fotogramas, {fps:g} fps)",

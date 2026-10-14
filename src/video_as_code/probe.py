@@ -40,7 +40,13 @@ def ffmpeg_available() -> bool:
 def find_melt() -> str | None:
     """Path to a usable `melt` (the MLT engine kdenlive itself renders
     with), or None if it isn't on PATH. Kdenlive ships it as `melt-7` on
-    some distributions (e.g. its own snap package)."""
+    some distributions (e.g. its own snap package). VIDEO_AS_CODE_MELT
+    points at another one - e.g. an MLT built from source, newer than the
+    distribution's (its plugins found through MLT_REPOSITORY, which melt
+    reads from the environment as usual)."""
+    override = os.environ.get("VIDEO_AS_CODE_MELT")
+    if override:
+        return override if os.path.isfile(override) else None
     return shutil.which("melt") or shutil.which("melt-7")
 
 

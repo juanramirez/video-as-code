@@ -176,3 +176,14 @@ timeline:
         levels[gain] = _max_volume_db(output)
 
     assert levels["1.5"] - levels["1.0"] > 2.5, levels
+
+
+def test_find_melt_honors_video_as_code_melt(tmp_path: Path, monkeypatch):
+    from video_as_code import probe
+
+    melt = tmp_path / "melt"
+    melt.write_text("#!/bin/sh\n")
+    monkeypatch.setenv("VIDEO_AS_CODE_MELT", str(melt))
+    assert probe.find_melt() == str(melt)
+    monkeypatch.setenv("VIDEO_AS_CODE_MELT", str(tmp_path / "missing"))
+    assert probe.find_melt() is None

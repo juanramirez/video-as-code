@@ -39,7 +39,9 @@ video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: 
 PATH — it's not bundled with `video-as-code`. It's equivalent to running
 `video-as-code build` and then `melt output.kdenlive -consumer avformat:output.mp4`
 yourself, minus the intermediate `.kdenlive` file (built to a temp
-directory and discarded).
+directory and discarded). `VIDEO_AS_CODE_MELT` points at another `melt`
+- e.g. an MLT built from source, newer than the distribution's (set
+`MLT_REPOSITORY` for its plugins, as melt itself expects).
 
 `video-as-code import` recognizes everything this generator knows how to produce
 (video/audio tracks, trimmed clips, fade to/from black, volume fades,
