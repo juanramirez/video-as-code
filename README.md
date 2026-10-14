@@ -33,7 +33,9 @@ video-as-code render project.yaml [-o output.mp4] [--split]  # build + render st
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 ```
 
-`build` and `render` also take `--fetch`, to run `fetch` first.
+`build` and `render` also take `--fetch`, to run `fetch` first, and
+`--proxy WxH` (e.g. `--proxy 480x270`) for a preview from light copies -
+see below.
 
 `video-as-code render` needs `melt` (the MLT engine kdenlive itself renders with) on
 PATH — it's not bundled with `video-as-code`. It's equivalent to running
@@ -85,6 +87,34 @@ and a title clip): `video-as-code build examples/simple/project.yaml`. See
 
 See `docs/making-a-video.md` for a short step-by-step howto of this
 whole flow.
+
+### `--proxy`: light previews of only the parts used
+
+Full-resolution phone videos (HEVC, 1080p and up) are what makes `melt`
+run out of memory on a laptop - it builds every clip's producer at load -
+and slow even when it doesn't. With `--proxy 480x270`, `build`/`render`
+read each video from a light H.264 copy of **only the source ranges the
+timeline uses** (ranges less than 5 s apart share a copy, far-apart uses
+of one long video get one copy each, each with a 1 s margin), with the
+placements' source times shifted to match. The copies are cached in
+`.proxies/` next to the YAML (add it to `.gitignore`), so later previews
+skip straight to rendering.
+
+- `crop:` margins are scaled to the copy's size; colours stay as the
+  original's (a colour-tagged video keeps its tags; an untagged HD one
+  has its colour matrix converted, since MLT guesses it by height).
+- Stills, gifs and audio files are used as they are; so is a video
+  played backwards (negative `speed:`).
+- With flat `speed:`, where a clip starts in its copy is rounded to a
+  frame of the warped clip - up to `speed / fps / 2` source seconds off.
+  That's invisible in a preview, and why this is for previews: render
+  the final video without `--proxy`.
+- Every copy starts near the part that's used, so the freeze MLT's
+  timewarp producer has with a large `source_in` plus `speed:` doesn't
+  happen in a proxied render.
+
+The project's own `width`/`height` don't change: for a lighter preview,
+render a copy of the YAML with a smaller canvas too.
 
 ### `video-as-code fetch`: assets from a Google Photos shared album
 

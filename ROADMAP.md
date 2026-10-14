@@ -1213,3 +1213,21 @@ whole video can be built from a fresh checkout anywhere.
   plus every track's frame at the profile size) came out 1.4-2x the peak
   RSS actually measured - on the safe side. `VIDEO_AS_CODE_MELT` points
   at a melt other than PATH's (e.g. one built from source).
+- **`--proxy WxH` on `build`/`render`** — **implemented** (2026-10-14):
+  previews from light H.264 copies of only the source ranges the
+  timeline uses (`proxies.py`), cached in `.proxies/`, with placements'
+  source times shifted (flat `speed:` to the nearest warped frame,
+  `speed_ramp:` by its source offset) and `crop:` margins scaled to the
+  copy. Two things measured on the way, both against real renders:
+  `crop:` margins are in the file's own pixels for video producers too
+  (not only images), and MLT ignores colour tags it doesn't need -
+  guessing an untagged video's matrix by height (BT.709 from 720 lines,
+  BT.601 below) - so derive now converts an untagged HD video's colours
+  when scaling it below 720 lines, while a tagged one (phones tag
+  theirs) keeps its tags and plays the same at any size. On a real
+  project's phone videos a proxied render matched the full one within
+  compression noise, and a cached proxied render took ~8 s where the full
+  one took ~23 s. As a bonus, every copy starts near what's used, so
+  MLT's timewarp freeze with a large `source_in` can't happen in a
+  proxied render. Open: rotated videos (rotation metadata) haven't been
+  tried - none of the real project's had any.

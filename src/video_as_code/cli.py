@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from . import fetch, fetch_resolve, i18n, probe, reverse, splitrender, trackpack, upscale, xmlgen
+from . import fetch, fetch_resolve, i18n, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -126,6 +126,9 @@ def cmd_build(args: argparse.Namespace) -> int:
     except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
+    resolved = _with_proxies(resolved, args.proxy)
+    if resolved is None:
+        return 1
     if args.pack_tracks:
         resolved = trackpack.pack_tracks(resolved)
     try:
@@ -143,6 +146,25 @@ def cmd_build(args: argparse.Namespace) -> int:
         )
     )
     return 0
+
+
+def _with_proxies(resolved, size_text: Optional[str]):
+    """`build`/`render --proxy`: `resolved` reading light copies (see
+    proxies.py), or None (after saying why) if the size is malformed or a
+    copy couldn't be made."""
+    if not size_text:
+        return resolved
+    try:
+        size = proxies.parse_size(size_text)
+    except ValueError:
+        print(msg("cli.proxy_invalid", value=size_text), file=sys.stderr)
+        return None
+    errors: list[str] = []
+    resolved = proxies.apply(resolved, size, errors, on_progress=lambda text: print(text, file=sys.stderr))
+    if errors:
+        print("\n".join(errors), file=sys.stderr)
+        return None
+    return resolved
 
 
 def cmd_validate(args: argparse.Namespace) -> int:
@@ -193,6 +215,9 @@ def cmd_render(args: argparse.Namespace) -> int:
     melt = probe.find_melt()
     if melt is None:
         print(msg("cli.render_missing_melt"), file=sys.stderr)
+        return 1
+    resolved = _with_proxies(resolved, args.proxy)
+    if resolved is None:
         return 1
 
     with contextlib.ExitStack() as stack:
@@ -291,6 +316,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_build.add_argument("-o", "--output", help=msg("cli.help.build_output"))
     p_build.add_argument("--pack-tracks", action="store_true", help=msg("cli.help.pack_tracks"))
     p_build.add_argument("--fetch", action="store_true", help=msg("cli.help.fetch_first"))
+    p_build.add_argument("--proxy", metavar="WxH", help=msg("cli.help.proxy"))
     p_build.set_defaults(func=cmd_build)
 
     p_validate = sub.add_parser("validate", help=msg("cli.help.validate"))
@@ -309,6 +335,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_render.add_argument("--fetch", action="store_true", help=msg("cli.help.fetch_first"))
     p_render.add_argument("--split", action="store_true", help=msg("cli.help.render_split"))
     p_render.add_argument("--max-mem", type=int, metavar="MB", help=msg("cli.help.render_max_mem"))
+    p_render.add_argument("--proxy", metavar="WxH", help=msg("cli.help.proxy"))
     p_render.set_defaults(func=cmd_render)
 
     p_fetch = sub.add_parser("fetch", help=msg("cli.help.fetch"))

@@ -2732,3 +2732,64 @@ timeline:
         f"line1={brightest_val:.1f} gap={mid_val:.1f} line2={second_val:.1f} "
         f"(y={brightest_y}/{mid_y}/{second_y})"
     )
+
+
+def test_proxied_render_matches_the_full_one(tmp_path: Path, melt):
+    """`--proxy` (proxies.py): a render from light copies of only the used
+    ranges looks like the full one - same moments (source times shifted
+    by where each copy starts, with and without `speed:`), same framing
+    (`crop:` margins scaled to the copy) and same colours (a colour-tagged
+    original, like a phone's, keeps its tags in the copy). Measured
+    against how much the full render itself changes in 0.2 s: a mismatch
+    of any of those is far bigger than that."""
+    import numpy as np
+
+    from video_as_code import proxies
+
+    hd = tmp_path / "hd.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=25:duration=12",
+         "-vf", "scale=out_color_matrix=bt709", "-pix_fmt", "yuv420p",
+         "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", str(hd)],
+        check=True,
+    )
+    yaml_path = tmp_path / "p.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 180}}
+bin:
+  - {{id: v, path: {hd}}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: v, start: 0, source_in: 1, source_out: 3}}
+        - {{clip: v, start: 2, source_in: 8, source_out: 11, speed: 1.5, crop: {{top: 100, bottom: 100}}}}
+""",
+        encoding="utf-8",
+    )
+
+    def render(name: str, project) -> Path:
+        kdenlive, out = tmp_path / f"{name}.kdenlive", tmp_path / f"{name}.mp4"
+        xmlgen.write(project, kdenlive)
+        result = _run_melt(melt, [str(kdenlive), "-consumer", f"avformat:{out}"], timeout=120)
+        assert out.exists(), result.stderr
+        return out
+
+    def frame(path: Path, t: float) -> np.ndarray:
+        raw = subprocess.run(
+            ["ffmpeg", "-loglevel", "error", "-ss", f"{t}", "-i", str(path), "-frames:v", "1", "-vf", "scale=64:36",
+             "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, check=True,
+        ).stdout
+        return np.frombuffer(raw, np.uint8).astype(float)
+
+    resolved = load_and_resolve(yaml_path)
+    full = render("full", resolved)
+    errors: list[str] = []
+    proxied = render("proxied", proxies.apply(resolved, (480, 270), errors))
+    assert errors == []
+    for t in (0.5, 1.5, 2.6, 3.5):
+        mismatch = np.abs(frame(full, t) - frame(proxied, t)).mean()
+        own_change = np.abs(frame(full, t) - frame(full, t + 0.2)).mean()
+        assert mismatch < own_change, (t, mismatch, own_change)
