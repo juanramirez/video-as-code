@@ -153,21 +153,22 @@ def fetch(
     (or, with `verify`, whose sha256 doesn't match the lock) and updates
     the lock, then generates the derive: clips. Raises FetchError (with its
     `problems`) listing whatever couldn't be had - after doing everything
-    else."""
+    else.
+
+    An album item used only as a derive: input is downloaded under its own
+    name - unless a plain `source:` clip uses it too, whose file it then
+    shares (derive.album_input_path)."""
     report = on_progress or (lambda text: None)
     doc = load_yaml(yaml_path)
     base_dir = doc.source_path.parent
     sources_root = base_dir / doc.project.sources_dir
     # (original name, bin id, local_name override) per file to have on
-    # disk; a derive: input has no bin id and keeps its original name
+    # disk; a derive-only input has no bin id and keeps its original name
+    # (one a plain clip also uses is that clip's job already: same file)
     jobs: list[tuple[str, Optional[str], Optional[str]]] = [
         (clip.source, clip.id, clip.local_name) for clip in doc.bin if clip.source is not None
     ]
-    for clip in doc.bin:
-        if clip.derive is not None and clip.derive.source is not None:
-            job = (clip.derive.source, None, None)
-            if job not in jobs:
-                jobs.append(job)
+    jobs += [(name, None, None) for name in _derive_only_sources(doc)]
     result = FetchResult()
     problems: list[Problem] = []
     failed: dict[str, str] = {}
@@ -188,6 +189,9 @@ def fetch(
             problems.append(Problem(reason=reason, link_clip=clip_id, clip_ids=[clip_id]))
     failures = [p.reason for p in problems]
     if any(clip.derive is not None for clip in doc.bin):
+        # read again: a plain clip's local name (which a derive: input of the
+        # same item shares) can only be known once its capture date is locked
+        doc = load_yaml(yaml_path)
         derive_errors: list[str] = []
         result.derived = derive.ensure_all(
             doc.bin,
@@ -198,7 +202,11 @@ def fetch(
         )
         # a derive: clip whose album input is missing was already reported above
         not_downloaded = {
-            msg("validation.derive_input_not_fetched", id=clip.id, path=sources_root / clip.derive.source)
+            msg(
+                "validation.derive_input_not_fetched",
+                id=clip.id,
+                path=derive.album_input_path(clip.derive.source, doc.bin, sources_root),
+            )
             for clip in doc.bin
             if clip.derive is not None and clip.derive.source in failed
         }
@@ -206,6 +214,17 @@ def fetch(
     if failures:
         raise FetchError("\n".join(failures), problems)
     return result
+
+
+def _derive_only_sources(doc: ProjectDoc) -> list[str]:
+    """Album items used only as derive: inputs (in bin order, no repeats)."""
+    plain = {clip.source for clip in doc.bin if clip.source is not None}
+    names: list[str] = []
+    for clip in doc.bin:
+        name = clip.derive.source if clip.derive is not None else None
+        if name is not None and name not in plain and name not in names:
+            names.append(name)
+    return names
 
 
 def _download(

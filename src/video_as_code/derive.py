@@ -120,6 +120,17 @@ def is_current(output: Path, input_path: Path) -> bool:
     return False
 
 
+def album_input_path(source: str, bin_clips: list[BinClipSpec], sources_root: Path) -> Path:
+    """Where a `derive: {source: ...}` input lives. If a plain `source:` clip
+    uses the same album item, its file (stored as <capture date>_<id>, see
+    sources_lock.local_name) - so an item used both ways is ONE file on
+    disk, downloaded once. Otherwise the item under its own original name."""
+    for clip in bin_clips:
+        if clip.derive is None and clip.source == source and clip.path is not None:
+            return clip.path
+    return sources_root / source
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as fh:
@@ -385,7 +396,7 @@ def ensure_all(
                 return False
             input_path = ref.path
         elif spec.source is not None:
-            input_path = sources_root / spec.source
+            input_path = album_input_path(spec.source, bin_clips, sources_root)
         else:
             input_path = spec.path
         if not input_path.exists():

@@ -425,7 +425,7 @@ def derive_input_path(clip: BinClipSpec, sources_root: Path, by_id: dict[str, Bi
     unresolved `clip:` reference)."""
     spec = clip.derive
     if spec.source is not None:
-        return sources_root / spec.source
+        return derive_mod.album_input_path(spec.source, list(by_id.values()), sources_root)
     if spec.path is not None:
         return spec.path
     ref = by_id.get(spec.clip)
@@ -463,7 +463,9 @@ def _resolve_derive_paths(bin_clips: list[BinClipSpec], derived_dir: Path, error
                     return None
                 input_path, input_ref = ref.path, f"clip:{ref.path.name}"
             elif spec.source is not None:
-                input_path, input_ref = sources_root / spec.source, f"source:{spec.source}"
+                # (input_ref names the album item, not where it's stored: same output either way)
+                input_path = derive_mod.album_input_path(spec.source, bin_clips, sources_root)
+                input_ref = f"source:{spec.source}"
             else:
                 input_path, input_ref = spec.path, f"path:{spec.path.name}"
             resolved = replace(clip, path=derive_mod.output_path(clip_id, spec, input_path, input_ref, derived_dir))

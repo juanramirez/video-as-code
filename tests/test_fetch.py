@@ -274,6 +274,37 @@ def test_fetch_downloads_derive_inputs_and_generates_them(tmp_path: Path, assets
     assert (again.downloaded, again.derived) == ([], [])
 
 
+def _derive_project_with(tmp_path: Path, bin_lines: str) -> Path:
+    path = tmp_path / "project.yaml"
+    path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240, sources: {{album: 'https://photos.app.goo.gl/x'}}}}
+bin:
+{bin_lines}
+timeline:
+  tracks: []
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_derive_input_shares_the_plain_clips_file(tmp_path: Path, assets_dir: Path, monkeypatch):
+    # VID_1.mp4 is a clip of its own AND a derive: input: one download, one file
+    album = FakeAlbum({"VID_1.mp4": (assets_dir / "av.mp4").read_bytes()})
+    album.install(monkeypatch)
+    project = _derive_project_with(
+        tmp_path, "  - {id: whole, source: VID_1.mp4}\n  - {id: cut, derive: {source: VID_1.mp4, trim: [0, 1]}}"
+    )
+    result = fetch.fetch(project)
+    assert album.downloads == 1 and result.derived == ["cut"]
+    assert not (tmp_path / "assets" / "VID_1.mp4").exists()
+    assert (tmp_path / "assets" / "19700101_whole.mp4").exists()
+    from video_as_code.schema import load_and_resolve
+
+    load_and_resolve(project)  # validates: the derive input is found under the clip's name
+
+
 def test_fetch_reports_a_missing_derive_input_once(tmp_path: Path, monkeypatch):
     FakeAlbum({}).install(monkeypatch)
     with pytest.raises(fetch.FetchError) as exc:
