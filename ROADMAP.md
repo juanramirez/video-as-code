@@ -1183,3 +1183,17 @@ whole video can be built from a fresh checkout anywhere.
   once, and the gif is reassembled with its original per-frame delays.
   `fetch` offers to download the program (a pinned release, checked
   against its sha256) when a project needs it and it isn't installed.
+- **One local file per album item** — **implemented** (2026-10-14): a
+  `derive: {source: X}` input resolves to the file of a plain `source:`
+  clip of the same item when there is one (`derive.album_input_path`),
+  instead of being downloaded again under X's own name. Found on a real
+  project where a clip and its louder copy kept the same original twice,
+  and where a preview turning every video into a light derive: copy
+  would have downloaded ~90 videos a second time.
+- **`fetch --prune`** — **implemented** (2026-10-14): deletes album items
+  used only as derive: inputs once everything made from them is
+  generated. The output's recorded input sha256 matching the lock's is
+  enough for validate/build/render to keep using it
+  (`derive.is_current_by_record`), and `fetch` doesn't download the
+  input again unless a derive: made from it changes. Roughly 2.5 GB on
+  that same project, mostly long originals of which seconds are used.
