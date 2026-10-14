@@ -29,7 +29,7 @@ anything else.
 video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
 video-as-code validate project.yaml                     # validate without building
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
-video-as-code render project.yaml [-o output.mp4]       # build + render straight to video via melt
+video-as-code render project.yaml [-o output.mp4] [--split]  # build + render straight to video via melt
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 ```
 
@@ -42,6 +42,21 @@ yourself, minus the intermediate `.kdenlive` file (built to a temp
 directory and discarded). `VIDEO_AS_CODE_MELT` points at another `melt`
 - e.g. an MLT built from source, newer than the distribution's (set
 `MLT_REPOSITORY` for its plugins, as melt itself expects).
+
+`render --split` is for machines without the RAM to render the whole
+project in one melt run (melt loads every clip up front and keeps every
+decoded photo until it exits). The picture is rendered in segments, each
+from a copy of the project trimmed to the clips it touches, and joined
+without re-encoding; the sound is rendered in one pass over the whole
+length (in segments, a time-stretched song would click at every seam) and
+muxed in. Segments are as long as an estimate of their memory allows -
+long where few clips play, short where crossfades pile up - within
+`--max-mem` MB each (default: 60% of the memory available when it
+starts), and each melt runs in a memory-capped `systemd-run --user
+--scope` when available, so a wrong estimate kills that melt, not the
+session. Every segment's render is cached in `.render_cache/` next to the
+YAML, keyed by its trimmed project and the files it reads: after an edit
+only the segments it touches are rendered again.
 
 `video-as-code import` recognizes everything this generator knows how to produce
 (video/audio tracks, trimmed clips, fade to/from black, volume fades,

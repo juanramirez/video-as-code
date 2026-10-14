@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from . import fetch, fetch_resolve, i18n, probe, reverse, trackpack, upscale, xmlgen
+from . import fetch, fetch_resolve, i18n, probe, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -207,6 +207,24 @@ def cmd_render(args: argparse.Namespace) -> int:
         except OSError as exc:
             print(msg("cli.write_failed", path=kdenlive_path, exc=exc), file=sys.stderr)
             return 1
+        if args.split:
+            try:
+                splitrender.render(
+                    kdenlive_path,
+                    output,
+                    resolved.total_frames,
+                    melt,
+                    yaml_path.parent / splitrender.CACHE_DIR,
+                    budget_mb=args.max_mem,
+                    report=lambda text: print(text, file=sys.stderr),
+                )
+            except (KdenliveAsCodeError, OSError) as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
+            print(msg("cli.render_done", output=output, frames=resolved.total_frames, fps=resolved.fps.fps))
+            if args.keep_kdenlive:
+                print(msg("cli.render_kept_kdenlive", path=kdenlive_path))
+            return 0
         result = subprocess.run(
             [melt, str(kdenlive_path), "-consumer", f"avformat:{output}"],
             capture_output=True,
@@ -289,6 +307,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_render.add_argument("-o", "--output", help=msg("cli.help.render_output"))
     p_render.add_argument("-k", "--keep-kdenlive", action="store_true", help=msg("cli.help.keep_kdenlive"))
     p_render.add_argument("--fetch", action="store_true", help=msg("cli.help.fetch_first"))
+    p_render.add_argument("--split", action="store_true", help=msg("cli.help.render_split"))
+    p_render.add_argument("--max-mem", type=int, metavar="MB", help=msg("cli.help.render_max_mem"))
     p_render.set_defaults(func=cmd_render)
 
     p_fetch = sub.add_parser("fetch", help=msg("cli.help.fetch"))
