@@ -305,6 +305,38 @@ def test_derive_input_shares_the_plain_clips_file(tmp_path: Path, assets_dir: Pa
     load_and_resolve(project)  # validates: the derive input is found under the clip's name
 
 
+def test_fetch_prune_deletes_derive_only_inputs_and_doesnt_get_them_back(tmp_path: Path, assets_dir: Path, monkeypatch):
+    album = FakeAlbum({"VID_1.mp4": (assets_dir / "av.mp4").read_bytes()})
+    album.install(monkeypatch)
+    project = _derive_project(tmp_path, "VID_1.mp4")
+    result = fetch.fetch(project, prune=True)
+    assert result.pruned == ["VID_1.mp4"] and result.pruned_bytes > 0
+    assert not (tmp_path / "assets" / "VID_1.mp4").exists()
+    again = fetch.fetch(project)  # the output is still current: nothing to download or generate
+    assert (album.downloads, again.downloaded, again.derived) == (1, [], [])
+    from video_as_code.schema import load_and_resolve
+
+    load_and_resolve(project)  # validate/build accept the output without its input
+
+
+def test_fetch_downloads_a_pruned_input_again_when_its_derive_changes(tmp_path: Path, assets_dir: Path, monkeypatch):
+    album = FakeAlbum({"VID_1.mp4": (assets_dir / "av.mp4").read_bytes()})
+    album.install(monkeypatch)
+    fetch.fetch(_derive_project(tmp_path, "VID_1.mp4"), prune=True)
+    changed = _derive_project_with(tmp_path, "  - {id: cut, derive: {source: VID_1.mp4, trim: [0, 1.5]}}")
+    result = fetch.fetch(changed)
+    assert result.downloaded == ["VID_1.mp4"] and result.derived == ["cut"]
+
+
+def test_fetch_prune_keeps_inputs_a_plain_clip_uses(tmp_path: Path, assets_dir: Path, monkeypatch):
+    FakeAlbum({"VID_1.mp4": (assets_dir / "av.mp4").read_bytes()}).install(monkeypatch)
+    project = _derive_project_with(
+        tmp_path, "  - {id: whole, source: VID_1.mp4}\n  - {id: cut, derive: {source: VID_1.mp4, trim: [0, 1]}}"
+    )
+    assert fetch.fetch(project, prune=True).pruned == []
+    assert (tmp_path / "assets" / "19700101_whole.mp4").exists()
+
+
 def test_fetch_reports_a_missing_derive_input_once(tmp_path: Path, monkeypatch):
     FakeAlbum({}).install(monkeypatch)
     with pytest.raises(fetch.FetchError) as exc:

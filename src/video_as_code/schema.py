@@ -1049,7 +1049,13 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
     # --- assets: existence on disk -----------------------------------------
     # Derived clips (see derive.py) are generated here if missing or stale
     # and their input is on disk; a missing input is reported by ensure_all.
-    derive_mod.ensure_all(doc.bin, doc.source_path.parent / doc.project.sources_dir, errors)
+    lock = sources_lock.read(doc.source_path.parent)
+    derive_mod.ensure_all(
+        doc.bin,
+        doc.source_path.parent / doc.project.sources_dir,
+        errors,
+        locked_sha256={name: entry["sha256"] for name, entry in lock.items() if entry.get("sha256")},
+    )
     bin_by_id: dict[str, BinClipSpec] = {}
     for clip in doc.bin:
         if clip.id in bin_by_id:

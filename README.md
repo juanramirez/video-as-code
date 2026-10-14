@@ -30,7 +30,7 @@ video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
 video-as-code validate project.yaml                     # validate without building
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
 video-as-code render project.yaml [-o output.mp4]       # build + render straight to video via melt
-video-as-code fetch project.yaml [--verify]             # download source:/url: clips
+video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 ```
 
 `build` and `render` also take `--fetch`, to run `fetch` first.
@@ -191,6 +191,13 @@ album item used only as a `derive:` input is still downloaded, under its
 own name; one that a plain `source:` clip also uses is the same file,
 downloaded once. The cache can always be deleted and rebuilt, so
 `<dir>/.derived/` belongs in your `.gitignore` too.
+
+`fetch --prune` then deletes the album items used only as `derive:`
+inputs once everything made from them is generated - often big originals
+of which a few seconds are used. The output's record of its input's
+sha256, matching the lock's, is enough for `build`/`render`/`validate` to
+keep using it, and `fetch` downloads the input again only if a `derive:`
+made from it changes (or its output is deleted).
 
 ### `video-as-code reconstruct`: recovering a YAML from a rendered video
 

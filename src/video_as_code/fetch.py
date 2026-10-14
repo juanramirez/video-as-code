@@ -82,6 +82,8 @@ class FetchResult:
     up_to_date: list[str] = field(default_factory=list)
     derived: list[str] = field(default_factory=list)  # bin ids of the derive: clips (re)generated
     renamed: list[str] = field(default_factory=list)  # already on disk under another local name: renamed
+    pruned: list[str] = field(default_factory=list)  # derive-only album inputs deleted after generating (prune)
+    pruned_bytes: int = 0
 
 
 def _read_names_cache(path: Path) -> dict[str, str]:
@@ -148,6 +150,7 @@ def fetch(
     yaml_path: Path,
     on_progress: Optional[Callable[[str], None]] = None,
     verify: bool = False,
+    prune: bool = False,
 ) -> FetchResult:
     """Downloads every `source:` bin clip of `yaml_path` that isn't on disk
     (or, with `verify`, whose sha256 doesn't match the lock) and updates
@@ -157,7 +160,11 @@ def fetch(
 
     An album item used only as a derive: input is downloaded under its own
     name - unless a plain `source:` clip uses it too, whose file it then
-    shares (derive.album_input_path)."""
+    shares (derive.album_input_path) - and not at all if it was pruned and
+    every output made from it is still current (derive.is_current_by_record).
+    With `prune`, such derive-only inputs are deleted once everything made
+    from them is generated: often multi-GB originals of which a few seconds
+    are used, which the album can always give back."""
     report = on_progress or (lambda text: None)
     doc = load_yaml(yaml_path)
     base_dir = doc.source_path.parent
@@ -168,7 +175,14 @@ def fetch(
     jobs: list[tuple[str, Optional[str], Optional[str]]] = [
         (clip.source, clip.id, clip.local_name) for clip in doc.bin if clip.source is not None
     ]
-    jobs += [(name, None, None) for name in _derive_only_sources(doc)]
+    locked = {name: entry["sha256"] for name, entry in sources_lock.read(base_dir).items() if entry.get("sha256")}
+    for name in _derive_only_sources(doc):
+        users = [c for c in doc.bin if c.derive is not None and c.derive.source == name]
+        if not (sources_root / name).exists() and all(
+            derive.is_current_by_record(c.path, locked.get(name)) for c in users
+        ):
+            continue  # pruned, and nothing made from it needs it again
+        jobs.append((name, None, None))
     result = FetchResult()
     problems: list[Problem] = []
     failed: dict[str, str] = {}
@@ -193,12 +207,14 @@ def fetch(
         # same item shares) can only be known once its capture date is locked
         doc = load_yaml(yaml_path)
         derive_errors: list[str] = []
+        locked = {name: entry["sha256"] for name, entry in sources_lock.read(base_dir).items() if entry.get("sha256")}
         result.derived = derive.ensure_all(
             doc.bin,
             sources_root,
             derive_errors,
             on_generate=lambda clip_id: report(msg("fetch.deriving", id=clip_id)),
             on_progress=report,
+            locked_sha256=locked,
         )
         # a derive: clip whose album input is missing was already reported above
         not_downloaded = {
@@ -211,6 +227,8 @@ def fetch(
             if clip.derive is not None and clip.derive.source in failed
         }
         failures += [e for e in derive_errors if e not in not_downloaded]
+        if prune and not derive_errors:
+            _prune(doc, sources_root, result)
     if failures:
         raise FetchError("\n".join(failures), problems)
     return result
@@ -225,6 +243,17 @@ def _derive_only_sources(doc: ProjectDoc) -> list[str]:
         if name is not None and name not in plain and name not in names:
             names.append(name)
     return names
+
+
+def _prune(doc: ProjectDoc, sources_root: Path, result: FetchResult) -> None:
+    """Deletes each derive-only album input whose every output is current."""
+    for name in _derive_only_sources(doc):
+        path = sources_root / name
+        users = [c for c in doc.bin if c.derive is not None and c.derive.source == name]
+        if path.exists() and all(derive.is_current(c.path, path) for c in users):
+            result.pruned_bytes += path.stat().st_size
+            path.unlink()
+            result.pruned.append(name)
 
 
 def _download(

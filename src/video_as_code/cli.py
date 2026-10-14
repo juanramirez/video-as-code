@@ -27,7 +27,9 @@ def _dump_yaml(data: dict) -> str:
     return yaml.dump(data, Dumper=dumper, sort_keys=False, allow_unicode=True, default_flow_style=False)
 
 
-def _run_fetch(yaml_path: Path, verify: bool = False, interactive: Optional[bool] = None) -> bool:
+def _run_fetch(
+    yaml_path: Path, verify: bool = False, interactive: Optional[bool] = None, prune: bool = False
+) -> bool:
     """Shared by `fetch` and `build`/`render --fetch`; False (after
     printing why) if anything couldn't be downloaded.
 
@@ -47,7 +49,7 @@ def _run_fetch(yaml_path: Path, verify: bool = False, interactive: Optional[bool
     skipped: set[str] = set()
     while True:
         try:
-            result = fetch.fetch(yaml_path, on_progress=_progress, verify=verify)
+            result = fetch.fetch(yaml_path, on_progress=_progress, verify=verify, prune=prune)
             break
         except fetch.FetchError as exc:
             print(str(exc), file=sys.stderr)
@@ -71,6 +73,8 @@ def _run_fetch(yaml_path: Path, verify: bool = False, interactive: Optional[bool
             derived=len(result.derived),
         )
     )
+    if result.pruned:
+        print(msg("cli.fetch_pruned", n=len(result.pruned), mb=round(result.pruned_bytes / 1e6)))
     return True
 
 
@@ -109,7 +113,7 @@ def cmd_install_upscaler(args: argparse.Namespace) -> int:
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
-    return 0 if _run_fetch(Path(args.project), verify=args.verify) else 1
+    return 0 if _run_fetch(Path(args.project), verify=args.verify, prune=args.prune) else 1
 
 
 def cmd_build(args: argparse.Namespace) -> int:
@@ -290,6 +294,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_fetch = sub.add_parser("fetch", help=msg("cli.help.fetch"))
     p_fetch.add_argument("project", help=msg("cli.help.project_path"))
     p_fetch.add_argument("--verify", action="store_true", help=msg("cli.help.fetch_verify"))
+    p_fetch.add_argument("--prune", action="store_true", help=msg("cli.help.fetch_prune"))
     p_fetch.set_defaults(func=cmd_fetch)
 
     p_upscaler = sub.add_parser("install-upscaler", help=msg("cli.help.install_upscaler"))

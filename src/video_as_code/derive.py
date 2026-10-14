@@ -120,6 +120,21 @@ def is_current(output: Path, input_path: Path) -> bool:
     return False
 
 
+def is_current_by_record(output: Path, locked_sha256: Optional[str]) -> bool:
+    """Whether `output` is known current although its input ISN'T on disk:
+    an album input that `fetch --prune` deleted after generating. The
+    sha256 recorded at generation time matching the lock's for that album
+    item is enough - the album still has the very same file, so nothing
+    the output was made from has changed (the spec is in its name)."""
+    sidecar = _sidecar(output)
+    if not locked_sha256 or not output.exists() or not sidecar.exists():
+        return False
+    try:
+        return json.loads(sidecar.read_text(encoding="utf-8")).get("sha256") == locked_sha256
+    except ValueError:
+        return False
+
+
 def album_input_path(source: str, bin_clips: list[BinClipSpec], sources_root: Path) -> Path:
     """Where a `derive: {source: ...}` input lives. If a plain `source:` clip
     uses the same album item, its file (stored as <capture date>_<id>, see
@@ -373,11 +388,14 @@ def ensure_all(
     errors: list[str],
     on_generate: Optional[Callable[[str], None]] = None,
     on_progress: Optional[Callable[[str], None]] = None,
+    locked_sha256: Optional[dict[str, str]] = None,
 ) -> list[str]:
     """Generates every derived clip whose file is missing or stale, inputs
     first (a `clip:` input may itself be derived). A missing input is
     appended to `errors` - pointing at `fetch` when it's an album item -
     and so is an ffmpeg failure; everything else still gets generated.
+    `locked_sha256` (album name -> sha256, from the lock) lets an output
+    whose album input was pruned count as current (is_current_by_record).
     Returns the ids generated."""
     by_id = {c.id: c for c in bin_clips}
     done: dict[str, bool] = {}  # id -> its file is ready
@@ -400,6 +418,9 @@ def ensure_all(
         else:
             input_path = spec.path
         if not input_path.exists():
+            if spec.source is not None and is_current_by_record(clip.path, (locked_sha256 or {}).get(spec.source)):
+                done[clip.id] = True  # its input was pruned; the album still has it unchanged
+                return True
             if spec.source is not None:
                 errors.append(msg("validation.derive_input_not_fetched", id=clip.id, path=input_path))
             elif spec.clip is None:
