@@ -18,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from . import autoprune
 from . import derive as derive_mod
 from . import probe, sources_lock, titles
 from . import upscale as upscale_mod
@@ -172,6 +173,10 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
     if not isinstance(sources, dict):
         errors.append(msg("validation.sources_invalid", sources=sources))
         sources = {}
+    prune_days = sources.get("prune_after_days", autoprune.DEFAULT_DAYS)
+    if isinstance(prune_days, bool) or not isinstance(prune_days, (int, float)) or prune_days < 0:
+        errors.append(msg("validation.prune_after_days_invalid", value=prune_days))
+        prune_days = autoprune.DEFAULT_DAYS
     return ProjectSpec(
         id=str(data["id"]),
         title=str(data["title"]),
@@ -183,6 +188,7 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
         notes=str(data["notes"]) if data.get("notes") is not None else None,
         album_url=str(sources["album"]) if sources.get("album") else None,
         sources_dir=str(sources.get("dir", "assets")),
+        prune_after_days=float(prune_days),
     )
 
 

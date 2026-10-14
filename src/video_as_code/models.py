@@ -32,6 +32,11 @@ class ProjectSpec:
     # relative to the YAML.
     album_url: Optional[str] = None
     sources_dir: str = "assets"
+    # `project.sources.prune_after_days`: before each render, delete files
+    # the tool can bring back by itself (album items only derive: needs,
+    # stale generated files) that no render has used for this long - see
+    # autoprune.py. 0 turns it off.
+    prune_after_days: float = 7.0
 
 
 @dataclass(frozen=True)

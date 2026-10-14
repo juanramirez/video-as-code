@@ -246,6 +246,27 @@ sha256, matching the lock's, is enough for `build`/`render`/`validate` to
 keep using it, and `fetch` downloads the input again only if a `derive:`
 made from it changes (or its output is deleted).
 
+Every `render` also does that by itself, for files no render has needed
+in a while:
+
+```yaml
+project:
+  sources:
+    album: https://photos.app.goo.gl/...
+    prune_after_days: 7   # the default; 0 = never
+```
+
+Before rendering, it deletes what the tool can always bring back and
+nothing this render reads: album items used only as `derive:` inputs
+(once their outputs stand on their own, as above), album items nothing
+uses any more, and generated files in `.derived/` and `.proxies/` - each
+only if no `build`/`validate`/`render` has used it for that many days
+(they keep a record in `.fetch_cache/last_used.json`). A file seen for
+the first time just starts counting, and a file only on this machine
+(one the lock doesn't know) is never touched. YAML files sharing a
+sources folder (a project and its preview) share that record. `render
+--no-prune` skips it once.
+
 ### `video-as-code reconstruct`: recovering a YAML from a rendered video
 
 ```bash

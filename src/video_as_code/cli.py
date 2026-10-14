@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from . import fetch, fetch_resolve, i18n, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import autoprune, fetch, fetch_resolve, i18n, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -126,9 +126,11 @@ def cmd_build(args: argparse.Namespace) -> int:
     except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
+    original = resolved
     resolved = _with_proxies(resolved, args.proxy)
     if resolved is None:
         return 1
+    _record_use(yaml_path, original, resolved)
     if args.pack_tracks:
         resolved = trackpack.pack_tracks(resolved)
     try:
@@ -146,6 +148,29 @@ def cmd_build(args: argparse.Namespace) -> int:
         )
     )
     return 0
+
+
+def _record_use(yaml_path: Path, *projects) -> None:
+    """Notes that the files these resolved projects read were used today
+    (see autoprune.py) - the original and its --proxy version alike."""
+    paths: set[Path] = set()
+    for project in projects:
+        if project is not None:
+            paths |= autoprune.used_paths(project)
+    autoprune.record_use(yaml_path.parent, paths)
+
+
+def _autoprune(yaml_path: Path, needed_by) -> None:
+    """Before a render: deletes old files the tool can bring back (see
+    autoprune.py), never one this render reads."""
+    try:
+        doc = load_yaml(yaml_path)
+    except KdenliveAsCodeError:
+        return
+    days = doc.project.prune_after_days
+    deleted, freed = autoprune.prune(doc, autoprune.used_paths(needed_by), days)
+    if deleted:
+        print(msg("cli.autopruned", n=len(deleted), days=days, mb=round(freed / 1e6)), file=sys.stderr)
 
 
 def _with_proxies(resolved, size_text: Optional[str]):
@@ -173,6 +198,7 @@ def cmd_validate(args: argparse.Namespace) -> int:
     except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
+    _record_use(Path(args.project), resolved)
     n_clips = sum(len(t.placements) for t in resolved.tracks)
     print(msg("cli.validate_done", n_tracks=len(resolved.tracks), n_clips=n_clips, frames=resolved.total_frames))
     return 0
@@ -216,9 +242,14 @@ def cmd_render(args: argparse.Namespace) -> int:
     if melt is None:
         print(msg("cli.render_missing_melt"), file=sys.stderr)
         return 1
+    original = resolved
     resolved = _with_proxies(resolved, args.proxy)
     if resolved is None:
         return 1
+    _record_use(yaml_path, original, resolved)
+    if not args.no_prune:
+        # (with --proxy the originals are kept too: recorded as used above)
+        _autoprune(yaml_path, resolved)
 
     with contextlib.ExitStack() as stack:
         if args.keep_kdenlive:
@@ -336,6 +367,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_render.add_argument("--split", action="store_true", help=msg("cli.help.render_split"))
     p_render.add_argument("--max-mem", type=int, metavar="MB", help=msg("cli.help.render_max_mem"))
     p_render.add_argument("--proxy", metavar="WxH", help=msg("cli.help.proxy"))
+    p_render.add_argument("--no-prune", action="store_true", help=msg("cli.help.no_prune"))
     p_render.set_defaults(func=cmd_render)
 
     p_fetch = sub.add_parser("fetch", help=msg("cli.help.fetch"))

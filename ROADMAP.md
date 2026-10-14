@@ -1231,3 +1231,15 @@ whole video can be built from a fresh checkout anywhere.
   MLT's timewarp freeze with a large `source_in` can't happen in a
   proxied render. Open: rotated videos (rotation metadata) haven't been
   tried - none of the real project's had any.
+- **Automatic pruning before each render** — **implemented**
+  (2026-10-14, `autoprune.py`, `tests/test_autoprune.py`):
+  `project.sources.prune_after_days` (default 7, 0 = never; `render
+  --no-prune` skips it once). Before rendering, deletes only what the
+  tool can bring back by itself and the render doesn't read: album items
+  used only as derive: inputs whose outputs stand on their own, album
+  items nothing uses any more, and stale files in `.derived/` and
+  `.proxies/` - each once no build/validate/render has used it for that
+  many days (recorded per file in `.fetch_cache/last_used.json`, shared
+  by every YAML in the folder, so a project and its preview keep each
+  other's files alive). A file seen for the first time only starts
+  counting; one the lock doesn't know is never touched.
