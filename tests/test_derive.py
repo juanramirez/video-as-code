@@ -95,6 +95,7 @@ def test_derive_from_another_clip_follows_it(tmp_path: Path):
         (["{id: d, derive: {path: a.mp4, scale: [-1, -1]}}"], "derive.scale"),
         (["{id: d, derive: {path: a.mp4, fps: 0}}"], "derive.fps"),
         (["{id: d, derive: {path: a.mp4, reverse: maybe}}"], "derive.reverse"),
+        (["{id: d, derive: {path: a.mp4, intra: 1}}"], "derive.intra"),
         (["{id: d, derive: {path: a.mp4, volume: -1}}"], "derive.volume"),
         (["{id: d, derive: {path: a.mp4, cut: [[2, 1]]}}"], "derive.cut"),
         (["{id: d, derive: {path: a.mp4, cut: [[3, 4], [1, 2]]}}"], "derive.cut"),
@@ -230,6 +231,17 @@ def test_derive_crop_scale_fps_on_a_silent_video(tmp_path: Path, assets_dir: Pat
     (video,) = info["streams"]  # no audio stream invented for a silent input
     assert (video["width"], video["height"]) == (100, 50)
     assert video["r_frame_rate"] == "10/1"
+
+
+def test_derive_intra_makes_every_frame_a_keyframe(tmp_path: Path, assets_dir: Path):
+    project = _project(tmp_path, [f"{{id: still, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0, 1], intra: true}}}}"])
+    load_and_resolve(project)
+    flags = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries", "frame=key_frame", "-of", "csv=p=0",
+         str(_bin(project)["still"].path)],
+        capture_output=True, text=True, check=True,
+    ).stdout.split()
+    assert len(flags) > 1 and {f.strip(",") for f in flags} == {"1"}
 
 
 def test_derive_volume_on_audio(tmp_path: Path, assets_dir: Path):

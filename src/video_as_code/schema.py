@@ -325,7 +325,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_not_a_map", id=clip_id, value=data))
         return None
     n_errors = len(errors)
-    known = {"source", "path", "clip", "motion", "trim", "cut", "crop", "scale", "fps", "reverse", "volume", "upscale"}
+    known = {"source", "path", "clip", "motion", "trim", "cut", "crop", "scale", "fps", "reverse", "volume", "upscale", "intra"}
     unknown = set(data) - known
     if unknown:
         errors.append(msg("validation.derive_unknown_keys", id=clip_id, keys=", ".join(sorted(unknown))))
@@ -391,13 +391,16 @@ def _parse_derive(
     motion = data.get("motion", False)
     if not isinstance(motion, bool):
         errors.append(msg("validation.derive_motion_invalid", id=clip_id, value=motion))
+    intra = data.get("intra", False)
+    if not isinstance(intra, bool):
+        errors.append(msg("validation.derive_intra_invalid", id=clip_id, value=intra))
     upscale = data.get("upscale")
     # x4 only: it's what the realesrgan-x4plus model does (see upscale.py)
     if upscale is not None and (isinstance(upscale, bool) or upscale != upscale_mod.FACTOR):
         errors.append(msg("validation.derive_upscale_invalid", id=clip_id, value=upscale, factor=upscale_mod.FACTOR))
     if len(errors) > n_errors:
         return None
-    if not (motion or trim or cut or crop or scale or fps or reverse or volume is not None or upscale):
+    if not (motion or trim or cut or crop or scale or fps or reverse or volume is not None or upscale or intra):
         errors.append(msg("validation.derive_does_nothing", id=clip_id))
         return None
     return DeriveSpec(
@@ -413,6 +416,7 @@ def _parse_derive(
         volume=float(volume) if volume is not None else None,
         upscale=int(upscale) if upscale is not None else None,
         motion=motion,
+        intra=intra,
     )
 
 

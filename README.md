@@ -165,6 +165,11 @@ the sound if there is any).
 `.MP.jpg`) carries inside it instead of the photo, so the result is an
 `.mp4`; the other operations then apply to that video.
 
+`intra: true` encodes a video result with every frame a keyframe. MLT's
+`speed:` (timewarp) can stall for a moment, or fail, near the end of a
+file with long keyframe intervals; an all-intra file avoids that, at the
+cost of a bigger file. It only affects video outputs.
+
 `upscale: 4` enlarges a still or a gif x4 with Real-ESRGAN, an AI upscaler
 that invents plausible detail rather than stretching pixels - for small
 album items (Google Photos' own animations are ~800x600) that would look

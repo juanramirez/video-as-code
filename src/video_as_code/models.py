@@ -54,7 +54,11 @@ class DeriveSpec:
     source pixels), `scale` (w, h; -1 keeps the aspect ratio), `fps`,
     `reverse` (picture and sound), `volume` (audio gain factor) and, last,
     `upscale` (4: enlarge a still or gif x4 with Real-ESRGAN, see
-    upscale.py - slow, so stills and gifs only)."""
+    upscale.py - slow, so stills and gifs only). `intra: true` encodes a
+    video output with every frame a keyframe (all-intra): MLT's timewarp
+    (`speed:` != 1) can hold one frame for a moment, or fail outright, near
+    the end of a file with a long GOP / B-frames - all-intra avoids it at
+    the cost of a bigger file."""
 
     source: Optional[str] = None
     path: Optional[Path] = None
@@ -68,6 +72,7 @@ class DeriveSpec:
     volume: Optional[float] = None
     upscale: Optional[int] = None
     motion: bool = False
+    intra: bool = False
 
 
 @dataclass

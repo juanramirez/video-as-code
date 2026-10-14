@@ -55,6 +55,8 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         canonical["cut"] = [list(r) for r in spec.cut]
     if spec.upscale:
         canonical["upscale"] = spec.upscale
+    if spec.intra:
+        canonical["intra"] = True
     return hashlib.sha1(json.dumps(canonical, sort_keys=True).encode()).hexdigest()[:10]
 
 
@@ -192,6 +194,8 @@ def build_command(spec: DeriveSpec, input_path: Path, output: Path, has_audio: b
         vf.append("scale=trunc(iw/2)*2:trunc(ih/2)*2")
         cmd += ["-map", "0:v:0", "-vf", ",".join(vf)]
         cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "medium", "-pix_fmt", "yuv420p"]
+        if spec.intra:
+            cmd += ["-g", "1", "-bf", "0"]  # every frame a keyframe (see DeriveSpec.intra)
         if has_audio:
             cmd += ["-map", "0:a:0?"]
             if af:
@@ -268,7 +272,7 @@ def build_cut_command(spec: DeriveSpec, input_path: Path, output: Path, has_audi
 
 
 def _ffmpeg_ops(spec: DeriveSpec) -> bool:
-    return bool(spec.trim or spec.cut or spec.crop or spec.scale or spec.fps or spec.reverse or spec.volume is not None)
+    return bool(spec.trim or spec.cut or spec.crop or spec.scale or spec.fps or spec.reverse or spec.volume is not None or spec.intra)
 
 
 def _run(clip_id: str, cmd: list[str], output: Path) -> None:
