@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -98,6 +99,9 @@ def test_derive_from_another_clip_follows_it(tmp_path: Path):
         (["{id: d, derive: {path: a.mp4, reverse: maybe}}"], "derive.reverse"),
         (["{id: d, derive: {path: a.mp4, intra: 1}}"], "derive.intra"),
         (["{id: d, derive: {path: a.mp4, volume: -1}}"], "derive.volume"),
+        (["{id: d, derive: {path: a.mp4, devignette: 1}}"], "derive.devignette"),
+        (["{id: d, derive: {path: a.mp4, devignette: 0}}"], "derive.devignette"),
+        (["{id: d, derive: {path: a.mp4, devignette: true}}"], "derive.devignette"),
         (["{id: d, derive: {path: a.mp4, cut: [[2, 1]]}}"], "derive.cut"),
         (["{id: d, derive: {path: a.mp4, cut: [[3, 4], [1, 2]]}}"], "derive.cut"),
         (["{id: d, derive: {path: a.mp4, cut: [1, 2]}}"], "derive.cut"),
@@ -243,6 +247,29 @@ def test_derive_intra_makes_every_frame_a_keyframe(tmp_path: Path, assets_dir: P
         capture_output=True, text=True, check=True,
     ).stdout.split()
     assert len(flags) > 1 and {f.strip(",") for f in flags} == {"1"}
+
+
+def test_derive_devignette_evens_out_a_baked_in_vignette(tmp_path: Path):
+    # a flat grey frame darkened by ffmpeg's own (forward) vignette, corners
+    # at 0.81 of the centre: undoing it with the same figure gives back a
+    # flat frame
+    angle = math.acos(0.81 ** 0.25)
+    dark = tmp_path / "dark.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0xa0a0a0:s=160x120",
+         "-vf", f"format=rgb24,vignette=angle={angle}:dither=0", "-frames:v", "1", str(dark)],
+        check=True,
+    )
+    project = _project(tmp_path, [f"{{id: flat, derive: {{path: {dark}, devignette: 0.81}}}}"])
+    load_and_resolve(project)
+    out = _bin(project)["flat"].path
+    assert out.suffix == ".png"
+    pixels = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(out), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    corner, centre = pixels[0], pixels[60 * 160 + 80]
+    assert abs(corner - centre) <= 3
 
 
 def test_derive_volume_on_audio(tmp_path: Path, assets_dir: Path):

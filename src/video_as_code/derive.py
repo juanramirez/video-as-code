@@ -20,6 +20,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import math
 import re
 import subprocess
 from pathlib import Path
@@ -57,6 +58,8 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         canonical["upscale"] = spec.upscale
     if spec.intra:
         canonical["intra"] = True
+    if spec.devignette is not None:
+        canonical["devignette"] = spec.devignette
     return hashlib.sha1(json.dumps(canonical, sort_keys=True).encode()).hexdigest()[:10]
 
 
@@ -230,6 +233,14 @@ def build_command(
         if kind == ".mp4":
             w, h = (-2 if w == -1 else w), (-2 if h == -1 else h)
         vf.append(f"scale={w}:{h}")
+    if spec.devignette is not None:
+        # ffmpeg's vignette darkens by cos(angle * d)^4, d being the distance
+        # from the centre over the corner's (a natural lens falloff), so
+        # corners at `devignette` of the centre's brightness are angle =
+        # acos(devignette^(1/4)); mode=backward divides by that instead of
+        # multiplying. After crop/scale: the vignette is the frame's own.
+        angle = math.acos(spec.devignette ** 0.25)
+        vf.append(f"vignette=angle={angle:.6f}:mode=backward")
     if spec.fps:
         vf.append(f"fps={spec.fps:g}")
     if spec.reverse:
@@ -349,7 +360,10 @@ def build_cut_command(spec: DeriveSpec, input_path: Path, output: Path, has_audi
 
 
 def _ffmpeg_ops(spec: DeriveSpec) -> bool:
-    return bool(spec.trim or spec.cut or spec.crop or spec.scale or spec.fps or spec.reverse or spec.volume is not None or spec.intra)
+    return bool(
+        spec.trim or spec.cut or spec.crop or spec.scale or spec.devignette is not None or spec.fps
+        or spec.reverse or spec.volume is not None or spec.intra
+    )
 
 
 def _run(clip_id: str, cmd: list[str], output: Path) -> None:

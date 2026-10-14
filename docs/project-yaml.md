@@ -88,6 +88,7 @@ Then any of these operations, applied in this order:
 | `cut` | `[[18.44, 20.36]]` | Remove these input-second ranges from the middle, picture and sound alike. |
 | `crop` | `{x: 0, y: 156, w: 4080, h: 2760}` | Keep this rectangle, in input pixels. |
 | `scale` | `[1920, 1080]` | Resize; `-1` on one side keeps the aspect ratio. |
+| `devignette` | `0.81` | Undo a vignette baked into the input (a shot taken from an old edit, say): how bright its corners are relative to its centre, between 0 and 1. |
 | `fps` | `30` | Re-time to this frame rate. |
 | `reverse` | `true` | Play backwards, picture and sound. |
 | `volume` | `1.41` | Multiply the sound's level. |

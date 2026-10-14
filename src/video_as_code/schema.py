@@ -331,7 +331,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_not_a_map", id=clip_id, value=data))
         return None
     n_errors = len(errors)
-    known = {"source", "path", "clip", "motion", "trim", "cut", "crop", "scale", "fps", "reverse", "volume", "upscale", "intra"}
+    known = {"source", "path", "clip", "motion", "trim", "cut", "crop", "scale", "devignette", "fps", "reverse", "volume", "upscale", "intra"}
     unknown = set(data) - known
     if unknown:
         errors.append(msg("validation.derive_unknown_keys", id=clip_id, keys=", ".join(sorted(unknown))))
@@ -385,6 +385,13 @@ def _parse_derive(
         # -1 on one side keeps the aspect ratio (ffmpeg's own convention)
         if scale is None or any(v == 0 or v < -1 for v in scale) or scale == (-1, -1):
             errors.append(msg("validation.derive_scale_invalid", id=clip_id, value=data["scale"]))
+    devignette = data.get("devignette")
+    # the corners' brightness relative to the centre: 1 would be no
+    # vignette at all, 0 black corners (nothing left to brighten)
+    if devignette is not None and (
+        isinstance(devignette, bool) or not isinstance(devignette, (int, float)) or not 0 < devignette < 1
+    ):
+        errors.append(msg("validation.derive_devignette_invalid", id=clip_id, value=devignette))
     fps = data.get("fps")
     if fps is not None and (isinstance(fps, bool) or not isinstance(fps, (int, float)) or fps <= 0):
         errors.append(msg("validation.derive_fps_invalid", id=clip_id, value=fps))
@@ -406,7 +413,10 @@ def _parse_derive(
         errors.append(msg("validation.derive_upscale_invalid", id=clip_id, value=upscale, factor=upscale_mod.FACTOR))
     if len(errors) > n_errors:
         return None
-    if not (motion or trim or cut or crop or scale or fps or reverse or volume is not None or upscale or intra):
+    if not (
+        motion or trim or cut or crop or scale or devignette is not None or fps or reverse or volume is not None
+        or upscale or intra
+    ):
         errors.append(msg("validation.derive_does_nothing", id=clip_id))
         return None
     return DeriveSpec(
@@ -417,6 +427,7 @@ def _parse_derive(
         cut=cut,
         crop=crop,
         scale=scale,
+        devignette=float(devignette) if devignette is not None else None,
         fps=float(fps) if fps is not None else None,
         reverse=reverse,
         volume=float(volume) if volume is not None else None,

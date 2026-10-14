@@ -56,7 +56,10 @@ class DeriveSpec:
     this order: `trim` (source seconds [start, end)) and `cut` (source
     seconds [start, end) ranges REMOVED from the middle, picture and sound
     alike; both in the input's own seconds), `crop` (x, y, w, h,
-    source pixels), `scale` (w, h; -1 keeps the aspect ratio), `fps`,
+    source pixels), `scale` (w, h; -1 keeps the aspect ratio),
+    `devignette` (undoes a vignette already baked into the input - say a
+    shot taken from an old edit that darkened its edges: how bright its
+    corners are relative to its centre, 0 < x < 1, see derive.py), `fps`,
     `reverse` (picture and sound), `volume` (audio gain factor) and, last,
     `upscale` (4: enlarge a still or gif x4 with Real-ESRGAN, see
     upscale.py - slow, so stills and gifs only). `intra: true` encodes a
@@ -72,6 +75,7 @@ class DeriveSpec:
     cut: Optional[tuple[tuple[float, float], ...]] = None
     crop: Optional[tuple[int, int, int, int]] = None
     scale: Optional[tuple[int, int]] = None
+    devignette: Optional[float] = None
     fps: Optional[float] = None
     reverse: bool = False
     volume: Optional[float] = None
