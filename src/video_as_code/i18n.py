@@ -32,6 +32,7 @@ _EN: dict[str, str] = {
         "(see gphotos.py's docstring)"
     ),
     "gphotos.request_failed": "Request to Google Photos failed ({url}): {exc}",
+    "gphotos.download_interrupted": "Download from Google Photos broke off ({url}): {exc}",
     "gphotos.not_a_shared_album": "'{url}' isn't a shared album link (no ?key= in it)",
     "gphotos.no_filename": "Google Photos didn't say what item {media_id}'s original file name is",
     "validation.yaml_missing": "YAML file not found: {path}",
@@ -268,6 +269,7 @@ _EN: dict[str, str] = {
     "links.drive_no_id": "No Google Drive file id in {url}",
     "links.yt_dlp_missing": "Can't run {command!r} ({exc}); install yt-dlp or point {env} at it",
     "links.yt_dlp_failed": "yt-dlp couldn't download {url}: {detail}",
+    "links.download_interrupted": "Download of {url} broke off: {exc}",
     "links.got_a_page": "{url} served a web page instead of a file (on Drive: is it shared as \"anyone with the link\"?)",
     "cli.fetch_done": "Fetch: {downloaded} downloaded, {up_to_date} already up to date, {derived} derived clip(s) generated",
     "cli.help.fetch": "Downloads the bin clips with source: from the project's shared album",
@@ -371,6 +373,7 @@ _ES: dict[str, str] = {
         "su formato (ver el docstring de gphotos.py)"
     ),
     "gphotos.request_failed": "Falló la petición a Google Fotos ({url}): {exc}",
+    "gphotos.download_interrupted": "La descarga de Google Fotos se cortó a medias ({url}): {exc}",
     "gphotos.not_a_shared_album": "'{url}' no es un enlace de álbum compartido (no lleva ?key=)",
     "gphotos.no_filename": "Google Fotos no indicó el nombre original del elemento {media_id}",
     "validation.yaml_missing": "No existe el archivo YAML: {path}",
@@ -607,6 +610,7 @@ _ES: dict[str, str] = {
     "links.drive_no_id": "No hay un id de archivo de Google Drive en {url}",
     "links.yt_dlp_missing": "No se puede ejecutar {command!r} ({exc}); instala yt-dlp o indica dónde está con {env}",
     "links.yt_dlp_failed": "yt-dlp no ha podido descargar {url}: {detail}",
+    "links.download_interrupted": "La descarga de {url} se cortó a medias: {exc}",
     "links.got_a_page": "{url} ha devuelto una página web en vez de un archivo (en Drive: ¿está compartido como \"cualquier persona con el enlace\"?)",
     "cli.fetch_done": "Fetch: {downloaded} descargado(s), {up_to_date} ya al día, {derived} clip(s) derivado(s) generado(s)",
     "cli.help.fetch": "Descarga del álbum compartido del proyecto los clips del bin con source:",

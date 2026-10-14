@@ -182,14 +182,17 @@ def test_download_writes_atomically_and_hashes(tmp_path: Path, monkeypatch):
     assert gphotos.sha256_of(dest) == sha
 
 
-def test_download_leaves_nothing_behind_when_interrupted(tmp_path: Path, monkeypatch):
+@pytest.mark.parametrize("error", [OSError("connection reset"), TimeoutError("The read operation timed out")])
+def test_download_leaves_nothing_behind_when_interrupted(tmp_path: Path, monkeypatch, error: Exception):
+    # a connection broken halfway is this item's GPhotosError (so fetch goes
+    # on with the rest), not an exception that stops everything
     class Broken(_FakeResponse):
         def read(self, *args):
-            raise OSError("connection reset")
+            raise error
 
     monkeypatch.setattr(gphotos, "_open", lambda request: Broken(b""))
     item = gphotos.parse_share_page(_share_html([_raw_item("p1", 1000)], None)).items[0]
     dest = tmp_path / "IMG_1.jpg"
-    with pytest.raises(OSError):
+    with pytest.raises(gphotos.GPhotosError, match="broke off"):
         gphotos.download(item, dest)
     assert not dest.exists() and not dest.with_name("IMG_1.jpg.part").exists()

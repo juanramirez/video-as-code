@@ -38,6 +38,7 @@ What the page looks like:
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import re
 import urllib.error
@@ -285,10 +286,16 @@ def download(item: AlbumItem, dest: Path) -> tuple[int, str]:
     size = 0
     try:
         with _open(item.download_url) as response, tmp.open("wb") as fh:
-            while chunk := response.read(_CHUNK):
-                fh.write(chunk)
-                digest.update(chunk)
-                size += len(chunk)
+            try:
+                while chunk := response.read(_CHUNK):
+                    fh.write(chunk)
+                    digest.update(chunk)
+                    size += len(chunk)
+            except (OSError, http.client.HTTPException) as exc:
+                # a connection that stalls or drops halfway (`_open` only covers
+                # the request itself): this item's failure, not the whole fetch's
+                url = item.download_url.split("?")[0]
+                raise GPhotosError(msg("gphotos.download_interrupted", url=url, exc=exc)) from exc
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise

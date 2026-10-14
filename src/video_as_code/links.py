@@ -26,6 +26,7 @@ an interrupted one never looks finished.
 from __future__ import annotations
 
 import glob
+import http.client
 import os
 import re
 import shlex
@@ -125,8 +126,12 @@ def _download_http(url: str, dest_dir: Path, stem: str, shown_url: str) -> Path:
                 raise LinkError(msg("links.got_a_page", url=shown_url))
             name = gphotos.filename_from_content_disposition(response.headers.get("Content-Disposition"))
             suffix = Path(name or urllib.parse.urlparse(response.geturl()).path).suffix.lower()
-            while chunk := response.read(1 << 20):
-                fh.write(chunk)
+            try:
+                while chunk := response.read(1 << 20):
+                    fh.write(chunk)
+            except (OSError, http.client.HTTPException) as exc:
+                # dropped or stalled halfway (gphotos._open only covers the request)
+                raise LinkError(msg("links.download_interrupted", url=shown_url, exc=exc)) from exc
     except gphotos.GPhotosError as exc:
         tmp.unlink(missing_ok=True)
         raise LinkError(str(exc)) from exc

@@ -2,12 +2,13 @@
 `yt-dlp` (VIDEO_AS_CODE_YT_DLP) so the real subprocess handling runs."""
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
 
 import pytest
 
-from video_as_code import links
+from video_as_code import gphotos, links
 
 
 @pytest.mark.parametrize(
@@ -39,6 +40,28 @@ def test_drive_file_id(url: str):
 def test_drive_link_without_an_id_fails(tmp_path: Path):
     with pytest.raises(links.LinkError):
         links.download("https://drive.google.com/drive/my-drive", tmp_path, "music")
+
+
+def test_download_broken_off_halfway_is_a_link_error(tmp_path: Path, monkeypatch):
+    class Broken(io.BytesIO):
+        headers = {"Content-Type": "audio/mpeg"}
+
+        def geturl(self):
+            return "https://example.com/song.mp3"
+
+        def read(self, *args):
+            raise TimeoutError("The read operation timed out")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.close()
+
+    monkeypatch.setattr(gphotos, "_open", lambda url: Broken())
+    with pytest.raises(links.LinkError, match="broke off"):
+        links.download("https://example.com/song.mp3", tmp_path, "music")
+    assert list(tmp_path.iterdir()) == []
 
 
 def _fake_yt_dlp(tmp_path: Path, monkeypatch, body: str) -> Path:
