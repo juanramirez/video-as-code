@@ -86,7 +86,8 @@ and a title clip): `video-as-code build examples/simple/project.yaml`. See
 `video-as-code build examples/scenes/project.yaml`.
 
 See `docs/making-a-video.md` for a short step-by-step howto of this
-whole flow.
+whole flow, and `docs/project-yaml.md` for every key a project file
+accepts.
 
 ### `--proxy`: light previews of only the parts used
 

@@ -18,6 +18,8 @@ Two forms, pick whichever fits what you're doing:
   (`dissolve`/`wipe`/`affine`/`iris`/`flip`/`glitch`/`delaygrab`/
   `cairogradient`). See `examples/scenes/project.yaml`.
 
+Every key either form accepts is in `docs/project-yaml.md`.
+
 Copy whichever example is closer to what you need and start editing -
 that's faster than writing one from scratch. Both forms can be mixed in
 the same project (a `scenes:` block compiles down into `timeline.tracks:`
