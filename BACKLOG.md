@@ -288,3 +288,38 @@ and `fetch --prune` shipped in v0.11 (see ROADMAP.md); still open:
   and clips dropped from the timeline) and stale outputs in `.derived/`
   whose spec no longer exists - with a "not in the album" warning for any
   file that `fetch` couldn't bring back.
+
+## Performance
+
+Measured on a real project: a ~4 min 1080p video with ~150 clips and a
+long chain of crossfades, previewed at 480x270 on a 4-core laptop with
+7 GB of RAM and an integrated GPU.
+
+- **Split rendering with variable segment sizes**: rendering in one melt
+  run needs more RAM than such a laptop has (melt builds every producer
+  at load), so the project's own script renders fixed 10-frame segments,
+  each from a copy of the project trimmed to the clips it touches, with
+  the sound rendered once separately and muxed in. 758 segments took
+  ~37 min, most of it presumably melt starting up and loading producers
+  (~5-7 s per segment). Sizing each segment by an estimate of the memory
+  its active clips need (few clips -> long segments, crossfade pile-ups
+  -> short ones) should cut that sharply. Belongs in the tool as
+  `render --split` rather than in a per-project shell script.
+- **Light preview copies of only the used range**: a light copy (e.g.
+  480x270 H.264, what keeps melt within RAM) of a whole 2-minute video of
+  which 4 s are used still decodes all of it. Copying only the ranges
+  the timeline uses (plus a margin), with the placements' source times
+  shifted to match, makes them much faster to generate and smaller - and
+  sidesteps MLT's timewarp freezing with a large `source_in` (the reason
+  projects keep hand-trimmed copies), since the used range then starts
+  near the file's beginning.
+- **Parallel downloads in `fetch`**: items are downloaded one at a time;
+  ~150 of them took over half an hour on a fresh machine. 3-4 at once
+  should help, within whatever rate limits Google Photos applies.
+- **Hardware encoding/decoding for `derive:`** (VAAPI on Intel/AMD,
+  NVENC/NVDEC on NVIDIA): much faster for long inputs (light copies,
+  60 fps phone videos), at some quality cost - so for preview copies
+  rather than final outputs, and only when the device supports it.
+- **Generating several `derive:` clips at once**: ffmpeg already uses
+  every core for most encodes, so on a 4-core machine with little RAM
+  the gain is small (maybe x1.5); last in line.
