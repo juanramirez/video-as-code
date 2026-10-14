@@ -1197,3 +1197,19 @@ whole video can be built from a fresh checkout anywhere.
   (`derive.is_current_by_record`), and `fetch` doesn't download the
   input again unless a derive: made from it changes. Roughly 2.5 GB on
   that same project, mostly long originals of which seconds are used.
+- **`render --split`** — **implemented** (2026-10-14, `splitrender.py`,
+  `tests/test_splitrender.py`): for machines without the RAM for one melt
+  run. The picture in segments, each from a copy trimmed to its clips,
+  joined without re-encoding; the sound in one pass, muxed in. Segments
+  are aligned power-of-two blocks (10 to 1280 frames) halved until a
+  memory estimate fits `--max-mem` (default 60% of what's available), so
+  an edit only re-plans the segments around it, and each segment's
+  render is cached by its trimmed project and input files. Measured on a
+  real project (320x180, 156 tracks, a loaded 4-core machine): a melt
+  start costs ~5 s and rendering ~0.37 s per frame, so its 758 fixed
+  10-frame segments spent more time starting melt than rendering; a
+  1.2 GB budget plans 32 segments instead. The estimate (baseline +
+  ~20 B per pixel of each still played, ~45 B per pixel of each video,
+  plus every track's frame at the profile size) came out 1.4-2x the peak
+  RSS actually measured - on the safe side. `VIDEO_AS_CODE_MELT` points
+  at a melt other than PATH's (e.g. one built from source).
