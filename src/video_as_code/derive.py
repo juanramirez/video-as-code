@@ -60,6 +60,12 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         canonical["intra"] = True
     if spec.devignette is not None:
         canonical["devignette"] = spec.devignette
+    if spec.fit:
+        canonical["fit"] = list(spec.fit)
+    if spec.feather:
+        canonical["feather"] = spec.feather
+    if spec.vignette is not None:
+        canonical["vignette"] = spec.vignette
     return hashlib.sha1(json.dumps(canonical, sort_keys=True).encode()).hexdigest()[:10]
 
 
@@ -200,7 +206,52 @@ def _output_height(spec: DeriveSpec, size: tuple[int, int]) -> int:
     if spec.scale:
         sw, sh = spec.scale
         h = sh if sh != -1 else round(sw * h / w)
+    if spec.fit:
+        h = spec.fit[1]
     return h
+
+
+# What `fit` can fill the space around the picture with (see _fit_filter).
+FIT_BACKGROUNDS = ("blur", "black")
+
+# How blurred `fit`'s `blur` background is: gblur's sigma as a fraction of
+# the output's width - enough that nothing in it reads as a second picture.
+_FIT_BLUR_SIGMA = 1 / 40
+
+
+def _feather_ramp(n: int) -> str:
+    """geq expression, 0 at the picture's outermost pixels to 1 at `n`
+    pixels in from every side, eased (smoothstep) so the edge has no
+    visible start or end."""
+    m = f"clip(min(min(X,W-1-X),min(Y,H-1-Y))/{n},0,1)"
+    return f"({m})*({m})*(3-2*({m}))"
+
+
+def _feather_to_black(n: int) -> str:
+    """`feather`: each colour channel faded out towards the edges - over
+    black it looks just like a transparent edge, and works for any output
+    (an .mp4 has no alpha)."""
+    ramp = _feather_ramp(n)
+    return f"format=gbrp,geq=r='r(X,Y)*{ramp}':g='g(X,Y)*{ramp}':b='b(X,Y)*{ramp}'"
+
+
+def _fit_filter(w: int, h: int, background: str, feather: Optional[int] = None) -> str:
+    """`fit`: the picture scaled to fit inside w x h, centred, the rest
+    black or - `blur` - a copy of it scaled to COVER w x h (cropped to it)
+    and blurred. A branching graph, but still one input and one output, so
+    it chains like any single filter (-vf and the gif graph alike)."""
+    fg = f"scale={w}:{h}:force_original_aspect_ratio=decrease"
+    if background == "blur" and feather:
+        # the picture's own edges melt into the blurred copy around it
+        fg += f",format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='255*{_feather_ramp(feather)}'"
+    if background == "black":
+        return f"{fg},pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black"
+    sigma = max(1.0, w * _FIT_BLUR_SIGMA)
+    return (
+        f"split=2[fitbg][fitfg];"
+        f"[fitbg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma={sigma:g}[fitbg2];"
+        f"[fitfg]{fg}[fitfg2];[fitbg2][fitfg2]overlay=(W-w)/2:(H-h)/2"
+    )
 
 
 def build_command(
@@ -241,6 +292,14 @@ def build_command(
         # multiplying. After crop/scale: the vignette is the frame's own.
         angle = math.acos(spec.devignette ** 0.25)
         vf.append(f"vignette=angle={angle:.6f}:mode=backward")
+    if spec.fit:
+        vf.append(_fit_filter(*spec.fit, feather=spec.feather))
+    if spec.feather:
+        vf.append(_feather_to_black(spec.feather))
+    if spec.vignette is not None:
+        # the same lens falloff as devignette's, applied forward
+        angle = math.acos(spec.vignette ** 0.25)
+        vf.append(f"vignette=angle={angle:.6f}")
     if spec.fps:
         vf.append(f"fps={spec.fps:g}")
     if spec.reverse:
@@ -361,8 +420,8 @@ def build_cut_command(spec: DeriveSpec, input_path: Path, output: Path, has_audi
 
 def _ffmpeg_ops(spec: DeriveSpec) -> bool:
     return bool(
-        spec.trim or spec.cut or spec.crop or spec.scale or spec.devignette is not None or spec.fps
-        or spec.reverse or spec.volume is not None or spec.intra
+        spec.trim or spec.cut or spec.crop or spec.scale or spec.devignette is not None or spec.fit
+        or spec.feather or spec.vignette is not None or spec.fps or spec.reverse or spec.volume is not None or spec.intra
     )
 
 

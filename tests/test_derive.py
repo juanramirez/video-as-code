@@ -102,6 +102,12 @@ def test_derive_from_another_clip_follows_it(tmp_path: Path):
         (["{id: d, derive: {path: a.mp4, devignette: 1}}"], "derive.devignette"),
         (["{id: d, derive: {path: a.mp4, devignette: 0}}"], "derive.devignette"),
         (["{id: d, derive: {path: a.mp4, devignette: true}}"], "derive.devignette"),
+        (["{id: d, derive: {path: a.mp4, fit: {size: [0, 10]}}}"], "derive.fit"),
+        (["{id: d, derive: {path: a.mp4, fit: {size: [16, 9], background: white}}}"], "derive.fit"),
+        (["{id: d, derive: {path: a.mp4, fit: [16, 9]}}"], "derive.fit"),
+        (["{id: d, derive: {path: a.mp4, vignette: 1}}"], "derive.vignette"),
+        (["{id: d, derive: {path: a.mp4, feather: 0}}"], "derive.feather"),
+        (["{id: d, derive: {path: a.mp4, feather: 2.5}}"], "derive.feather"),
         (["{id: d, derive: {path: a.mp4, cut: [[2, 1]]}}"], "derive.cut"),
         (["{id: d, derive: {path: a.mp4, cut: [[3, 4], [1, 2]]}}"], "derive.cut"),
         (["{id: d, derive: {path: a.mp4, cut: [1, 2]}}"], "derive.cut"),
@@ -270,6 +276,89 @@ def test_derive_devignette_evens_out_a_baked_in_vignette(tmp_path: Path):
     ).stdout
     corner, centre = pixels[0], pixels[60 * 160 + 80]
     assert abs(corner - centre) <= 3
+
+
+def _gray_pixels(path: Path) -> tuple[int, int, bytes]:
+    w, h = (int(v) for v in subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", str(path)],
+        capture_output=True, text=True, check=True,
+    ).stdout.split()[0].split("x"))
+    pixels = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+        capture_output=True, check=True,
+    ).stdout
+    return w, h, pixels
+
+
+@pytest.mark.parametrize("background, side_is_black", [("black", True), ("blur", False)])
+def test_derive_fit_fills_around_a_portrait_picture(tmp_path: Path, background: str, side_is_black: bool):
+    # a bright 60x120 portrait still fitted into 240x120: the picture keeps
+    # its shape in the middle; the sides are black, or - blur - a blurred
+    # copy of the (bright) picture
+    tall = tmp_path / "tall.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0xc0c0c0:s=60x120", "-frames:v", "1", str(tall)],
+        check=True,
+    )
+    project = _project(
+        tmp_path, [f"{{id: wide, derive: {{path: {tall}, fit: {{size: [240, 120], background: {background}}}}}}}"]
+    )
+    load_and_resolve(project)
+    w, h, pixels = _gray_pixels(_bin(project)["wide"].path)
+    assert (w, h) == (240, 120)
+    centre, side = pixels[60 * w + 120], pixels[60 * w + 5]
+    assert centre > 150
+    assert (side < 10) if side_is_black else (side > 150)
+
+
+def test_derive_feather_softens_every_edge(tmp_path: Path):
+    flat = tmp_path / "flat.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0xc0c0c0:s=160x120", "-frames:v", "1", str(flat)],
+        check=True,
+    )
+    project = _project(tmp_path, [f"{{id: soft, derive: {{path: {flat}, feather: 20}}}}"])
+    load_and_resolve(project)
+    w, h, pixels = _gray_pixels(_bin(project)["soft"].path)
+    at = lambda x, y: pixels[y * w + x]
+    centre = at(80, 60)
+    assert centre > 180
+    # black at every border, half-way 10 px in, untouched from 20 px in
+    assert max(at(0, 60), at(159, 60), at(80, 0), at(80, 119)) < 10
+    assert 0.3 * centre < at(10, 60) < 0.7 * centre and 0.3 * centre < at(80, 10) < 0.7 * centre
+    assert abs(at(25, 60) - centre) <= 2 and abs(at(80, 25) - centre) <= 2
+
+
+def test_derive_feather_with_fit_blur_melts_into_the_surround(tmp_path: Path):
+    # a bright portrait picture on its blurred copy: with feather, the
+    # picture's side edge melts into the copy - no black seam - while the
+    # box itself still fades out at its own edges
+    tall = tmp_path / "tall.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0xc0c0c0:s=60x120", "-frames:v", "1", str(tall)],
+        check=True,
+    )
+    project = _project(
+        tmp_path, [f"{{id: wide, derive: {{path: {tall}, fit: {{size: [240, 120], background: blur}}, feather: 6}}}}"]
+    )
+    load_and_resolve(project)
+    w, h, pixels = _gray_pixels(_bin(project)["wide"].path)
+    row = [pixels[60 * w + x] for x in range(80, 100)]  # across the picture's left edge (at x=90)
+    assert min(row) > 120
+    assert pixels[0] < 10 and pixels[60 * w + 120] > 150
+
+
+def test_derive_vignette_darkens_the_corners(tmp_path: Path):
+    flat = tmp_path / "flat.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0xa0a0a0:s=160x120", "-frames:v", "1", str(flat)],
+        check=True,
+    )
+    project = _project(tmp_path, [f"{{id: dark, derive: {{path: {flat}, vignette: 0.5}}}}"])
+    load_and_resolve(project)
+    w, _, pixels = _gray_pixels(_bin(project)["dark"].path)
+    corner, centre = pixels[0], pixels[60 * w + 80]
+    assert corner / centre == pytest.approx(0.5, abs=0.08)
 
 
 def test_derive_volume_on_audio(tmp_path: Path, assets_dir: Path):

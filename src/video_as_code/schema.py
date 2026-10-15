@@ -331,7 +331,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_not_a_map", id=clip_id, value=data))
         return None
     n_errors = len(errors)
-    known = {"source", "path", "clip", "motion", "trim", "cut", "crop", "scale", "devignette", "fps", "reverse", "volume", "upscale", "intra"}
+    known = {"source", "path", "clip", "motion", "trim", "cut", "crop", "scale", "devignette", "fit", "feather", "vignette", "fps", "reverse", "volume", "upscale", "intra"}
     unknown = set(data) - known
     if unknown:
         errors.append(msg("validation.derive_unknown_keys", id=clip_id, keys=", ".join(sorted(unknown))))
@@ -392,6 +392,28 @@ def _parse_derive(
         isinstance(devignette, bool) or not isinstance(devignette, (int, float)) or not 0 < devignette < 1
     ):
         errors.append(msg("validation.derive_devignette_invalid", id=clip_id, value=devignette))
+    fit = None
+    if data.get("fit") is not None:
+        # {size: [w, h], background: blur | black}: the whole picture inside
+        # w x h, what's left filled with a blurred copy of itself or black
+        raw = data["fit"]
+        size = _number_pair(raw.get("size")) if isinstance(raw, dict) else None
+        background = raw.get("background", "blur") if isinstance(raw, dict) else None
+        ok = isinstance(raw, dict) and not set(raw) - {"size", "background"}
+        ok = ok and size is not None and all(v > 0 and v == int(v) for v in size) and background in derive_mod.FIT_BACKGROUNDS
+        if ok:
+            fit = (int(size[0]), int(size[1]), background)
+        else:
+            errors.append(msg("validation.derive_fit_invalid", id=clip_id, value=raw))
+    feather = data.get("feather")
+    if feather is not None and (isinstance(feather, bool) or not isinstance(feather, int) or feather <= 0):
+        errors.append(msg("validation.derive_feather_invalid", id=clip_id, value=feather))
+    vignette = data.get("vignette")
+    # same scale as devignette: the corners' brightness relative to the centre
+    if vignette is not None and (
+        isinstance(vignette, bool) or not isinstance(vignette, (int, float)) or not 0 < vignette < 1
+    ):
+        errors.append(msg("validation.derive_vignette_invalid", id=clip_id, value=vignette))
     fps = data.get("fps")
     if fps is not None and (isinstance(fps, bool) or not isinstance(fps, (int, float)) or fps <= 0):
         errors.append(msg("validation.derive_fps_invalid", id=clip_id, value=fps))
@@ -414,8 +436,8 @@ def _parse_derive(
     if len(errors) > n_errors:
         return None
     if not (
-        motion or trim or cut or crop or scale or devignette is not None or fps or reverse or volume is not None
-        or upscale or intra
+        motion or trim or cut or crop or scale or devignette is not None or fit or feather or vignette is not None or fps
+        or reverse or volume is not None or upscale or intra
     ):
         errors.append(msg("validation.derive_does_nothing", id=clip_id))
         return None
@@ -428,6 +450,9 @@ def _parse_derive(
         crop=crop,
         scale=scale,
         devignette=float(devignette) if devignette is not None else None,
+        fit=fit,
+        feather=feather,
+        vignette=float(vignette) if vignette is not None else None,
         fps=float(fps) if fps is not None else None,
         reverse=reverse,
         volume=float(volume) if volume is not None else None,

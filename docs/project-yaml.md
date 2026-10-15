@@ -89,6 +89,9 @@ Then any of these operations, applied in this order:
 | `crop` | `{x: 0, y: 156, w: 4080, h: 2760}` | Keep this rectangle, in input pixels. |
 | `scale` | `[1920, 1080]` | Resize; `-1` on one side keeps the aspect ratio. |
 | `devignette` | `0.81` | Undo a vignette baked into the input (a shot taken from an old edit, say): how bright its corners are relative to its centre, between 0 and 1. |
+| `fit` | `{size: [1440, 960], background: blur}` | Make the whole picture fit inside `size`, centred, and fill the rest: `blur` (the default) with a blurred copy of the picture enlarged to cover it, `black` with black. Fits a portrait photo into a landscape frame without cropping it. |
+| `feather` | `16` | Soft edges: the picture fades out over its last that many pixels on every side, to black (and, with `fit: blur`, the picture itself also melts into its blurred surround). |
+| `vignette` | `0.81` | Darken the edges, the reverse of `devignette`: how bright the corners end up relative to the centre, between 0 and 1. |
 | `fps` | `30` | Re-time to this frame rate. |
 | `reverse` | `true` | Play backwards, picture and sound. |
 | `volume` | `1.41` | Multiply the sound's level. |

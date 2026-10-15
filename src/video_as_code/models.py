@@ -59,7 +59,15 @@ class DeriveSpec:
     source pixels), `scale` (w, h; -1 keeps the aspect ratio),
     `devignette` (undoes a vignette already baked into the input - say a
     shot taken from an old edit that darkened its edges: how bright its
-    corners are relative to its centre, 0 < x < 1, see derive.py), `fps`,
+    corners are relative to its centre, 0 < x < 1, see derive.py), `fit`
+    ((w, h, background): the whole picture made to fit inside w x h, the
+    rest filled with `black` or with a blurred, enlarged copy of itself -
+    `blur` - so a portrait photo fills a landscape frame without being
+    cropped), `feather` (soft edges: the picture fades out over its last
+    that many pixels on every side - to black, and with `fit: blur` also
+    into the blurred copy around it), `vignette` (the reverse of
+    `devignette`: darkens the edges,
+    corners at that fraction of the centre's brightness), `fps`,
     `reverse` (picture and sound), `volume` (audio gain factor) and, last,
     `upscale` (4: enlarge a still or gif x4 with Real-ESRGAN, see
     upscale.py - slow, so stills and gifs only). `intra: true` encodes a
@@ -76,6 +84,9 @@ class DeriveSpec:
     crop: Optional[tuple[int, int, int, int]] = None
     scale: Optional[tuple[int, int]] = None
     devignette: Optional[float] = None
+    fit: Optional[tuple[int, int, str]] = None  # (w, h, "blur" | "black")
+    feather: Optional[int] = None  # px
+    vignette: Optional[float] = None
     fps: Optional[float] = None
     reverse: bool = False
     volume: Optional[float] = None
