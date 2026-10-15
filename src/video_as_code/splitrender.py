@@ -40,10 +40,13 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,6 +93,10 @@ class Segment:
     first: int  # frames, inclusive
     last: int
     est_mb: int
+
+    @property
+    def frames(self) -> int:
+        return self.last - self.first + 1
 
 
 # --- trimming -----------------------------------------------------------------
@@ -382,6 +389,66 @@ def _melt_command(melt: str, args: list[str], cap_mb: Optional[int]) -> list[str
     return command
 
 
+# Where a running render publishes how far it got, for anything that wants
+# to show it (a progress bar in another window, say): one JSON file per
+# user, the latest render's - {output, total, done, segment, segments,
+# phase (render/audio/join/done/failed), started, updated (epoch seconds),
+# pid, utc_offset (seconds)}. Written at most once a second, atomically.
+PROGRESS_FILE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "video-as-code" / "render-progress.json"
+_CURRENT_FRAME = re.compile(rb"Current Frame:\s*(\d+)")
+
+
+class Progress:
+    def __init__(self, output: Path, total_frames: int, path: Optional[Path] = None) -> None:
+        self.path = path or PROGRESS_FILE
+        self.state = {"output": str(Path(output).resolve()), "total": total_frames, "done": 0, "segment": 0,
+                      "segments": 0, "phase": "render", "started": time.time(), "pid": os.getpid(),
+                      # so a reader can show clock times in the renderer's own time zone
+                      "utc_offset": time.localtime().tm_gmtoff}
+        self._last_write = 0.0
+        self._write(force=True)
+
+    def update(self, done: int, segment: int, segments: int) -> None:
+        self.state.update(done=done, segment=segment, segments=segments)
+        self._write()
+
+    def phase(self, name: str) -> None:
+        self.state["phase"] = name
+        self._write(force=True)
+
+    def finish(self, phase: str = "done") -> None:
+        if phase == "done":
+            self.state["done"] = self.state["total"]
+        self.phase(phase)
+
+    def _write(self, force: bool = False) -> None:
+        now = time.time()
+        if not force and now - self._last_write < 1:
+            return
+        self._last_write = now
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_name(self.path.name + f".{os.getpid()}.tmp")
+            tmp.write_text(json.dumps({**self.state, "updated": now}), encoding="utf-8")
+            tmp.replace(self.path)
+        except OSError:
+            pass  # showing progress is a nicety: never fail a render over it
+
+
+def _run_melt_with_progress(cmd: list[str], env: dict[str, str], on_frame: Callable[[int], None]) -> tuple[int, str]:
+    """Runs melt, passing each frame it reports ("Current Frame: N", on
+    stderr, \r-separated) to `on_frame`; returns (exit code, stderr's tail)."""
+    proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env)
+    tail = b""
+    assert proc.stderr is not None
+    while chunk := proc.stderr.read1(65536):
+        tail = (tail + chunk)[-8192:]
+        frames = _CURRENT_FRAME.findall(chunk)
+        if frames:
+            on_frame(int(frames[-1]))
+    return proc.wait(), tail.decode(errors="replace")
+
+
 def render(
     kdenlive_path: Path,
     output: Path,
@@ -408,6 +475,7 @@ def render(
     cap = (lambda est: max(int(est * 1.5), est + 512)) if use_scope else (lambda est: None)
     env = probe.melt_env()
     cache_dir.mkdir(parents=True, exist_ok=True)
+    progress = Progress(output, total_frames)
 
     with tempfile.TemporaryDirectory(dir=cache_dir) as tmp_name:
         tmp = Path(tmp_name)
@@ -440,23 +508,27 @@ def render(
                 seg_root = trim(root, seg.first, seg.last)
                 key = segment_key(seg_root, base, [f"{seg.first}-{seg.last}", " ".join(_ENCODE)])
                 parts.append(part)
+                done_before = sum(s.frames for s in segments[:n - 1])
                 if part.exists() and _read(part.with_suffix(".key")) == key:
                     report(msg("split.segment_cached", n=n, total=len(segments), first=seg.first, last=seg.last))
+                    progress.update(done_before + seg.frames, n, len(segments))
                     continue
+                progress.update(done_before, n, len(segments))
                 report(msg("split.segment", n=n, total=len(segments), first=seg.first, last=seg.last, mb=seg.est_mb))
                 seg_xml = tmp / "segment.kdenlive"
                 ET.ElementTree(seg_root).write(seg_xml, encoding="utf-8", xml_declaration=True)
                 rendered = tmp / part.name
-                run = subprocess.run(
+                returncode, stderr = _run_melt_with_progress(
                     _melt_command(
                         melt,
                         [str(seg_xml), "-consumer", f"avformat:{rendered}", *_ENCODE, f"in={seg.first}", f"out={seg.last}"],
                         cap(seg.est_mb),
                     ),
-                    capture_output=True, text=True, env=env,
+                    env,
+                    lambda frame: progress.update(done_before + max(0, min(frame - seg.first, seg.frames)), n, len(segments)),
                 )
-                if run.returncode != 0 or not rendered.exists():
-                    detail = (run.stderr.strip().splitlines() or [f"exit {run.returncode}"])[-1]
+                if returncode != 0 or not rendered.exists():
+                    detail = (stderr.strip().splitlines() or [f"exit {returncode}"])[-1]
                     raise SplitRenderError(msg("split.segment_failed", first=seg.first, last=seg.last, detail=detail))
                 # only a finished segment enters the cache
                 shutil.move(str(rendered), part)
@@ -464,12 +536,15 @@ def render(
         except BaseException:
             if audio_proc is not None:
                 audio_proc.kill()
+            progress.finish("failed")
             raise
 
         if audio_proc is not None:
+            progress.phase("audio")
             report(msg("split.audio_wait"))
             if audio_proc.wait() != 0 or not (tmp / "audio.wav").exists():
                 detail = (tmp / "audio.log").read_text(errors="replace").strip()[-300:]
+                progress.finish("failed")
                 raise SplitRenderError(msg("split.audio_failed", detail=detail))
             shutil.move(str(tmp / "audio.wav"), audio)
             audio.with_suffix(".key").write_text(audio_key, encoding="utf-8")
@@ -480,6 +555,7 @@ def render(
             if old.name not in wanted and old.is_file():
                 old.unlink()
 
+        progress.phase("join")
         report(msg("split.concat"))
         concat_list = tmp / "concat.txt"
         # absolute paths: the concat demuxer resolves relative ones against the list's own directory
@@ -492,7 +568,9 @@ def render(
             capture_output=True, text=True,
         )
         if run.returncode != 0:
+            progress.finish("failed")
             raise SplitRenderError(msg("split.concat_failed", detail=run.stderr.strip()[-300:]))
+    progress.finish()
     return segments
 
 

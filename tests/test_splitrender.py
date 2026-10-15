@@ -3,7 +3,9 @@ XML, and `render --split` end to end with the real melt."""
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -132,6 +134,8 @@ def test_render_split_end_to_end_and_cached(tmp_path: Path, assets_dir: Path, me
     for k, v in extra_env.items():
         monkeypatch.setenv(k, v)
     monkeypatch.setenv("VIDEO_AS_CODE_NO_SCOPE", "1")
+    progress_file = tmp_path / "render-progress.json"
+    monkeypatch.setattr(splitrender, "PROGRESS_FILE", progress_file)
     yaml_path = tmp_path / "project.yaml"
     yaml_path.write_text(
         f"""
@@ -159,8 +163,27 @@ timeline:
     assert _streams(output) == {"video", "audio"}
     err = capsys.readouterr().err
     assert "8 segment(s)" in err
+    state = json.loads(progress_file.read_text(encoding="utf-8"))
+    assert (state["phase"], state["done"], state["total"], state["segments"]) == ("done", 75, 75, 8)
+    assert state["output"] == str(output.resolve())
 
     assert cli.main(["render", str(yaml_path), "-o", str(output), "--split", "--max-mem", "1"]) == 0
     err = capsys.readouterr().err
     assert err.count("unchanged") == 9  # 8 segments + the sound, all from the cache
     assert _frames(output) == 75
+
+
+def test_melt_progress_reaches_the_callback():
+    # melt reports "Current Frame: N, percentage: P" on stderr, \r-separated
+    script = (
+        "import sys, time\n"
+        "for f in (3, 7, 12):\n"
+        "    sys.stderr.write(f'Current Frame: {f:>10}, percentage: {f}\\r'); sys.stderr.flush(); time.sleep(0.05)\n"
+        "sys.stderr.write('oops at the end\\n')\n"
+    )
+    seen: list[int] = []
+    code, tail = splitrender._run_melt_with_progress([sys.executable, "-c", script], dict(os.environ), seen.append)
+    assert code == 0
+    assert seen and seen[-1] == 12 and seen == sorted(seen)
+    assert tail.strip().endswith("oops at the end")
+
