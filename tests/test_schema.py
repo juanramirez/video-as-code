@@ -1828,3 +1828,43 @@ def test_bin_local_name_invalid(tmp_path: Path, bin_entry: str, needle: str):
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(_write_yaml(tmp_path, _source_yaml(bin_entry)))
     assert needle in str(exc.value)
+
+
+def _kf_project(assets_dir: Path, kf: str) -> str:
+    return f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 4, color_grade_keyframes: {kf}}}
+"""
+
+
+def test_color_grade_keyframes_resolve_to_clip_frames(tmp_path: Path, assets_dir: Path):
+    kf = "[{at: 0, lift: [0, 0, 0]}, {at: 1.5, lift: [0.2, 0.1, 0]}]"
+    placement = load_and_resolve(_write_yaml(tmp_path, _kf_project(assets_dir, kf))).tracks[0].placements[0]
+    assert placement.color_grade_keyframes == [(0, {"lift": (0.0, 0.0, 0.0)}), (37, {"lift": (0.2, 0.1, 0.0)})] or \
+        placement.color_grade_keyframes == [(0, {"lift": (0.0, 0.0, 0.0)}), (38, {"lift": (0.2, 0.1, 0.0)})]
+
+
+@pytest.mark.parametrize(
+    "kf",
+    [
+        "[]",
+        "[{at: 1, lift: [0, 0, 0]}]",  # not starting at 0
+        "[{at: 0, lift: [0, 0, 0]}, {at: 0, lift: [0, 0, 0]}]",  # not increasing
+        "[{at: 0, lift: [0, 0, 0]}, {at: 1, gamma: [1, 1, 1]}]",  # different groups
+        "[{at: 0, lift: [0, 0]}]",
+        "[{at: 0, tint: [0, 0, 0]}]",
+        "[{at: 0, lift: [-1, 0, 0]}]",
+        "[{at: 0}]",
+    ],
+)
+def test_color_grade_keyframes_invalid(tmp_path: Path, assets_dir: Path, kf: str):
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, _kf_project(assets_dir, kf)))
+    assert "color_grade_keyframes" in str(exc.value)

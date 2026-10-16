@@ -2981,3 +2981,44 @@ timeline:
     assert changes, "the specks never change"
     # every change on a multiple of 3 (frames 0-2 the same, 3-5 the same...)
     assert all(i % 3 == 0 for i in changes), changes
+
+
+def test_color_grade_keyframes_animate_the_grade(tmp_path: Path, melt):
+    """`color_grade_keyframes`: lift eased from 0 to 0.3 over the first
+    second, then held - the picture brightens over that second, on the
+    clip's own clock (it starts 1 s into the timeline)."""
+    exe, extra_env = melt
+    gray = tmp_path / "dark.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0x202020:size=320x240",
+         "-frames:v", "1", str(gray)],
+        check=True,
+    )
+    yaml_path = tmp_path / "kf.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - {{id: dark, path: {gray}}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: dark, start: 0, duration: 1}}
+        - {{clip: dark, start: 1, duration: 2, color_grade_keyframes: [{{at: 0, lift: [0, 0, 0]}}, {{at: 1, lift: [0.3, 0.3, 0.3]}}]}}
+""",
+        encoding="utf-8",
+    )
+    kdenlive = tmp_path / "kf.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive)
+    out = tmp_path / "kf.mov"
+    result = subprocess.run([exe, str(kdenlive), "-consumer", f"avformat:{out}", "vcodec=png", "an=1"],
+                            capture_output=True, text=True, env={**os.environ, **extra_env, "LC_ALL": "C"}, timeout=300)
+    assert result.returncode == 0, result.stderr
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(out), "-vf", "format=gray", "-f", "rawvideo", "-"],
+                         capture_output=True, check=True).stdout
+    lum = [sum(raw[i:i + 320 * 240]) / (320 * 240) for i in range(0, len(raw), 320 * 240)]
+    assert abs(lum[25] - lum[10]) < 2  # the clip starts ungraded
+    assert lum[37] > lum[26] + 5  # brightening through its first second
+    assert lum[50] > lum[37] + 5
+    assert abs(lum[70] - lum[55]) < 2  # then held

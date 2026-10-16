@@ -345,6 +345,12 @@ class ClipPlacementSpec:
     # dead no-op filter emitted, same discipline `old_film`'s
     # false-means-no-filter toggles hold to).
     color_grade: Optional[dict[str, tuple[float, float, float]]] = None
+    # `color_grade_keyframes: [{at: 0, lift: [..]}, {at: 1.5, lift: [..]}]`:
+    # a second grade on top of `color_grade`, animated - each group eased
+    # linearly from one keyframe to the next (`at`: seconds into the clip,
+    # the first at 0; every keyframe with the same groups), held after the
+    # last. E.g. a brightness swell that rises and falls over several clips.
+    color_grade_keyframes: Optional[list[tuple[float, dict[str, tuple[float, float, float]]]]] = None
     # LUT-based grading (`avfilter.lut3d`) was investigated and dropped -
     # see ROADMAP.md: on this project's own preferred from-source melt
     # build it hits the exact same "Cannot set src colorspace" bug
@@ -537,6 +543,8 @@ class ResolvedPlacement:
     film_grain_brightness: int = 70
     # Color grading - see ClipPlacementSpec.
     color_grade: Optional[dict[str, tuple[float, float, float]]] = None
+    # (clip-relative frame, groups) - see ClipPlacementSpec.color_grade_keyframes
+    color_grade_keyframes: Optional[list[tuple[int, dict[str, tuple[float, float, float]]]]] = None
     # Video stabilization - see ClipPlacementSpec.
     stabilize: Optional[bool] = None
 

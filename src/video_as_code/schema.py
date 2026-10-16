@@ -1016,6 +1016,43 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
             if valid:
                 color_grade = parsed_cg
 
+    cg_kf_raw = item.get("color_grade_keyframes")
+    color_grade_keyframes: list[tuple[float, dict[str, tuple[float, float, float]]]] | None = None
+    if cg_kf_raw is not None:
+        parsed_kf = []
+        ok = isinstance(cg_kf_raw, list) and bool(cg_kf_raw)
+        for kf in cg_kf_raw if ok else ():
+            at = kf.get("at") if isinstance(kf, dict) else None
+            groups = {k: v for k, v in kf.items() if k != "at"} if isinstance(kf, dict) else {}
+            if not (isinstance(at, (int, float)) and not isinstance(at, bool) and at >= 0 and groups):
+                ok = False
+                break
+            parsed = {}
+            for key, val in groups.items():
+                if key not in ("lift", "gamma", "gain") or not (isinstance(val, (list, tuple)) and len(val) == 3):
+                    ok = False
+                    break
+                try:
+                    triple = tuple(float(v) for v in val)
+                except (TypeError, ValueError):
+                    ok = False
+                    break
+                if min(triple) < 0:
+                    ok = False
+                    break
+                parsed[key] = triple
+            if not ok:
+                break
+            parsed_kf.append((float(at), parsed))
+        if ok:
+            ats = [a for a, _ in parsed_kf]
+            ok = ats[0] == 0 and all(b > a for a, b in zip(ats, ats[1:]))
+            ok = ok and all(set(g) == set(parsed_kf[0][1]) for _, g in parsed_kf)
+        if ok:
+            color_grade_keyframes = parsed_kf
+        else:
+            errors.append(msg("validation.color_grade_keyframes_invalid", ctx=ctx))
+
     stabilize_raw = item.get("stabilize")
     stabilize: bool | None = None
     if stabilize_raw is None:
@@ -1077,6 +1114,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         film_grain_brightness=grain_brightness,
         film_grain=old_film_flags["film_grain"],
         color_grade=color_grade,
+        color_grade_keyframes=color_grade_keyframes,
         stabilize=stabilize,
     )
 
@@ -1530,6 +1568,9 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     focus_rect=placement.focus_rect,
                     focus_blur=placement.focus_blur,
                     color_grade=placement.color_grade,
+                    color_grade_keyframes=None if placement.color_grade_keyframes is None else [
+                        (fps.seconds_to_frames(at), groups) for at, groups in placement.color_grade_keyframes
+                    ],
                     old_film=placement.old_film,
                     film_dust=placement.film_dust,
                     film_dust_style=placement.film_dust_style,

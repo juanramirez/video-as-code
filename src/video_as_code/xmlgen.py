@@ -782,6 +782,22 @@ def _add_color_grade_filter(ids: _IdCounters, entry: ET.Element, placement: Reso
     _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_color_grade_keyframes_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """`color_grade_keyframes`: a second `lift_gamma_gain`, after
+    `color_grade`'s, with MLT's animated values (`frame=value;...`,
+    linear between keyframes). Its in/out are the clip's own, so frame 0
+    is the clip's first."""
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter"),
+                                        "in": str(placement.in_frame), "out": str(placement.out_frame)})
+    _prop(f, "mlt_service", "lift_gamma_gain")
+    for group in ("lift", "gamma", "gain"):
+        if group not in placement.color_grade_keyframes[0][1]:
+            continue
+        for k, ch in enumerate("rgb"):
+            _prop(f, f"{group}_{ch}", ";".join(f"{at}={g[group][k]:g}" for at, g in placement.color_grade_keyframes))
+    _prop(f, "kdenlive:collapsed", 0)
+
+
 def _add_deshake_filter(ids: _IdCounters, entry: ET.Element) -> None:
     """Video stabilization (v0.10 headline) via MLT's own `deshake`
     filter (Vid.Stab, GPLv2 - the single-pass version of `vidstab`, no
@@ -944,6 +960,8 @@ def _build_track(
             _add_old_film_filters(ids, entry, placement, project.total_frames)
             if placement.color_grade is not None:
                 _add_color_grade_filter(ids, entry, placement)
+            if placement.color_grade_keyframes is not None:
+                _add_color_grade_keyframes_filter(ids, entry, placement)
             if placement.stabilize:
                 _add_deshake_filter(ids, entry)
         if placement.mute:
