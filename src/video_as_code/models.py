@@ -313,8 +313,29 @@ class ClipPlacementSpec:
     # for a user-facing YAML field).
     old_film: Optional[bool] = None
     film_dust: Optional[bool] = None
+    # `film_dust: {style, size, count}` instead of `true`: `svg` (the
+    # default) draws MLT's dust pictures, `size` % of the clip's width
+    # across; `dots` draws small round specks instead, `size` px at most in
+    # radius (see mltdata.py for how). `count`: at most that many per frame.
+    film_dust_style: str = "svg"
+    film_dust_size: int = 2
+    film_dust_count: int = 10
+    # `pictures:` (svg only): which pictures to draw from instead of MLT's
+    # five - each MLT's own by name (`dust1`..`dust5`) or an .svg path, one
+    # picked at random per speck, so a repeated entry comes up more often
+    film_dust_pictures: Optional[tuple[str, ...]] = None
+    # `hold:` the same specks for that many frames running (default 1: new
+    # ones every frame) - see xmlgen._old_film_span
+    film_dust_hold: int = 1
     film_scratches: Optional[bool] = None
     film_grain: Optional[bool] = None
+    # `film_grain: {noise, contrast, brightness}` instead of `true`: `noise`
+    # how strong, `contrast`/`brightness` in % with 100 meaning unchanged -
+    # what a map defaults to; `true` keeps kdenlive's 40/160/70, which also
+    # darkens and hardens the whole picture.
+    film_grain_noise: int = 40
+    film_grain_contrast: int = 160
+    film_grain_brightness: int = 70
     # Professional color grading (mlt_service "lift_gamma_gain",
     # Meltytech, LGPLv2.1) - "lift=shadows, gamma=midtones,
     # gain=highlights", the classic three-way grading formula. Any
@@ -503,8 +524,17 @@ class ResolvedPlacement:
     # "Old film" look family - see ClipPlacementSpec.
     old_film: Optional[bool] = None
     film_dust: Optional[bool] = None
+    film_dust_style: str = "svg"
+    film_dust_size: int = 2
+    film_dust_count: int = 10
+    # MLT's own pictures by name, the others as absolute paths
+    film_dust_pictures: Optional[tuple[str, ...]] = None
+    film_dust_hold: int = 1
     film_scratches: Optional[bool] = None
     film_grain: Optional[bool] = None
+    film_grain_noise: int = 40
+    film_grain_contrast: int = 160
+    film_grain_brightness: int = 70
     # Color grading - see ClipPlacementSpec.
     color_grade: Optional[dict[str, tuple[float, float, float]]] = None
     # Video stabilization - see ClipPlacementSpec.

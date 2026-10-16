@@ -656,7 +656,31 @@ def _add_freeze_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedP
     _prop(f, "kdenlive:collapsed", 0)
 
 
-def _add_old_film_filters(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+def _old_film_span(placement: ResolvedPlacement, total_frames: int, hold: int = 1) -> dict[str, str]:
+    """`in`/`out` for an old-film filter, so its randomness follows the
+    TIMELINE. `oldfilm` and `dust` seed their random numbers with the
+    filter's progress (srand(progress * 10000)): with no in/out on the
+    filter that progress never moves, so every frame of every clip got the
+    same dust specks and the same jitter/flicker (measured 2026-10-14);
+    with the clip's own in/out it would run 0 -> 1 in each clip, repeating
+    the same sequence in every clip of the same length. Shifting the
+    filter's range back by the clip's start makes progress = timeline
+    frame / total frames: a different seed on every frame of the video
+    (distinct as long as it's under 10000 frames, ~5.5 min at 30 fps;
+    beyond that neighbouring frames may share one).
+
+    `hold` > 1 (film_dust's) stretches the range instead to hold * 10000
+    frames: progress * 10000 = timeline frame / hold, so the seed - and the
+    specks - stay put for `hold` frames running (one less than that, so a
+    whole multiple isn't rounded down into the previous run)."""
+    first = placement.in_frame - placement.start_frame
+    length = max(total_frames, 1) if hold == 1 else hold * 10000
+    return {"in": str(first), "out": str(first + length - 1 - (hold > 1))}
+
+
+def _add_old_film_filters(
+    ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement, total_frames: int
+) -> None:
     """The "old film" look family (v0.8): four independent, freely
     combinable kdenlive-native filters (Marco Gittler, GPL, not
     frei0r), each a plain on/off toggle applying kdenlive's own filter
@@ -683,9 +707,11 @@ def _add_old_film_filters(ids: _IdCounters, entry: ET.Element, placement: Resolv
     Applied after every other clip-level filter (fade/crop/chroma_key/
     overlay/Ken Burns/focus-pull), in this fixed order among themselves
     - order doesn't functionally matter between the four, but a
-    consistent one keeps generated XML diffs stable."""
+    consistent one keeps generated XML diffs stable. Each gets a timeline-
+    wide in/out (see _old_film_span)."""
+    span = _old_film_span(placement, total_frames)
     if placement.old_film:
-        f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), **span})
         _prop(f, "mlt_service", "oldfilm")
         _prop(f, "delta", 14)
         _prop(f, "every", 20)
@@ -697,13 +723,16 @@ def _add_old_film_filters(ids: _IdCounters, entry: ET.Element, placement: Resolv
         _prop(f, "unevendevelop_duration", 70)
         _prop(f, "kdenlive:collapsed", 0)
     if placement.film_dust:
-        f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+        dust_span = _old_film_span(placement, total_frames, placement.film_dust_hold)
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), **dust_span})
         _prop(f, "mlt_service", "dust")
-        _prop(f, "maxdiameter", 2)
-        _prop(f, "maxcount", 10)
+        # with `dots`, the same filter draws round specks instead of its
+        # pictures when melt runs on mltdata's copy of its data folder
+        _prop(f, "maxdiameter", placement.film_dust_size)
+        _prop(f, "maxcount", placement.film_dust_count)
         _prop(f, "kdenlive:collapsed", 0)
     if placement.film_scratches:
-        f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), **span})
         _prop(f, "mlt_service", "lines")
         _prop(f, "line_width", 2)
         _prop(f, "num", 5)
@@ -711,11 +740,11 @@ def _add_old_film_filters(ids: _IdCounters, entry: ET.Element, placement: Resolv
         _prop(f, "lighter", 40)
         _prop(f, "kdenlive:collapsed", 0)
     if placement.film_grain:
-        f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+        f = ET.SubElement(entry, "filter", {"id": ids.next("filter"), **span})
         _prop(f, "mlt_service", "grain")
-        _prop(f, "noise", 40)
-        _prop(f, "contrast", 160)
-        _prop(f, "brightness", 70)
+        _prop(f, "noise", placement.film_grain_noise)
+        _prop(f, "contrast", placement.film_grain_contrast)
+        _prop(f, "brightness", placement.film_grain_brightness)
         _prop(f, "kdenlive:collapsed", 0)
 
 
@@ -912,7 +941,7 @@ def _build_track(
                 _add_pillar_echo_filter(ids, entry, placement)
             if placement.freeze_at_frame is not None:
                 _add_freeze_filter(ids, entry, placement)
-            _add_old_film_filters(ids, entry, placement)
+            _add_old_film_filters(ids, entry, placement, project.total_frames)
             if placement.color_grade is not None:
                 _add_color_grade_filter(ids, entry, placement)
             if placement.stabilize:

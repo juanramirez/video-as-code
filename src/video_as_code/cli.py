@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from . import autoprune, fetch, fetch_resolve, i18n, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import autoprune, fetch, fetch_resolve, i18n, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -251,6 +251,20 @@ def cmd_render(args: argparse.Namespace) -> int:
         # (with --proxy the originals are kept too: recorded as used above)
         _autoprune(yaml_path, resolved)
 
+    # C locale, or decimals like `gain: 2.5`/`speed: 1.08` get truncated
+    # under a comma-decimal locale - see probe.melt_env; and, for
+    # `film_dust: {style: dots}`, melt's data folder without its dust
+    # pictures (with `pictures:`, with the chosen ones) - see mltdata.py
+    mlt_data = None
+    dust_pictures = mltdata.wanted_pictures(resolved)
+    if mltdata.wants_dots(resolved) or dust_pictures:
+        data_dir = mltdata.find_data_dir(melt)
+        if data_dir is None:
+            print(msg("cli.render_no_mlt_data", melt=melt), file=sys.stderr)
+            return 1
+        mlt_data = mltdata.pictures_data_dir(data_dir, mltdata.default_cache_root(), dust_pictures or ())
+    env = probe.melt_env(mlt_data=mlt_data)
+
     with contextlib.ExitStack() as stack:
         if args.keep_kdenlive:
             kdenlive_path = yaml_path.with_suffix(".kdenlive")
@@ -273,6 +287,7 @@ def cmd_render(args: argparse.Namespace) -> int:
                     yaml_path.parent / splitrender.CACHE_DIR,
                     budget_mb=args.max_mem,
                     report=lambda text: print(text, file=sys.stderr),
+                    env=env,
                 )
             except (KdenliveAsCodeError, OSError) as exc:
                 print(str(exc), file=sys.stderr)
@@ -285,9 +300,7 @@ def cmd_render(args: argparse.Namespace) -> int:
             [melt, str(kdenlive_path), "-consumer", f"avformat:{output}"],
             capture_output=True,
             text=True,
-            # C locale, or decimals like `gain: 2.5`/`speed: 1.08` get
-            # truncated under a comma-decimal locale - see probe.melt_env
-            env=probe.melt_env(),
+            env=env,
         )
         if result.returncode != 0:
             print(msg("cli.render_failed", path=output, stderr=result.stderr.strip()), file=sys.stderr)

@@ -577,6 +577,83 @@ timeline:
     assert placement.film_scratches is None
 
 
+def _dust_project(assets_dir: Path, *dusts: str) -> str:
+    clips = "\n".join(
+        f"        - {{clip: photo, start: {i}, duration: 1, film_dust: {d}}}" for i, d in enumerate(dusts)
+    )
+    return f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+{clips}
+"""
+
+
+def test_film_dust_map_resolves(tmp_path: Path, assets_dir: Path):
+    resolved = load_and_resolve(_write_yaml(tmp_path, _dust_project(assets_dir, "{style: dots, size: 3, count: 6}")))
+    placement = resolved.tracks[0].placements[0]
+    assert placement.film_dust is True
+    assert (placement.film_dust_style, placement.film_dust_size, placement.film_dust_count) == ("dots", 3, 6)
+    # `true` keeps the old defaults
+    plain = load_and_resolve(_write_yaml(tmp_path, _dust_project(assets_dir, "true"))).tracks[0].placements[0]
+    assert (plain.film_dust_style, plain.film_dust_size, plain.film_dust_count) == ("svg", 2, 10)
+    assert plain.film_dust_hold == 1
+    held = load_and_resolve(_write_yaml(tmp_path, _dust_project(assets_dir, "{hold: 4}"))).tracks[0].placements[0]
+    assert held.film_dust_hold == 4
+
+
+def test_film_dust_pictures_resolve(tmp_path: Path, assets_dir: Path):
+    """MLT's own pictures stay names; the project's resolve against its folder."""
+    (tmp_path / "speck.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10'/>")
+    resolved = load_and_resolve(_write_yaml(tmp_path, _dust_project(assets_dir, "{pictures: [dust3, speck.svg, speck.svg]}")))
+    placement = resolved.tracks[0].placements[0]
+    assert placement.film_dust_pictures == ("dust3", str((tmp_path / "speck.svg").resolve()), str((tmp_path / "speck.svg").resolve()))
+
+
+@pytest.mark.parametrize(
+    "dusts, needle",
+    [
+        (["{style: blobs}"], "film_dust"),
+        (["{style: dots, size: 0}"], "film_dust"),
+        (["{style: dots, radius: 3}"], "film_dust"),
+        (["{style: dots}", "true"], "same style"),
+        (["{style: dots, pictures: [dust3]}"], "film_dust"),
+        (["{pictures: []}"], "film_dust"),
+        (["{pictures: [dust9]}"], "dust9"),
+        (["{hold: 0}"], "film_dust"),
+        (["{pictures: [dust3]}", "{pictures: [dust4]}"], "same pictures"),
+        (["{pictures: [dust3]}", "true"], "same pictures"),
+    ],
+)
+def test_film_dust_map_invalid(tmp_path: Path, assets_dir: Path, dusts: list[str], needle: str):
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, _dust_project(assets_dir, *dusts)))
+    assert needle in str(exc.value)
+
+
+def test_film_grain_map_resolves(tmp_path: Path, assets_dir: Path):
+    grain = _dust_project(assets_dir, "true").replace("film_dust: true", "film_grain: {noise: 12}")
+    placement = load_and_resolve(_write_yaml(tmp_path, grain)).tracks[0].placements[0]
+    assert placement.film_grain is True
+    # a map leaves the picture's levels alone unless told otherwise
+    assert (placement.film_grain_noise, placement.film_grain_contrast, placement.film_grain_brightness) == (12, 100, 100)
+    plain = _dust_project(assets_dir, "true").replace("film_dust: true", "film_grain: true")
+    p = load_and_resolve(_write_yaml(tmp_path, plain)).tracks[0].placements[0]
+    assert (p.film_grain_noise, p.film_grain_contrast, p.film_grain_brightness) == (40, 160, 70)
+
+
+def test_film_grain_map_invalid(tmp_path: Path, assets_dir: Path):
+    bad = _dust_project(assets_dir, "true").replace("film_dust: true", "film_grain: {noise: -1}")
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, bad))
+    assert "film_grain" in str(exc.value)
+
+
 def test_old_film_flags_must_be_boolean(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}

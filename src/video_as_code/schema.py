@@ -138,6 +138,26 @@ def load_yaml(path: str | Path) -> ProjectDoc:
     )
 
 
+_MLT_DUST_PICTURES = ("dust1", "dust2", "dust3", "dust4", "dust5")
+
+
+def _dust_pictures(pictures: tuple[str, ...] | None, base: Path, ctx: str, errors: list[str]) -> tuple[str, ...] | None:
+    """`film_dust: {pictures}` resolved: MLT's own by name, the rest as
+    absolute paths (relative to the project file) - existing .svg files."""
+    if pictures is None:
+        return None
+    out = []
+    for p in pictures:
+        if p in _MLT_DUST_PICTURES:
+            out.append(p)
+            continue
+        path = Path(p) if Path(p).is_absolute() else base / p
+        if path.suffix.lower() != ".svg" or not path.is_file():
+            errors.append(msg("validation.film_dust_picture_missing", ctx=ctx, picture=p))
+        out.append(str(path.resolve()))
+    return tuple(out)
+
+
 def load_and_resolve(path: str | Path) -> ResolvedProject:
     """High-level entry point: loads the YAML, compiles `scenes:` (if any)
     into explicit tracks/clips, and validates+resolves the result."""
@@ -929,6 +949,37 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         freeze_at = None
 
     old_film_flags = {}
+    dust_style, dust_size, dust_count, dust_pictures, dust_hold = "svg", 2, 10, None, 1
+    raw_dust = item.get("film_dust")
+    if isinstance(raw_dust, dict):
+        # {style: svg | dots, size, count, pictures, hold} - see ClipPlacementSpec.film_dust_style
+        dust_style = raw_dust.get("style", "svg")
+        dust_size = raw_dust.get("size", 2 if dust_style == "svg" else 4)
+        dust_count = raw_dust.get("count", 10)
+        dust_pictures = raw_dust.get("pictures")
+        dust_hold = raw_dust.get("hold", 1)
+        ok = not set(raw_dust) - {"style", "size", "count", "pictures", "hold"} and dust_style in ("svg", "dots")
+        ok = ok and all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in (dust_size, dust_count, dust_hold))
+        if dust_pictures is not None:
+            ok = ok and dust_style == "svg" and isinstance(dust_pictures, list) and bool(dust_pictures)
+            ok = ok and all(isinstance(v, str) and v.strip() for v in dust_pictures)
+            dust_pictures = tuple(dust_pictures) if ok else None
+        if not ok:
+            errors.append(msg("validation.film_dust_invalid", ctx=ctx, value=raw_dust))
+        item = {**item, "film_dust": True}
+    grain_noise, grain_contrast, grain_brightness = 40, 160, 70
+    raw_grain = item.get("film_grain")
+    if isinstance(raw_grain, dict):
+        # {noise, contrast, brightness} - see ClipPlacementSpec.film_grain_noise
+        grain_noise = raw_grain.get("noise", 40)
+        grain_contrast = raw_grain.get("contrast", 100)
+        grain_brightness = raw_grain.get("brightness", 100)
+        ok = not set(raw_grain) - {"noise", "contrast", "brightness"}
+        ok = ok and all(isinstance(v, int) and not isinstance(v, bool) and v >= 0
+                        for v in (grain_noise, grain_contrast, grain_brightness))
+        if not ok:
+            errors.append(msg("validation.film_grain_invalid", ctx=ctx, value=raw_grain))
+        item = {**item, "film_grain": True}
     for field_name in ("old_film", "film_dust", "film_scratches", "film_grain"):
         raw = item.get(field_name)
         if raw is None:
@@ -1015,7 +1066,15 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         focus_blur=focus_blur,
         old_film=old_film_flags["old_film"],
         film_dust=old_film_flags["film_dust"],
+        film_dust_style=dust_style,
+        film_dust_size=dust_size,
+        film_dust_count=dust_count,
+        film_dust_pictures=dust_pictures,
+        film_dust_hold=dust_hold if isinstance(dust_hold, int) else 1,
         film_scratches=old_film_flags["film_scratches"],
+        film_grain_noise=grain_noise,
+        film_grain_contrast=grain_contrast,
+        film_grain_brightness=grain_brightness,
         film_grain=old_film_flags["film_grain"],
         color_grade=color_grade,
         stabilize=stabilize,
@@ -1473,7 +1532,15 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     color_grade=placement.color_grade,
                     old_film=placement.old_film,
                     film_dust=placement.film_dust,
+                    film_dust_style=placement.film_dust_style,
+                    film_dust_size=placement.film_dust_size,
+                    film_dust_count=placement.film_dust_count,
+                    film_dust_hold=placement.film_dust_hold,
+                    film_dust_pictures=_dust_pictures(placement.film_dust_pictures, doc.source_path.parent, ctx, errors),
                     film_scratches=placement.film_scratches,
+                    film_grain_noise=placement.film_grain_noise,
+                    film_grain_contrast=placement.film_grain_contrast,
+                    film_grain_brightness=placement.film_grain_brightness,
                     film_grain=placement.film_grain,
                     stabilize=placement.stabilize,
                 )
@@ -1507,6 +1574,14 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             )
         )
 
+    # dust drawn as dots or as pictures is one choice for the whole render
+    # (melt's data folder, see mltdata.py), not per clip
+    dust_styles = {p.film_dust_style for t in resolved_tracks for p in t.placements if p.film_dust}
+    if len(dust_styles) > 1:
+        errors.append(msg("validation.film_dust_mixed_styles"))
+    dust_pictures = {p.film_dust_pictures for t in resolved_tracks for p in t.placements if p.film_dust}
+    if len(dust_pictures) > 1:
+        errors.append(msg("validation.film_dust_mixed_pictures"))
     if errors:
         raise ValidationErrors(errors)
 

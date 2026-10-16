@@ -458,6 +458,7 @@ def render(
     budget_mb: Optional[int] = None,
     report: Callable[[str], None] = lambda text: None,
     memory_cap: Optional[bool] = None,
+    env: Optional[dict[str, str]] = None,
 ) -> list[Segment]:
     """Renders `kdenlive_path` to `output` in segments (see the module
     docstring); returns the plan used. Raises SplitRenderError."""
@@ -473,7 +474,7 @@ def render(
     # the cap leaves room for the estimate being low; it's there so that
     # running out kills melt, not the session
     cap = (lambda est: max(int(est * 1.5), est + 512)) if use_scope else (lambda est: None)
-    env = probe.melt_env()
+    env = env or probe.melt_env()
     cache_dir.mkdir(parents=True, exist_ok=True)
     progress = Progress(output, total_frames)
 

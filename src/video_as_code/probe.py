@@ -50,7 +50,7 @@ def find_melt() -> str | None:
     return shutil.which("melt") or shutil.which("melt-7")
 
 
-def melt_env(base: dict[str, str] | None = None) -> dict[str, str]:
+def melt_env(base: dict[str, str] | None = None, mlt_data: Path | None = None) -> dict[str, str]:
     """Environment to run `melt` with: the caller's own (or `base`), plus
     `LC_ALL=C`.
 
@@ -65,6 +65,8 @@ def melt_env(base: dict[str, str] | None = None) -> dict[str, str]:
     melt process makes every decimal in the XML mean what it says."""
     env = dict(os.environ if base is None else base)
     env["LC_ALL"] = "C"
+    if mlt_data is not None:
+        env["MLT_DATA"] = str(mlt_data)  # see mltdata.py
     return env
 
 

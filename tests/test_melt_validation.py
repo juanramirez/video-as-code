@@ -2793,3 +2793,191 @@ timeline:
         mismatch = np.abs(frame(full, t) - frame(proxied, t)).mean()
         own_change = np.abs(frame(full, t) - frame(full, t + 0.2)).mean()
         assert mismatch < own_change, (t, mismatch, own_change)
+
+
+def test_film_dust_changes_every_frame_and_between_clips(tmp_path: Path, melt):
+    """`dust` (like `oldfilm`) seeds its randomness with the filter's
+    progress: the specks must land elsewhere on every frame, and two clips
+    of the same length mustn't repeat the same sequence (see
+    xmlgen._old_film_span) - before, every frame of every clip had the
+    very same specks."""
+    gray = tmp_path / "gray.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0x808080:size=320x240",
+         "-frames:v", "1", str(gray)],
+        check=True,
+    )
+    yaml_path = tmp_path / "dust.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - {{id: gray, path: {gray}}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: gray, start: 0, duration: 1, film_dust: true}}
+        - {{clip: gray, start: 1, duration: 1, film_dust: true}}
+""",
+        encoding="utf-8",
+    )
+    kdenlive = tmp_path / "dust.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive)
+    out = tmp_path / "dust.mp4"
+    result = _run_melt(melt, [str(kdenlive), "-consumer", f"avformat:{out}", "vcodec=libx264", "an=1"], timeout=300)
+    assert result.returncode == 0, result.stderr
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(out), "-vf", "format=gray", "-f", "rawvideo", "-"],
+                         capture_output=True, check=True).stdout
+    frames = [raw[i:i + 320 * 240] for i in range(0, len(raw), 320 * 240)]
+    specks = [{j for j, v in enumerate(f) if abs(v - 128) > 12} for f in frames]
+
+    def shared(a: set, b: set) -> float:
+        return len(a & b) / max(1, min(len(a), len(b)))
+
+    assert sum(1 for s in specks if s) > len(specks) // 2  # there are specks at all
+    assert shared(specks[5], specks[6]) < 0.5  # they move from frame to frame...
+    assert shared(specks[5], specks[30]) < 0.5  # ...and the 2nd clip doesn't repeat the 1st
+
+
+def test_film_dust_dots_draws_small_round_specks(tmp_path: Path, melt):
+    """`film_dust: {style: dots}` (see mltdata.py): melt run on a copy of
+    its data folder without the dust pictures draws round specks at most
+    `size` px in radius - against ~2% of the width (here ~6 px across,
+    shaped like blots) with the pictures."""
+    from video_as_code import mltdata, probe
+
+    exe, extra_env = melt
+    data_dir = mltdata.find_data_dir(exe)
+    if data_dir is None or not list((data_dir / "oldfilm").glob("dust*.svg")):
+        pytest.skip("this melt's data folder (with its dust pictures) wasn't found")
+    gray = tmp_path / "gray.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0x808080:size=320x240",
+         "-frames:v", "1", str(gray)],
+        check=True,
+    )
+    yaml_path = tmp_path / "dots.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - {{id: gray, path: {gray}}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: gray, start: 0, duration: 2, film_dust: {{style: dots, size: 3, count: 20}}}}
+""",
+        encoding="utf-8",
+    )
+    kdenlive = tmp_path / "dots.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive)
+
+    def render(mlt_data) -> list[list[int]]:
+        out = tmp_path / f"dots-{mlt_data is not None}.mp4"
+        env = probe.melt_env({**os.environ, **extra_env}, mlt_data=mlt_data)
+        result = subprocess.run([exe, str(kdenlive), "-consumer", f"avformat:{out}", "vcodec=libx264", "an=1"],
+                                capture_output=True, text=True, env=env, timeout=300)
+        assert result.returncode == 0, result.stderr
+        raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(out), "-vf", "format=gray", "-f", "rawvideo", "-"],
+                             capture_output=True, check=True).stdout
+        return [[j for j, v in enumerate(raw[i:i + 320 * 240]) if abs(v - 128) > 8]
+                for i in range(0, len(raw), 320 * 240)]
+
+    pictures = render(None)
+    dots = render(mltdata.dots_data_dir(data_dir, tmp_path / "cache"))
+    assert sum(1 for m in dots if m) > len(dots) // 2  # specks drawn at all
+    assert dots != pictures  # the data folder swap is what changes them
+    # at most 20 specks of at most 6x6 px each (radius 3)
+    assert max(len(m) for m in dots) <= 20 * (2 * 3) ** 2
+
+
+
+def test_film_dust_pictures_draws_only_the_chosen_ones(tmp_path: Path, melt):
+    """`film_dust: {pictures}` (see mltdata.py): melt run on a copy of its
+    data folder whose dust pictures are the chosen ones - here a white
+    square, so every speck drawn is light, where MLT's own are mostly dark."""
+    from video_as_code import mltdata, probe
+
+    exe, extra_env = melt
+    data_dir = mltdata.find_data_dir(exe)
+    if data_dir is None or not list((data_dir / "oldfilm").glob("dust*.svg")):
+        pytest.skip("this melt's data folder (with its dust pictures) wasn't found")
+    gray = tmp_path / "gray.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0x808080:size=320x240",
+         "-frames:v", "1", str(gray)],
+        check=True,
+    )
+    (tmp_path / "white.svg").write_text(
+        "<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='#fff'/></svg>"
+    )
+    yaml_path = tmp_path / "pics.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - {{id: gray, path: {gray}}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: gray, start: 0, duration: 2, film_dust: {{size: 5, count: 20, pictures: [white.svg]}}}}
+""",
+        encoding="utf-8",
+    )
+    resolved = load_and_resolve(yaml_path)
+    kdenlive = tmp_path / "pics.kdenlive"
+    xmlgen.write(resolved, kdenlive)
+    out = tmp_path / "pics.mp4"
+    mlt_data = mltdata.pictures_data_dir(data_dir, tmp_path / "cache", mltdata.wanted_pictures(resolved))
+    env = probe.melt_env({**os.environ, **extra_env}, mlt_data=mlt_data)
+    result = subprocess.run([exe, str(kdenlive), "-consumer", f"avformat:{out}", "vcodec=libx264", "an=1"],
+                            capture_output=True, text=True, env=env, timeout=300)
+    assert result.returncode == 0, result.stderr
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(out), "-vf", "format=gray", "-f", "rawvideo", "-"],
+                         capture_output=True, check=True).stdout
+    light = sum(1 for v in raw if v > 128 + 40)
+    dark = sum(1 for v in raw if v < 128 - 40)
+    assert light > 1000  # the squares (16 px across: 5% of 320) are drawn
+    assert dark < light // 50  # and none of MLT's dark pictures
+
+
+def test_film_dust_hold_keeps_the_specks_for_that_many_frames(tmp_path: Path, melt):
+    """`film_dust: {hold: 3}` (see xmlgen._old_film_span): the same specks
+    for 3 frames running, then new ones."""
+    exe, extra_env = melt
+    gray = tmp_path / "gray.png"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=0x808080:size=320x240",
+         "-frames:v", "1", str(gray)],
+        check=True,
+    )
+    yaml_path = tmp_path / "hold.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - {{id: gray, path: {gray}}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: gray, start: 0, duration: 2, film_dust: {{size: 5, count: 20, hold: 3}}}}
+""",
+        encoding="utf-8",
+    )
+    kdenlive = tmp_path / "hold.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive)
+    out = tmp_path / "hold.mov"
+    result = subprocess.run([exe, str(kdenlive), "-consumer", f"avformat:{out}", "vcodec=png", "an=1"],
+                            capture_output=True, text=True, env={**os.environ, **extra_env, "LC_ALL": "C"}, timeout=300)
+    assert result.returncode == 0, result.stderr
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(out), "-vf", "format=gray", "-f", "rawvideo", "-"],
+                         capture_output=True, check=True).stdout
+    frames = [raw[i:i + 320 * 240] for i in range(0, len(raw), 320 * 240)]
+    changes = [i for i in range(1, len(frames)) if frames[i] != frames[i - 1]]
+    assert changes, "the specks never change"
+    # every change on a multiple of 3 (frames 0-2 the same, 3-5 the same...)
+    assert all(i % 3 == 0 for i in changes), changes
