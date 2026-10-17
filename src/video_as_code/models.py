@@ -34,6 +34,12 @@ class ProjectSpec:
     # puts what it downloads, relative to the YAML.
     album_url: Optional[str] = None
     album_name: Optional[str] = None
+    # `project.sources.reference`: links to the video this project remakes
+    # (the old edit it's compared with and cuts shots out of), tried in
+    # order like a bin clip's `url:`, and where `fetch` puts it, relative to
+    # the YAML. build/render never read it.
+    reference_urls: Optional[tuple[str, ...]] = None
+    reference_path: str = "reference/reference.mp4"
     sources_dir: str = "assets"
     # `project.sources.prune_after_days`: before each render, delete files
     # the tool can bring back by itself (album items only derive: needs,

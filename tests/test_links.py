@@ -99,3 +99,16 @@ def test_missing_yt_dlp_is_a_link_error(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("VIDEO_AS_CODE_YT_DLP", str(tmp_path / "no-such-yt-dlp"))
     with pytest.raises(links.LinkError, match="VIDEO_AS_CODE_YT_DLP"):
         links.download("https://youtu.be/abc", tmp_path / "assets", "music")
+
+
+def test_youtube_video_asks_for_the_whole_video_as_an_mp4(tmp_path: Path, monkeypatch):
+    # project.sources.reference: video + audio, merged into an mp4
+    _fake_yt_dlp(
+        tmp_path,
+        monkeypatch,
+        "path = out.replace('%(ext)s', 'mp4')\nopen(path, 'w').write(fmt + ' ' + ' '.join(sys.argv))\nprint(path)\n",
+    )
+    got = links.download("https://youtu.be/abc", tmp_path / "reference", "old", video=True)
+    assert got == tmp_path / "reference" / "old.mp4"
+    text = got.read_text()
+    assert text.startswith("bestvideo[ext=mp4]+bestaudio[ext=m4a]") and "--merge-output-format mp4" in text

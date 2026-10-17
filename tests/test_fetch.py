@@ -502,3 +502,69 @@ def test_fetch_from_an_album_not_created_yet_says_so_without_listing(tmp_path: P
         fetch.fetch(_project_with_album(tmp_path, "{name: 'vid · summer · 2014'}"))
     assert msg("fetch.album_not_created", name="vid · summer · 2014") in str(exc.value)
     assert album.listings == 0
+
+
+def _project_with_reference(tmp_path: Path, reference: str) -> Path:
+    path = tmp_path / "project.yaml"
+    path.write_text(
+        f"project:\n  id: p1\n  title: T\n  fps: 25\n  width: 320\n  height: 240\n  sources:\n    reference: {reference}\n"
+        "bin: []\ntimeline:\n  tracks: []\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_fetch_downloads_the_reference_video_whole_and_then_leaves_it(tmp_path: Path, monkeypatch):
+    calls = []
+
+    def download(url, dest_dir, stem, video=False):
+        calls.append((url, video))
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        (dest_dir / f"{stem}.mp4").write_bytes(b"VIDEO")
+        return dest_dir / f"{stem}.mp4"
+
+    monkeypatch.setattr(fetch.links, "download", download)
+    path = _project_with_reference(tmp_path, "{url: 'https://youtu.be/old', path: 'reference/Old video.mp4'}")
+    assert fetch.fetch(path).downloaded == [fetch.REFERENCE_ID]
+    assert (tmp_path / "reference" / "Old video.mp4").read_bytes() == b"VIDEO"
+    assert calls == [("https://youtu.be/old", True)]  # the whole video, not just its sound
+    assert fetch.fetch(path).up_to_date == [fetch.REFERENCE_ID]
+    assert len(calls) == 1
+
+
+def test_fetch_tries_the_reference_links_in_order(tmp_path: Path, monkeypatch):
+    def download(url, dest_dir, stem, video=False):
+        if "broken" in url:
+            raise fetch.links.LinkError("nope")
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        (dest_dir / f"{stem}.mp4").write_bytes(b"V")
+        return dest_dir / f"{stem}.mp4"
+
+    monkeypatch.setattr(fetch.links, "download", download)
+    path = _project_with_reference(tmp_path, "['https://youtu.be/broken', 'https://youtu.be/ok']")
+    assert fetch.fetch(path).downloaded == [fetch.REFERENCE_ID]
+    assert (tmp_path / "reference" / "reference.mp4").exists()
+
+
+def test_fetch_reports_a_reference_none_of_whose_links_work(tmp_path: Path, monkeypatch):
+    def download(url, dest_dir, stem, video=False):
+        raise fetch.links.LinkError(f"{url} is gone")
+
+    monkeypatch.setattr(fetch.links, "download", download)
+    with pytest.raises(fetch.FetchError) as exc:
+        fetch.fetch(_project_with_reference(tmp_path, "https://youtu.be/gone"))
+    assert "https://youtu.be/gone is gone" in str(exc.value)
+    assert exc.value.problems == []  # nothing in the bin to fix interactively
+
+
+def test_fetch_rejects_a_reference_that_comes_with_another_extension(tmp_path: Path, monkeypatch):
+    def download(url, dest_dir, stem, video=False):
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        (dest_dir / f"{stem}.webm").write_bytes(b"V")
+        return dest_dir / f"{stem}.webm"
+
+    monkeypatch.setattr(fetch.links, "download", download)
+    with pytest.raises(fetch.FetchError) as exc:
+        fetch.fetch(_project_with_reference(tmp_path, "https://youtu.be/x"))
+    assert ".webm" in str(exc.value)
+    assert not list((tmp_path / "reference").iterdir())

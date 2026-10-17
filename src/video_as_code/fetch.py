@@ -76,6 +76,10 @@ class FetchError(KdenliveAsCodeError):
         self.problems = problems or []
 
 
+# how project.sources.reference shows up in FetchResult and messages
+REFERENCE_ID = "reference"
+
+
 @dataclass
 class FetchResult:
     downloaded: list[str] = field(default_factory=list)
@@ -208,6 +212,10 @@ def fetch(
         for clip_id, reason in _download_links(base_dir, sources_root, link_clips, result, report, verify).items():
             problems.append(Problem(reason=reason, link_clip=clip_id, clip_ids=[clip_id]))
     failures = [p.reason for p in problems]
+    if doc.project.reference_urls:
+        reason = _download_reference(base_dir, doc.project.reference_urls, doc.project.reference_path, result, report)
+        if reason:
+            failures.append(reason)  # not a Problem: there's no bin clip to fix it in
     if any(clip.derive is not None for clip in doc.bin):
         # read again: a plain clip's local name (which a derive: input of the
         # same item shares) can only be known once its capture date is locked
@@ -238,6 +246,36 @@ def fetch(
     if failures:
         raise FetchError("\n".join(failures), problems)
     return result
+
+
+def _download_reference(
+    base_dir: Path, urls: tuple[str, ...], path: str, result: FetchResult, report: Callable[[str], None]
+) -> Optional[str]:
+    """project.sources.reference: the video this project remakes, downloaded
+    (the whole video, not just its sound) if it isn't at `path` yet - tried
+    link by link. Returns why it couldn't be had, or None. Once there it's
+    kept as is: delete it to download it again."""
+    target = base_dir / path
+    if target.is_file():
+        result.up_to_date.append(REFERENCE_ID)
+        return None
+    errors: list[str] = []
+    for url in urls:
+        report(msg("fetch.link_downloading", id=REFERENCE_ID, url=url))
+        try:
+            got = links.download(url, target.parent, target.stem, video=True)
+        except links.LinkError as exc:
+            errors.append(str(exc))
+            continue
+        if got.suffix.lower() != target.suffix.lower():
+            got.unlink()
+            errors.append(msg("fetch.reference_extension", path=path, ext=got.suffix))
+            continue
+        if got != target:
+            got.replace(target)
+        result.downloaded.append(REFERENCE_ID)
+        return None
+    return msg("fetch.links_failed", id=REFERENCE_ID, errors="\n  ".join(errors))
 
 
 def _derive_only_sources(doc: ProjectDoc) -> list[str]:

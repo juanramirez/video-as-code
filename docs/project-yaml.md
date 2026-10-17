@@ -45,6 +45,7 @@ couldn't match, for a person to review).
 | Key | Default | Meaning |
 |---|---|---|
 | `album` | - | A Google Photos shared-album link (`https://photos.app.goo.gl/...`), or a map `{name, url}`: the album's `name` (for a tool that creates it, then writes its link as `url`) and its `url` once it exists. Needed for any `source:` clip; `fetch` needs the link. Keep it out of public repos: anyone with it can see the album. See README's *`video-as-code fetch`* section. |
+| `reference` | - | The video this project remakes, for a project that rebuilds an old edit: a link, a list of links (tried in order, as a clip's `url:`), or a map `{url, path}` - `path` being where to keep it (default `reference/reference.mp4`). `fetch` downloads it whole (from YouTube: video and sound, as an mp4) if it isn't there yet. Only needed to find and match the old video's material, or while the project still cuts shots out of it (`derive: {path: reference/...}`); a new video has none. Keep unlisted links out of public repos. |
 | `dir` | `assets` | Folder (relative to the YAML) where `fetch` puts downloads and `derive:` its outputs (in `<dir>/.derived/`). |
 | `prune_after_days` | `7` | Before each `render`, delete files the tool can bring back by itself (album items only `derive:` needs, stale generated files) that no `build`/`validate`/`render` has used for this many days. `0` = never. See README's *`video-as-code fetch`* section. |
 

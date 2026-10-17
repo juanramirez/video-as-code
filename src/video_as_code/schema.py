@@ -194,6 +194,7 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
         errors.append(msg("validation.sources_invalid", sources=sources))
         sources = {}
     album_url, album_name = _parse_album(sources.get("album"), errors)
+    reference_urls, reference_path = _parse_reference(sources.get("reference"), errors)
     prune_days = sources.get("prune_after_days", autoprune.DEFAULT_DAYS)
     if isinstance(prune_days, bool) or not isinstance(prune_days, (int, float)) or prune_days < 0:
         errors.append(msg("validation.prune_after_days_invalid", value=prune_days))
@@ -209,6 +210,8 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
         notes=str(data["notes"]) if data.get("notes") is not None else None,
         album_url=album_url,
         album_name=album_name,
+        reference_urls=reference_urls,
+        reference_path=reference_path,
         sources_dir=str(sources.get("dir", "assets")),
         prune_after_days=float(prune_days),
     )
@@ -228,6 +231,24 @@ def _parse_album(raw, errors: list[str]) -> tuple[Optional[str], Optional[str]]:
         errors.append(msg("validation.album_invalid", album=raw))
         return None, None
     return url or None, name or None
+
+
+def _parse_reference(raw, errors: list[str]) -> tuple[Optional[tuple[str, ...]], str]:
+    """`project.sources.reference` -> (links, path): a link, a list of
+    links, or a map with `url` (one or a list) and `path` (where to keep
+    it, default reference/reference.mp4)."""
+    default = ProjectSpec.__dataclass_fields__["reference_path"].default
+    if raw is None:
+        return None, default
+    urls, path = (raw.get("url"), raw.get("path", default)) if isinstance(raw, dict) else (raw, default)
+    urls = [urls] if isinstance(urls, str) else urls
+    if (isinstance(raw, dict) and set(raw) - {"url", "path"}
+            or not isinstance(urls, list) or not urls
+            or not all(isinstance(u, str) and u.strip() for u in urls)
+            or not isinstance(path, str) or not Path(path).suffix):
+        errors.append(msg("validation.reference_invalid", reference=raw))
+        return None, default
+    return tuple(urls), path
 
 
 def _parse_bin_clip(

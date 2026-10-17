@@ -1912,3 +1912,28 @@ def test_album_map_invalid(tmp_path: Path, album: str):
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(_write_yaml(tmp_path, _album_project(album)))
     assert "project.sources.album" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "reference, urls, path",
+    [
+        ("https://youtu.be/a", ("https://youtu.be/a",), "reference/reference.mp4"),
+        ("['https://youtu.be/a', 'https://drive.google.com/file/d/x/view']",
+         ("https://youtu.be/a", "https://drive.google.com/file/d/x/view"), "reference/reference.mp4"),
+        ("{url: 'https://youtu.be/a', path: 'reference/Old 2015_16.mp4'}", ("https://youtu.be/a",), "reference/Old 2015_16.mp4"),
+    ],
+)
+def test_reference_as_link_list_or_map(tmp_path: Path, reference: str, urls, path):
+    text = _album_project("https://photos.app.goo.gl/x", "  []").replace(
+        "    album: https://photos.app.goo.gl/x", f"    album: https://photos.app.goo.gl/x\n    reference: {reference}")
+    project = load_yaml(_write_yaml(tmp_path, text)).project
+    assert (project.reference_urls, project.reference_path) == (urls, path)
+
+
+@pytest.mark.parametrize("reference", ["[]", "{path: a.mp4}", "{url: x, path: noext}", "{url: x, link: y}", "3", "['']"])
+def test_reference_invalid(tmp_path: Path, reference: str):
+    text = _album_project("https://photos.app.goo.gl/x", "  []").replace(
+        "    album: https://photos.app.goo.gl/x", f"    album: https://photos.app.goo.gl/x\n    reference: {reference}")
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, text))
+    assert "project.sources.reference" in str(exc.value)

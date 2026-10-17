@@ -163,6 +163,21 @@ album afterwards: `fetch` needs it whenever a file is missing - on another
 machine, or after pruning (below) - and an album takes no extra space,
 since its items are the library's own.
 
+A project that remakes an old video can name that video too, so `fetch`
+brings it along (it's what the remake is compared with, and what shots
+still missing from the album are cut out of meanwhile):
+
+```yaml
+  sources:
+    reference:
+      url: https://youtu.be/...                 # e.g. an unlisted upload
+      path: reference/Old edit.mp4              # default: reference/reference.mp4
+```
+
+It's downloaded whole - from YouTube, video and sound merged into an mp4 -
+once; delete the file to download it again. `build`/`render` don't need it
+unless a clip cuts from it.
+
 What isn't in the album - typically the music - can come from links
 instead, tried in order until one works:
 

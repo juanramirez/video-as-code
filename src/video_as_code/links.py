@@ -47,6 +47,8 @@ _DRIVE_HOSTS = {"drive.google.com", "docs.google.com"}
 _DRIVE_DOWNLOAD = "https://drive.usercontent.google.com/download?id={id}&export=download&confirm=t"
 _YT_DLP_ENV = "VIDEO_AS_CODE_YT_DLP"
 _YT_DLP_FORMAT = "bestaudio[ext=m4a]/bestaudio"
+# the whole video (project.reference): mp4 video + m4a audio, merged into an mp4
+_YT_DLP_VIDEO_FORMAT = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
 
 
 class LinkError(KdenliveAsCodeError):
@@ -73,13 +75,15 @@ def drive_file_id(url: str) -> Optional[str]:
     return ids[0] if ids else None
 
 
-def download(url: str, dest_dir: Path, stem: str) -> Path:
+def download(url: str, dest_dir: Path, stem: str, video: bool = False) -> Path:
     """Downloads `url` to `dest_dir/<stem><ext>`, the extension being the
-    downloaded file's own, and returns that path. Raises LinkError."""
+    downloaded file's own, and returns that path. From YouTube it takes the
+    audio only, unless `video` (then the whole video, as an mp4). Raises
+    LinkError."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     link_kind = kind(url)
     if link_kind == "youtube":
-        return _download_youtube(url, dest_dir, stem)
+        return _download_youtube(url, dest_dir, stem, video)
     if link_kind == "drive":
         file_id = drive_file_id(url)
         if not file_id:
@@ -92,12 +96,13 @@ def _yt_dlp_command() -> list[str]:
     return shlex.split(os.environ.get(_YT_DLP_ENV) or "yt-dlp")
 
 
-def _download_youtube(url: str, dest_dir: Path, stem: str) -> Path:
+def _download_youtube(url: str, dest_dir: Path, stem: str, video: bool = False) -> Path:
     for stale in dest_dir.glob(f"{glob.escape(stem)}.part.*"):  # leftovers of an interrupted run
         stale.unlink()
     command = _yt_dlp_command() + [
         "--quiet", "--no-warnings", "--no-playlist", "--no-progress",
-        "-f", _YT_DLP_FORMAT,
+        "-f", _YT_DLP_VIDEO_FORMAT if video else _YT_DLP_FORMAT,
+        *(["--merge-output-format", "mp4"] if video else []),
         "-o", str(dest_dir / f"{stem}.part.%(ext)s"),
         "--print", "after_move:filepath",
         url,
