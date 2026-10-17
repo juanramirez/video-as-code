@@ -466,11 +466,11 @@ def test_derive_scaling_an_untagged_hd_video_down_converts_its_colours(tmp_path:
 
 
 def test_derive_fit_lighten_lifts_a_dark_pictures_blurred_surround(tmp_path: Path):
-    # a near-black portrait: its blurred copy is near-black too, unless
-    # `lighten` raises the surround's black point - the picture itself stays dark
+    # a dark portrait: its blurred copy is as dark, unless `lighten`
+    # brightens the surround (x3 here) - the picture itself stays dark
     dark = tmp_path / "dark.png"
     subprocess.run(
-        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0x080808:s=60x120", "-frames:v", "1", str(dark)],
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0x202020:s=60x120", "-frames:v", "1", str(dark)],
         check=True,
     )
     sides = {}
@@ -481,8 +481,8 @@ def test_derive_fit_lighten_lifts_a_dark_pictures_blurred_surround(tmp_path: Pat
         load_and_resolve(project)
         w, h, pixels = _gray_pixels(_bin(project)["wide"].path)
         sides[lighten] = pixels[60 * w + 5]
-        assert pixels[60 * w + 120] < 20  # the picture: untouched
-    assert sides[""] < 20 and sides[", lighten: 0.4"] > 90
+        assert pixels[60 * w + 120] < 45  # the picture: untouched
+    assert sides[""] < 45 and sides[", lighten: 0.4"] > 80
 
 
 @pytest.mark.parametrize("fit", ["{size: [240, 120], background: black, lighten: 0.3}", "{size: [240, 120], lighten: 1.5}",
@@ -492,3 +492,19 @@ def test_derive_fit_lighten_invalid(tmp_path: Path, fit: str):
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(project)
     assert "derive.fit" in str(exc.value)
+
+
+def test_derive_fit_lighten_keeps_the_surrounds_hue(tmp_path: Path):
+    # a dark brown picture: its lightened surround is a lighter BROWN (red > green > blue
+    # in the same proportions), not grey
+    brown = tmp_path / "brown.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0x30200f:s=60x120", "-frames:v", "1", str(brown)], check=True
+    )
+    project = _project(tmp_path, [f"{{id: wide, derive: {{path: {brown}, fit: {{size: [240, 120], background: blur, lighten: 0.3}}}}}}"])
+    load_and_resolve(project)
+    out = _bin(project)["wide"].path
+    rgb = subprocess.run(["ffmpeg", "-v", "error", "-i", str(out), "-vf", "crop=1:1:5:60", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                         capture_output=True, check=True).stdout
+    r, g, b = rgb[0], rgb[1], rgb[2]
+    assert r > 90 and r > g > b and b < 0.6 * r  # light brown: brighter, and still clearly brown

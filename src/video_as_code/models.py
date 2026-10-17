@@ -94,9 +94,9 @@ class DeriveSpec:
     scale: Optional[tuple[int, int]] = None
     devignette: Optional[float] = None
     fit: Optional[tuple[int, int, str]] = None  # (w, h, "blur" | "black")
-    # `fit: {lighten}`: how much to lift the shadows of the blurred copy
-    # around the picture (0-1: its black point raised to that level) - for
-    # a dark picture, whose blurred surround would otherwise look black
+    # `fit: {lighten}`: how much to brighten the blurred copy around the
+    # picture (0-1: every channel times 1 + 5 x lighten, so its colours
+    # stay) - for a dark picture, whose surround would otherwise look black
     fit_lighten: Optional[float] = None
     feather: Optional[int] = None  # px
     vignette: Optional[float] = None

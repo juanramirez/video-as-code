@@ -478,8 +478,8 @@ def _parse_derive(
     fit_lighten = None
     if data.get("fit") is not None:
         # {size: [w, h], background: blur | black, lighten}: the whole picture
-        # inside w x h, what's left filled with a blurred copy of itself (its
-        # shadows lifted by `lighten`, 0-1) or black
+        # inside w x h, what's left filled with a blurred copy of itself
+        # (brightened by `lighten`, 0-1, its colours kept) or black
         raw = data["fit"]
         size = _number_pair(raw.get("size")) if isinstance(raw, dict) else None
         background = raw.get("background", "blur") if isinstance(raw, dict) else None

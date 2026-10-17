@@ -237,11 +237,23 @@ def _feather_to_black(n: int) -> str:
     return f"format=gbrp,geq=r='r(X,Y)*{ramp}':g='g(X,Y)*{ramp}':b='b(X,Y)*{ramp}'"
 
 
+def _gain_filter(gain: float) -> str:
+    """Every RGB channel times `gain`, as colorchannelmixer steps (each
+    takes at most 2)."""
+    steps = []
+    while gain > 1.0001:
+        step = min(2.0, gain)
+        steps.append(f",colorchannelmixer=rr={step:g}:gg={step:g}:bb={step:g}")
+        gain /= step
+    return "".join(steps)
+
+
 def _fit_filter(w: int, h: int, background: str, feather: Optional[int] = None, lighten: Optional[float] = None) -> str:
     """`fit`: the picture scaled to fit inside w x h, centred, the rest
     black or - `blur` - a copy of it scaled to COVER w x h (cropped to it)
-    and blurred, its shadows lifted by `lighten` (its black point raised
-    to that level, so a dark picture doesn't sit on what looks like black).
+    and blurred, brightened by `lighten` (each channel times 1 + 5 x
+    lighten, which keeps its colours - a dark brown turns light brown, not
+    grey - so a dark picture doesn't sit on what looks like black).
     A branching graph, but still one input and one output, so it chains
     like any single filter (-vf and the gif graph alike)."""
     fg = f"scale={w}:{h}:force_original_aspect_ratio=decrease"
@@ -254,7 +266,8 @@ def _fit_filter(w: int, h: int, background: str, feather: Optional[int] = None, 
     return (
         f"split=2[fitbg][fitfg];"
         f"[fitbg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma={sigma:g}"
-        + (f",colorlevels=romin={lighten:g}:gomin={lighten:g}:bomin={lighten:g}" if lighten else "")
+        # every channel times the same gain: brighter, same hue (raising the black point instead greys it)
+        + (_gain_filter(1 + 5 * lighten) if lighten else "")
         + "[fitbg2];"
         f"[fitfg]{fg}[fitfg2];[fitbg2][fitfg2]overlay=(W-w)/2:(H-h)/2"
     )
