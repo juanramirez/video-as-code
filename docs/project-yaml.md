@@ -44,7 +44,7 @@ couldn't match, for a person to review).
 
 | Key | Default | Meaning |
 |---|---|---|
-| `album` | - | A Google Photos shared-album link (`https://photos.app.goo.gl/...`). Needed for any `source:` clip. Keep it out of public repos: anyone with it can see the album. |
+| `album` | - | A Google Photos shared-album link (`https://photos.app.goo.gl/...`), or a map `{name, url}`: the album's `name` (for a tool that creates it, then writes its link as `url`) and its `url` once it exists. Needed for any `source:` clip; `fetch` needs the link. Keep it out of public repos: anyone with it can see the album. See README's *`video-as-code fetch`* section. |
 | `dir` | `assets` | Folder (relative to the YAML) where `fetch` puts downloads and `derive:` its outputs (in `<dir>/.derived/`). |
 | `prune_after_days` | `7` | Before each `render`, delete files the tool can bring back by itself (album items only `derive:` needs, stale generated files) that no `build`/`validate`/`render` has used for this many days. `0` = never. See README's *`video-as-code fetch`* section. |
 

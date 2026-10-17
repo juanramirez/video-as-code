@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
@@ -193,6 +193,7 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
     if not isinstance(sources, dict):
         errors.append(msg("validation.sources_invalid", sources=sources))
         sources = {}
+    album_url, album_name = _parse_album(sources.get("album"), errors)
     prune_days = sources.get("prune_after_days", autoprune.DEFAULT_DAYS)
     if isinstance(prune_days, bool) or not isinstance(prune_days, (int, float)) or prune_days < 0:
         errors.append(msg("validation.prune_after_days_invalid", value=prune_days))
@@ -206,10 +207,27 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
         colorspace=colorspace,
         default_image_duration=float(data.get("default_image_duration", 4.0)),
         notes=str(data["notes"]) if data.get("notes") is not None else None,
-        album_url=str(sources["album"]) if sources.get("album") else None,
+        album_url=album_url,
+        album_name=album_name,
         sources_dir=str(sources.get("dir", "assets")),
         prune_after_days=float(prune_days),
     )
+
+
+def _parse_album(raw, errors: list[str]) -> tuple[Optional[str], Optional[str]]:
+    """`project.sources.album` -> (url, name): a shared-album link, or a
+    map with the album's `name` (to create it under, see albums.py) and/or
+    its `url` (its link, once it exists)."""
+    if not raw:
+        return None, None
+    if not isinstance(raw, dict):
+        return str(raw), None
+    name, url = raw.get("name"), raw.get("url")
+    if (set(raw) - {"name", "url"} or not (name or url)
+            or any(v is not None and not isinstance(v, str) for v in (name, url))):
+        errors.append(msg("validation.album_invalid", album=raw))
+        return None, None
+    return url or None, name or None
 
 
 def _parse_bin_clip(
@@ -298,7 +316,7 @@ def _parse_bin_clip(
         if "path" in item:
             errors.append(msg("validation.bin_source_and_path", id=item.get("id")))
             return None
-        if not project.album_url:
+        if not (project.album_url or project.album_name):
             errors.append(msg("validation.bin_source_without_album", id=item.get("id")))
             return None
         if Path(source).name != source or source in ("", ".", ".."):
@@ -363,7 +381,7 @@ def _parse_derive(
     source = path = clip = None
     if inputs[0] == "source":
         source = str(data["source"])
-        if not project.album_url:
+        if not (project.album_url or project.album_name):
             errors.append(msg("validation.bin_source_without_album", id=clip_id))
         elif Path(source).name != source or source in ("", ".", ".."):
             errors.append(msg("validation.bin_source_not_a_name", id=clip_id, source=source))

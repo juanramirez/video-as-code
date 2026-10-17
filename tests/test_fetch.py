@@ -465,3 +465,40 @@ def test_a_broken_download_doesnt_stop_the_others(tmp_path: Path, monkeypatch):
     assert [p.source for p in exc.value.problems] == ["a.jpg"]
     assert "connection reset" in exc.value.problems[0].reason
     assert (tmp_path / "assets" / "19700101_c1.jpg").exists()
+
+
+def _project_with_album(tmp_path: Path, album: str) -> Path:
+    path = tmp_path / "project.yaml"
+    path.write_text(
+        f"""
+project:
+  id: p1
+  title: T
+  fps: 25
+  width: 320
+  height: 240
+  sources:
+    album: {album}
+bin:
+  - {{id: c0, source: a.jpg}}
+timeline:
+  tracks: []
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_fetch_from_an_album_given_as_name_and_url(tmp_path: Path, monkeypatch):
+    FakeAlbum({"a.jpg": b"AAA"}).install(monkeypatch)
+    path = _project_with_album(tmp_path, "{name: 'vid · summer · 2014', url: 'https://photos.app.goo.gl/x'}")
+    assert fetch.fetch(path).downloaded == ["a.jpg"]
+
+
+def test_fetch_from_an_album_not_created_yet_says_so_without_listing(tmp_path: Path, monkeypatch):
+    album = FakeAlbum({"a.jpg": b"AAA"})
+    album.install(monkeypatch)
+    with pytest.raises(fetch.FetchError) as exc:
+        fetch.fetch(_project_with_album(tmp_path, "{name: 'vid · summer · 2014'}"))
+    assert msg("fetch.album_not_created", name="vid · summer · 2014") in str(exc.value)
+    assert album.listings == 0

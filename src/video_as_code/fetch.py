@@ -97,8 +97,10 @@ class _AlbumIndex:
     """The album's items, listed once on first use, plus what's known of
     their original file names."""
 
-    def __init__(self, album_url: str, names_cache_path: Path, report: Callable[[str], None]):
+    def __init__(self, album_url: Optional[str], names_cache_path: Path, report: Callable[[str], None],
+                 album_name: Optional[str] = None):
         self._album_url = album_url
+        self._album_name = album_name
         self._names_cache_path = names_cache_path
         self._names = _read_names_cache(names_cache_path)  # media id -> original file name
         self._report = report
@@ -110,6 +112,10 @@ class _AlbumIndex:
     @property
     def items(self) -> list[gphotos.AlbumItem]:
         if self._listing_error is not None:
+            raise self._listing_error
+        if self._items is None and not self._album_url:
+            # only named so far (project.sources.album: {name: ...}): nothing to list yet
+            self._listing_error = gphotos.GPhotosError(msg("fetch.album_not_created", name=self._album_name))
             raise self._listing_error
         if self._items is None:
             self._report(msg("fetch.listing_album"))
@@ -276,7 +282,7 @@ def _download(
     renamed - or copied, if that other name is still wanted too - rather
     than downloaded again."""
     entries = sources_lock.read(base_dir)
-    index = _AlbumIndex(doc.project.album_url, base_dir / _NAMES_CACHE, report)
+    index = _AlbumIndex(doc.project.album_url, base_dir / _NAMES_CACHE, report, doc.project.album_name)
 
     def dest_of(name: str, clip_id: Optional[str], override: Optional[str]) -> Path:
         if clip_id is None:

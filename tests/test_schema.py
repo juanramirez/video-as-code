@@ -5,7 +5,8 @@ from pathlib import Path
 import pytest
 
 from video_as_code.errors import ValidationErrors
-from video_as_code.schema import load_and_resolve
+from video_as_code.i18n import msg
+from video_as_code.schema import load_and_resolve, load_yaml
 
 
 def _write_yaml(tmp_path: Path, content: str) -> Path:
@@ -1868,3 +1869,46 @@ def test_color_grade_keyframes_invalid(tmp_path: Path, assets_dir: Path, kf: str
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(_write_yaml(tmp_path, _kf_project(assets_dir, kf)))
     assert "color_grade_keyframes" in str(exc.value)
+
+
+def _album_project(album: str, bin_lines: str = "  - {id: c0, source: a.jpg}") -> str:
+    return f"""
+project:
+  id: p1
+  title: T
+  fps: 25
+  width: 320
+  height: 240
+  sources:
+    album: {album}
+bin:
+{bin_lines}
+timeline:
+  tracks: []
+"""
+
+
+@pytest.mark.parametrize(
+    "album, url, name",
+    [
+        ("https://photos.app.goo.gl/x", "https://photos.app.goo.gl/x", None),
+        ("{url: 'https://photos.app.goo.gl/x'}", "https://photos.app.goo.gl/x", None),
+        ("{name: 'vid · summer · 2014'}", None, "vid · summer · 2014"),
+        ("{name: 'vid · summer · 2014', url: 'https://photos.app.goo.gl/x'}", "https://photos.app.goo.gl/x", "vid · summer · 2014"),
+    ],
+)
+def test_album_as_link_or_name_and_url(tmp_path: Path, album: str, url, name):
+    project = load_yaml(_write_yaml(tmp_path, _album_project(album, "  []"))).project
+    assert (project.album_url, project.album_name) == (url, name)
+    # a named album with no link yet still counts for `source:` clips (fetch is what needs the link):
+    # the only complaint left is that the file hasn't been fetched
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, _album_project(album)))
+    assert exc.value.messages == [msg("validation.bin_source_not_fetched", id="c0", path=tmp_path / "assets" / "a.jpg")]
+
+
+@pytest.mark.parametrize("album", ["{}", "{title: x}", "{name: 3}", "{name: x, url: [a]}", "{name: x, link: y}"])
+def test_album_map_invalid(tmp_path: Path, album: str):
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, _album_project(album)))
+    assert "project.sources.album" in str(exc.value)

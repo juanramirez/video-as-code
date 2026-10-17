@@ -28,9 +28,12 @@ class ProjectSpec:
     notes: Optional[str] = None
     # `project.sources`: where bin clips with `source:` come from (see
     # BinClipSpec.source). `album_url` is a Google Photos shared-album link
-    # (gphotos.py); `sources_dir` is where `fetch` puts what it downloads,
-    # relative to the YAML.
+    # (gphotos.py); `album_name` the album's name, for a tool that creates
+    # it and writes its link back as `url:` (albums.py) - until then
+    # `fetch` can't get anything from it. `sources_dir` is where `fetch`
+    # puts what it downloads, relative to the YAML.
     album_url: Optional[str] = None
+    album_name: Optional[str] = None
     sources_dir: str = "assets"
     # `project.sources.prune_after_days`: before each render, delete files
     # the tool can bring back by itself (album items only derive: needs,

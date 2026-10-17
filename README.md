@@ -145,6 +145,24 @@ never download on their own: a `source:` clip that isn't on disk yet is a
 validation error pointing at `fetch` (or `--fetch`). Add `.fetch_cache/`
 (file names already looked up in the album) to your `.gitignore`.
 
+The album can also be given by **name**, before it exists:
+
+```yaml
+  sources:
+    album:
+      name: "vid · summer · 2014"                 # what to call it
+      url: https://photos.app.goo.gl/...       # its share link, once it has one
+```
+
+That's for a tool that builds the album itself - finding the clips in a
+photo library, putting them in a new album with that name and sharing it
+- and then writes the link in as `url:` (`albums.write_album_url`, a text
+edit that keeps the YAML's comments and layout). Until it has a `url:`,
+`fetch` says the album doesn't exist yet instead of downloading. Keep the
+album afterwards: `fetch` needs it whenever a file is missing - on another
+machine, or after pruning (below) - and an album takes no extra space,
+since its items are the library's own.
+
 What isn't in the album - typically the music - can come from links
 instead, tried in order until one works:
 
