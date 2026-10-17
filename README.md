@@ -429,3 +429,11 @@ this limitation — it's not a test that was loosened carelessly.
 
 See `BACKLOG.md` for the unordered pool of known gaps and ideas, and
 `ROADMAP.md` for what's shipped and what's scheduled for the next version.
+
+## License
+
+MIT - see `LICENSE`. The tools it drives are separate programs with their
+own licenses, run as they are, not bundled: melt/MLT (LGPL), kdenlive
+(GPL), ffmpeg (LGPL/GPL), yt-dlp (Unlicense) and Real-ESRGAN's
+realesrgan-ncnn-vulkan (MIT; its models BSD-3-Clause), which `fetch`
+offers to download from its own releases.

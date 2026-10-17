@@ -3,6 +3,7 @@ name = "video-as-code"
 version = "0.10.0"
 description = "Programmatic kdenlive project generator from a declarative YAML description, meant for versioning videos with a VCS (like Git)."
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.9"
 dependencies = [
     "PyYAML>=6.0",
