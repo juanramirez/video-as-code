@@ -134,10 +134,22 @@ class _AlbumIndex:
     def by_media_id(self, media_id: str) -> Optional[gphotos.AlbumItem]:
         return next((i for i in self.items if i.media_id == media_id), None)
 
-    def find(self, name: str) -> Optional[gphotos.AlbumItem]:
+    def find(self, key: str) -> Optional[gphotos.AlbumItem]:
+        """The album item a source key names (sources_lock.source_key): by
+        original file name, and - if the key has one - capture time, which
+        tells apart items that share a name. With a plain name and several
+        such items, the first found: the one taken closest to the time in
+        its name."""
+        name, taken = sources_lock.split_source(key)
+
+        def matches(item: gphotos.AlbumItem) -> bool:
+            return self._names.get(item.media_id) == name and (
+                taken is None or sources_lock.taken_local(item.taken_ms, item.tz_offset_ms) == taken
+            )
+
         candidates = gphotos.rank_by_name_time(self.items, name)
         for item in candidates:  # names already known cost nothing
-            if self._names.get(item.media_id) == name:
+            if matches(item):
                 return item
         unknown = [i for i in candidates if i.media_id not in self._names]
         with ThreadPoolExecutor(max_workers=_LOOKUP_BATCH) as pool:
@@ -146,7 +158,7 @@ class _AlbumIndex:
                 for item, item_name in zip(batch, pool.map(gphotos.original_filename, batch)):
                     self._names[item.media_id] = item_name
                 self._save_names()
-                match = next((i for i in batch if self._names[i.media_id] == name), None)
+                match = next((i for i in batch if matches(i)), None)
                 if match is not None:
                     return match
         return None
@@ -188,7 +200,7 @@ def fetch(
     locked = {name: entry["sha256"] for name, entry in sources_lock.read(base_dir).items() if entry.get("sha256")}
     for name in _derive_only_sources(doc):
         users = [c for c in doc.bin if c.derive is not None and c.derive.source == name]
-        if not (sources_root / name).exists() and all(
+        if not (sources_root / sources_lock.source_file_name(name)).exists() and all(
             derive.is_current_by_record(c.path, locked.get(name)) for c in users
         ):
             continue  # pruned, and nothing made from it needs it again
@@ -292,7 +304,7 @@ def _derive_only_sources(doc: ProjectDoc) -> list[str]:
 def _prune(doc: ProjectDoc, sources_root: Path, result: FetchResult) -> None:
     """Deletes each derive-only album input whose every output is current."""
     for name in _derive_only_sources(doc):
-        path = sources_root / name
+        path = sources_root / sources_lock.source_file_name(name)
         users = [c for c in doc.bin if c.derive is not None and c.derive.source == name]
         if path.exists() and all(derive.is_current(c.path, path) for c in users):
             result.pruned_bytes += path.stat().st_size
@@ -324,7 +336,7 @@ def _download(
 
     def dest_of(name: str, clip_id: Optional[str], override: Optional[str]) -> Path:
         if clip_id is None:
-            return sources_root / name
+            return sources_root / sources_lock.source_file_name(name)
         return sources_root / sources_lock.local_name(clip_id, name, entries.get(name), override)
 
     # backfill capture dates the lock doesn't have yet (one album listing)
@@ -452,7 +464,7 @@ def use_local_file(yaml_path: Path, problem: Problem, file: Path) -> Path:
         # each clip's dated local name if the lock knows the date
         entries = sources_lock.read(base_dir)
         old = entries.get(problem.source) or {}
-        dest = sources_root / problem.source
+        dest = sources_root / sources_lock.source_file_name(problem.source)
         entries[problem.source] = {**({"taken": old["taken"]} if old.get("taken") else {}), **entry}
         shutil.copy2(file, dest)
         sources_lock.write(base_dir, entries)
@@ -474,10 +486,10 @@ def _local_copy(sources_root: Path, name: str, entry: dict, dest: Path) -> Optio
     doesn't know the content yet."""
     if not entry.get("sha256") or not sources_root.is_dir():
         return None
-    candidates = [sources_root / name]
+    candidates = [sources_root / sources_lock.source_file_name(name)]
     if entry.get("taken"):
         date = str(entry["taken"])[:10].replace("-", "")
-        candidates += sorted(sources_root.glob(f"{date}_*{Path(name).suffix.lower()}"))
+        candidates += sorted(sources_root.glob(f"{date}_*{Path(sources_lock.split_source(name)[0]).suffix.lower()}"))
     for path in candidates:
         if path == dest or not path.is_file() or path.stat().st_size != entry.get("size"):
             continue

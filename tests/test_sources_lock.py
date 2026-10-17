@@ -2,7 +2,10 @@
 derived from it - the bits fetch's tests only exercise at the epoch."""
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
+
+import pytest
 
 from video_as_code import sources_lock
 
@@ -59,3 +62,43 @@ def test_link_local_name():
     assert sources_lock.link_local_name("music", {"ext": ".m4a"}) == "music.m4a"
     assert sources_lock.link_local_name("music", None) == "music"  # not downloaded yet
     assert sources_lock.link_local_name("music", {"ext": ".m4a"}, "song.m4a") == "song.m4a"
+
+
+# --- album items named with their capture time too (`source: {name, taken}`) ---
+
+def test_source_key_round_trips_and_a_plain_name_stays_plain():
+    key = sources_lock.source_key("IMG-20150308-WA0003.jpg", "2015-03-08T15:23:51")
+    assert key == "IMG-20150308-WA0003.jpg@2015-03-08T15:23:51"
+    assert sources_lock.split_source(key) == ("IMG-20150308-WA0003.jpg", "2015-03-08T15:23:51")
+    assert sources_lock.source_key("a.jpg") == "a.jpg"
+    assert sources_lock.split_source("a.jpg") == ("a.jpg", None)
+    assert sources_lock.split_source("me@home.jpg") == ("me@home.jpg", None)  # an @ that isn't a time is part of the name
+
+
+def test_source_file_name_keeps_same_named_items_apart():
+    one = sources_lock.source_file_name("IMG-WA0003.jpg@2015-03-08T15:23:51")
+    other = sources_lock.source_file_name("IMG-WA0003.jpg@2015-04-01T09:00:00")
+    assert one == "IMG-WA0003_20150308T152351.jpg" and other != one
+    assert sources_lock.source_file_name("IMG-WA0003.jpg") == "IMG-WA0003.jpg"
+
+
+def test_local_name_of_a_keyed_source_uses_the_names_extension():
+    key = "IMG-WA0003.JPG@2015-03-08T15:23:51"
+    assert sources_lock.local_name("beach", key, {"taken": "2015-03-08T15:23:51"}) == "20150308_beach.jpg"
+    assert sources_lock.local_name("beach", key, None) == "IMG-WA0003_20150308T152351.JPG"
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        ("2015-03-08 15:23:51", "2015-03-08T15:23:51"),
+        ("2015-03-08T15:23:51", "2015-03-08T15:23:51"),
+        (datetime(2015, 3, 8, 15, 23, 51), "2015-03-08T15:23:51"),  # YAML's reading of an unquoted one
+        ("2015-03-08", None),
+        ("2015-03-08 15:23", None),
+        (None, None),
+        (20150308, None),
+    ],
+)
+def test_normalize_taken(value, expected):
+    assert sources_lock.normalize_taken(value) == expected

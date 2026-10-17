@@ -145,6 +145,26 @@ never download on their own: a `source:` clip that isn't on disk yet is a
 validation error pointing at `fetch` (or `--fetch`). Add `.fetch_cache/`
 (file names already looked up in the album) to your `.gitignore`.
 
+A file name doesn't always pick one album item: cameras restart their
+numbering, and WhatsApp names pictures after the day they arrived
+(`IMG-20150308-WA0003.jpg` can be several different photos from several
+phones). With a plain name, `fetch` takes the item taken closest to the
+time in its name - which may be the wrong one. Add its capture time to
+say which:
+
+```yaml
+  - id: beach
+    source: {name: IMG-20150308-WA0003.jpg, taken: "2015-03-08 15:23:51"}
+```
+
+`taken` is the capture time as Google Photos has it, local to where it
+was taken, to the second (the same value `sources.lock.yaml` records).
+That's what keeps such a project buildable from its YAML alone: without
+it, the only way to point at the right one would be a local copy of the
+file, which a fresh checkout doesn't have. In the lock and on disk the
+item is then known as `<name>@<taken>`, so two same-named items never
+overwrite each other.
+
 The album can also be given by **name**, before it exists:
 
 ```yaml

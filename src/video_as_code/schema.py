@@ -233,6 +233,25 @@ def _parse_album(raw, errors: list[str]) -> tuple[Optional[str], Optional[str]]:
     return url or None, name or None
 
 
+def _parse_source(raw, clip_id, errors: list[str]) -> Optional[str]:
+    """A `source:` (a bin clip's, or a derive: input's) as the key it's
+    known by (sources_lock.source_key): an album item's original file name,
+    or `{name, taken}` - that name plus its capture time, for when several
+    items of the album share the name and the name alone can't say which
+    one is meant. None (with the error) if it's neither."""
+    if isinstance(raw, dict):
+        name, taken = raw.get("name"), sources_lock.normalize_taken(raw.get("taken"))
+        if set(raw) - {"name", "taken"} or not isinstance(name, str) or taken is None:
+            errors.append(msg("validation.source_map_invalid", id=clip_id, source=raw))
+            return None
+    else:
+        name, taken = str(raw), None
+    if Path(name).name != name or name in ("", ".", "..") or "@" in name and taken is None and sources_lock.split_source(name)[1]:
+        errors.append(msg("validation.bin_source_not_a_name", id=clip_id, source=name))
+        return None
+    return sources_lock.source_key(name, taken)
+
+
 def _parse_reference(raw, errors: list[str]) -> tuple[Optional[tuple[str, ...]], str]:
     """`project.sources.reference` -> (links, path): a link, a list of
     links, or a map with `url` (one or a list) and `path` (where to keep
@@ -333,15 +352,14 @@ def _parse_bin_clip(
     if item.get("source") is not None:
         # See BinClipSpec.source: an item of the project's shared album,
         # downloaded by `fetch` under its original file name.
-        source = str(item["source"])
+        source = _parse_source(item["source"], item.get("id"), errors)
+        if source is None:
+            return None
         if "path" in item:
             errors.append(msg("validation.bin_source_and_path", id=item.get("id")))
             return None
         if not (project.album_url or project.album_name):
             errors.append(msg("validation.bin_source_without_album", id=item.get("id")))
-            return None
-        if Path(source).name != source or source in ("", ".", ".."):
-            errors.append(msg("validation.bin_source_not_a_name", id=item.get("id"), source=source))
             return None
         override = str(item["local_name"]) if item.get("local_name") is not None else None
         if override is not None:
@@ -349,7 +367,7 @@ def _parse_bin_clip(
                 errors.append(msg("validation.local_name_not_a_name", id=item.get("id"), name=override))
                 return None
             # the extension decides how the file is probed and played
-            if Path(override).suffix.lower() != Path(source).suffix.lower():
+            if Path(override).suffix.lower() != Path(sources_lock.split_source(source)[0]).suffix.lower():
                 errors.append(msg("validation.local_name_extension", id=item.get("id"), name=override, source=source))
                 return None
         local = sources_lock.local_name(str(item["id"]), source, lock.get(source), override)
@@ -401,11 +419,9 @@ def _parse_derive(
         return None
     source = path = clip = None
     if inputs[0] == "source":
-        source = str(data["source"])
-        if not (project.album_url or project.album_name):
+        source = _parse_source(data["source"], clip_id, errors)
+        if source is not None and not (project.album_url or project.album_name):
             errors.append(msg("validation.bin_source_without_album", id=clip_id))
-        elif Path(source).name != source or source in ("", ".", ".."):
-            errors.append(msg("validation.bin_source_not_a_name", id=clip_id, source=source))
     elif inputs[0] == "path":
         raw_path = Path(str(data["path"]))
         path = raw_path if raw_path.is_absolute() else source_dir / raw_path

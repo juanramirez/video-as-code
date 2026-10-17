@@ -1937,3 +1937,28 @@ def test_reference_invalid(tmp_path: Path, reference: str):
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(_write_yaml(tmp_path, text))
     assert "project.sources.reference" in str(exc.value)
+
+
+@pytest.mark.parametrize(
+    "source, key",
+    [
+        ("IMG-WA0003.jpg", "IMG-WA0003.jpg"),
+        ("{name: IMG-WA0003.jpg, taken: '2015-03-08 15:23:51'}", "IMG-WA0003.jpg@2015-03-08T15:23:51"),
+        ("{name: IMG-WA0003.jpg, taken: 2015-03-08 15:23:51}", "IMG-WA0003.jpg@2015-03-08T15:23:51"),  # unquoted: a YAML datetime
+    ],
+)
+def test_source_by_name_or_by_name_and_capture_time(tmp_path: Path, source: str, key: str):
+    text = _album_project("https://photos.app.goo.gl/x", f"  - {{id: c0, source: {source}}}\n  - {{id: d0, derive: {{source: {source}, scale: [10, 10]}}}}")
+    doc = load_yaml(_write_yaml(tmp_path, text))
+    assert [c.source for c in doc.bin if c.id == "c0"] == [key]
+    assert [c.derive.source for c in doc.bin if c.id == "d0"] == [key]
+
+
+@pytest.mark.parametrize(
+    "source",
+    ["{name: a.jpg}", "{name: a.jpg, taken: '2015-03-08'}", "{taken: '2015-03-08 15:23:51'}", "{name: a.jpg, taken: '2015-03-08 15:23:51', x: 1}", "{name: dir/a.jpg, taken: '2015-03-08 15:23:51'}"],
+)
+def test_source_map_invalid(tmp_path: Path, source: str):
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, _album_project("https://photos.app.goo.gl/x", f"  - {{id: c0, source: {source}}}")))
+    assert "'source'" in str(exc.value)

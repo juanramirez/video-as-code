@@ -26,7 +26,7 @@ import subprocess
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import probe
+from . import probe, sources_lock
 from . import upscale as upscale_mod
 from .errors import KdenliveAsCodeError
 from .i18n import msg
@@ -152,7 +152,7 @@ def album_input_path(source: str, bin_clips: list[BinClipSpec], sources_root: Pa
     for clip in bin_clips:
         if clip.derive is None and clip.source == source and clip.path is not None:
             return clip.path
-    return sources_root / source
+    return sources_root / sources_lock.source_file_name(source)
 
 
 def _sha256(path: Path) -> str:

@@ -115,7 +115,7 @@ def prune(
     # longer used at all) - `fetch` can always download them again
     plain_sources = {c.source for c in doc.bin if c.source is not None}
     for name, entry in lock.items():
-        path = sources_root / name
+        path = sources_root / sources_lock.source_file_name(name)
         if name in plain_sources or not path.is_file() or not entry.get("sha256"):
             continue
         users = [c for c in doc.bin if c.derive is not None and c.derive.source == name]

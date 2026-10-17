@@ -568,3 +568,73 @@ def test_fetch_rejects_a_reference_that_comes_with_another_extension(tmp_path: P
         fetch.fetch(_project_with_reference(tmp_path, "https://youtu.be/x"))
     assert ".webm" in str(exc.value)
     assert not list((tmp_path / "reference").iterdir())
+
+
+class SameNameAlbum:
+    """Two different photos that share a file name, taken a month apart
+    (as WhatsApp or a camera that restarted its numbering produce)."""
+
+    MARCH = 1425828231000  # 2015-03-08T15:23:51 UTC
+    APRIL = 1427878800000  # 2015-04-01T09:00:00 UTC
+
+    def __init__(self):
+        self.items = [
+            gphotos.AlbumItem(media_id="mApr", base_url="https://x/apr", is_video=False, width=1, height=1, taken_ms=self.APRIL),
+            gphotos.AlbumItem(media_id="mMar", base_url="https://x/mar", is_video=False, width=1, height=1, taken_ms=self.MARCH),
+        ]
+        self.body = {"mApr": b"APRIL", "mMar": b"MARCH"}
+
+    def install(self, monkeypatch) -> None:
+        monkeypatch.setattr(gphotos, "list_album", lambda url, on_progress=None: list(self.items))
+        monkeypatch.setattr(gphotos, "original_filename", lambda item: "IMG-WA0003.jpg")
+
+        def download(item, dest):
+            body = self.body[item.media_id]
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(body)
+            return len(body), hashlib.sha256(body).hexdigest()
+
+        monkeypatch.setattr(gphotos, "download", download)
+
+
+def _same_name_project(tmp_path: Path, bin_lines: str) -> Path:
+    path = tmp_path / "project.yaml"
+    path.write_text(
+        "project: {id: p1, title: T, fps: 25, width: 320, height: 240, sources: {album: 'https://photos.app.goo.gl/x'}}\n"
+        f"bin:\n{bin_lines}\ntimeline:\n  tracks: []\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_fetch_tells_same_named_album_items_apart_by_capture_time(tmp_path: Path, monkeypatch):
+    SameNameAlbum().install(monkeypatch)
+    path = _same_name_project(
+        tmp_path,
+        "  - {id: march, source: {name: IMG-WA0003.jpg, taken: '2015-03-08 15:23:51'}}\n"
+        "  - {id: april, source: {name: IMG-WA0003.jpg, taken: '2015-04-01T09:00:00'}}\n",
+    )
+    fetch.fetch(path)
+    assert (tmp_path / "assets" / "20150308_march.jpg").read_bytes() == b"MARCH"
+    assert (tmp_path / "assets" / "20150401_april.jpg").read_bytes() == b"APRIL"
+    lock = _lock(tmp_path)  # one entry each, keyed by name and time: neither overwrites the other
+    assert lock["IMG-WA0003.jpg@2015-03-08T15:23:51"]["media_id"] == "mMar"
+    assert lock["IMG-WA0003.jpg@2015-04-01T09:00:00"]["media_id"] == "mApr"
+
+
+def test_a_capture_time_no_album_item_has_is_not_found(tmp_path: Path, monkeypatch):
+    SameNameAlbum().install(monkeypatch)
+    path = _same_name_project(tmp_path, "  - {id: x, source: {name: IMG-WA0003.jpg, taken: '2015-05-05 05:05:05'}}\n")
+    with pytest.raises(fetch.FetchError) as exc:
+        fetch.fetch(path)
+    assert "IMG-WA0003.jpg@2015-05-05T05:05:05" in str(exc.value)
+
+
+def test_a_same_named_derive_input_is_stored_under_its_name_and_time(tmp_path: Path, monkeypatch):
+    SameNameAlbum().install(monkeypatch)
+    monkeypatch.setattr(fetch.derive, "ensure_all", lambda *a, **k: [])
+    path = _same_name_project(
+        tmp_path, "  - {id: d, derive: {source: {name: IMG-WA0003.jpg, taken: '2015-03-08 15:23:51'}, scale: [10, 10]}}\n"
+    )
+    fetch.fetch(path)
+    assert (tmp_path / "assets" / "IMG-WA0003_20150308T152351.jpg").read_bytes() == b"MARCH"
