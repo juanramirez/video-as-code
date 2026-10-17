@@ -99,6 +99,12 @@ plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
   pick the AI model (Real-ESRGAN general / anime / a face restorer such
   as GFPGAN for faces). Came out of rebuilding the 2014/15 video by hand:
   five low-res shots, three variants each, chosen from a sheet.
+  The same pass should spot a camera's **date stamp** burnt into a photo
+  (the orange digits in a corner of old compact-camera pictures - text
+  detection on the picture), offer it with the stamp removed by an
+  inpainting model (LaMa did it well by hand for 2014/15: a mask over the
+  digits, 1024 px windows), and ask; kept as a `derive:` operation too
+  (`remove_date_stamp`, or a general `inpaint: {mask}`).
 
 ## Creative transitions beyond kdenlive's own set
 
