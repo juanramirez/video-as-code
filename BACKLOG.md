@@ -79,6 +79,27 @@ plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
   proxy media files, not just flipping a flag — out of proportion with
   the rest of the schema's "just emit static XML" scope.
 
+## Assisted quality pass
+
+- **`video-as-code enhance`: find the assets that will look poor and offer
+  better versions, asking which one to keep**. A pass over the project's
+  material (after `fetch`) that flags, per clip, what will show badly in
+  the render: a picture enlarged well past its own pixels (the size it's
+  placed at vs its crop, e.g. a 799x450 WhatsApp photo shown at 1812x978),
+  heavy JPEG blocking or noise, blur. For each flagged asset it makes
+  candidate versions - `upscale: 4` (Real-ESRGAN, already a `derive:`
+  operation), a plain Lanczos enlargement with unsharp mask and a touch of
+  grain, colour denoise before either - and shows them side by side at
+  the size the video will show them (a contact sheet with big labels, or
+  one window per asset), then asks which to use (or to keep the
+  original). The choice is written into the YAML as `derive:` operations
+  on the album original, so nothing extra has to be uploaded anywhere and
+  the result stays reproducible from the YAML alone. Needs `derive:` keys
+  for the non-AI candidates (`sharpen`, `grain`, `denoise`), and a way to
+  pick the AI model (Real-ESRGAN general / anime / a face restorer such
+  as GFPGAN for faces). Came out of rebuilding the 2014/15 video by hand:
+  five low-res shots, three variants each, chosen from a sheet.
+
 ## Creative transitions beyond kdenlive's own set
 
 kdenlive's UI only exposes `dissolve`/`wipe`-style transitions, but MLT
