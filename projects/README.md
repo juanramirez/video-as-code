@@ -9,8 +9,9 @@ convenience, but its contents (aside from this README) are excluded via
 
 Each subdirectory under `projects/` is:
 
-- Its own independent git repository (`git init` inside it), local
-  only — no remote configured, no push.
+- Its own independent git repository (`git init` inside it), with its
+  own remote - a private one: a project's YAML names its shared albums
+  and links, which must stay out of public view.
 - Owner of its own `.gitignore` to exclude raw footage (source video/
   audio): large binary files not worth versioning. Only the project's
   "code" gets versioned — `project.yaml` and the like — not the assets.
