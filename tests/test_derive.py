@@ -463,3 +463,32 @@ def test_derive_scaling_an_untagged_hd_video_down_converts_its_colours(tmp_path:
     assert "color_matrix" not in same[same.index("-vf") + 1]
     tagged = derive.build_command(DeriveSpec(path=hd, scale=(480, 270)), hd, tmp_path / "t.mp4", False, (1280, 720, True))
     assert "color_matrix" not in tagged[tagged.index("-vf") + 1]  # a tagged one keeps its tags instead
+
+
+def test_derive_fit_lighten_lifts_a_dark_pictures_blurred_surround(tmp_path: Path):
+    # a near-black portrait: its blurred copy is near-black too, unless
+    # `lighten` raises the surround's black point - the picture itself stays dark
+    dark = tmp_path / "dark.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=0x080808:s=60x120", "-frames:v", "1", str(dark)],
+        check=True,
+    )
+    sides = {}
+    for lighten in ("", ", lighten: 0.4"):
+        project = _project(
+            tmp_path, [f"{{id: wide, derive: {{path: {dark}, fit: {{size: [240, 120], background: blur{lighten}}}}}}}"]
+        )
+        load_and_resolve(project)
+        w, h, pixels = _gray_pixels(_bin(project)["wide"].path)
+        sides[lighten] = pixels[60 * w + 5]
+        assert pixels[60 * w + 120] < 20  # the picture: untouched
+    assert sides[""] < 20 and sides[", lighten: 0.4"] > 90
+
+
+@pytest.mark.parametrize("fit", ["{size: [240, 120], background: black, lighten: 0.3}", "{size: [240, 120], lighten: 1.5}",
+                                 "{size: [240, 120], lighten: true}"])
+def test_derive_fit_lighten_invalid(tmp_path: Path, fit: str):
+    project = _project(tmp_path, [f"{{id: d, derive: {{path: a.mp4, fit: {fit}}}}}"])
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(project)
+    assert "derive.fit" in str(exc.value)

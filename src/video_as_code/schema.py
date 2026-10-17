@@ -475,16 +475,22 @@ def _parse_derive(
     ):
         errors.append(msg("validation.derive_devignette_invalid", id=clip_id, value=devignette))
     fit = None
+    fit_lighten = None
     if data.get("fit") is not None:
-        # {size: [w, h], background: blur | black}: the whole picture inside
-        # w x h, what's left filled with a blurred copy of itself or black
+        # {size: [w, h], background: blur | black, lighten}: the whole picture
+        # inside w x h, what's left filled with a blurred copy of itself (its
+        # shadows lifted by `lighten`, 0-1) or black
         raw = data["fit"]
         size = _number_pair(raw.get("size")) if isinstance(raw, dict) else None
         background = raw.get("background", "blur") if isinstance(raw, dict) else None
-        ok = isinstance(raw, dict) and not set(raw) - {"size", "background"}
+        lighten = raw.get("lighten") if isinstance(raw, dict) else None
+        ok = isinstance(raw, dict) and not set(raw) - {"size", "background", "lighten"}
         ok = ok and size is not None and all(v > 0 and v == int(v) for v in size) and background in derive_mod.FIT_BACKGROUNDS
+        ok = ok and (lighten is None or (background == "blur" and not isinstance(lighten, bool)
+                                         and isinstance(lighten, (int, float)) and 0 <= lighten < 1))
         if ok:
             fit = (int(size[0]), int(size[1]), background)
+            fit_lighten = float(lighten) if lighten else None
         else:
             errors.append(msg("validation.derive_fit_invalid", id=clip_id, value=raw))
     feather = data.get("feather")
@@ -533,6 +539,7 @@ def _parse_derive(
         scale=scale,
         devignette=float(devignette) if devignette is not None else None,
         fit=fit,
+        fit_lighten=fit_lighten,
         feather=feather,
         vignette=float(vignette) if vignette is not None else None,
         fps=float(fps) if fps is not None else None,

@@ -62,6 +62,8 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         canonical["devignette"] = spec.devignette
     if spec.fit:
         canonical["fit"] = list(spec.fit)
+    if spec.fit_lighten:
+        canonical["fit_lighten"] = spec.fit_lighten
     if spec.feather:
         canonical["feather"] = spec.feather
     if spec.vignette is not None:
@@ -235,11 +237,13 @@ def _feather_to_black(n: int) -> str:
     return f"format=gbrp,geq=r='r(X,Y)*{ramp}':g='g(X,Y)*{ramp}':b='b(X,Y)*{ramp}'"
 
 
-def _fit_filter(w: int, h: int, background: str, feather: Optional[int] = None) -> str:
+def _fit_filter(w: int, h: int, background: str, feather: Optional[int] = None, lighten: Optional[float] = None) -> str:
     """`fit`: the picture scaled to fit inside w x h, centred, the rest
     black or - `blur` - a copy of it scaled to COVER w x h (cropped to it)
-    and blurred. A branching graph, but still one input and one output, so
-    it chains like any single filter (-vf and the gif graph alike)."""
+    and blurred, its shadows lifted by `lighten` (its black point raised
+    to that level, so a dark picture doesn't sit on what looks like black).
+    A branching graph, but still one input and one output, so it chains
+    like any single filter (-vf and the gif graph alike)."""
     fg = f"scale={w}:{h}:force_original_aspect_ratio=decrease"
     if background == "blur" and feather:
         # the picture's own edges melt into the blurred copy around it
@@ -249,7 +253,9 @@ def _fit_filter(w: int, h: int, background: str, feather: Optional[int] = None) 
     sigma = max(1.0, w * _FIT_BLUR_SIGMA)
     return (
         f"split=2[fitbg][fitfg];"
-        f"[fitbg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma={sigma:g}[fitbg2];"
+        f"[fitbg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma={sigma:g}"
+        + (f",colorlevels=romin={lighten:g}:gomin={lighten:g}:bomin={lighten:g}" if lighten else "")
+        + "[fitbg2];"
         f"[fitfg]{fg}[fitfg2];[fitbg2][fitfg2]overlay=(W-w)/2:(H-h)/2"
     )
 
@@ -293,7 +299,7 @@ def build_command(
         angle = math.acos(spec.devignette ** 0.25)
         vf.append(f"vignette=angle={angle:.6f}:mode=backward")
     if spec.fit:
-        vf.append(_fit_filter(*spec.fit, feather=spec.feather))
+        vf.append(_fit_filter(*spec.fit, feather=spec.feather, lighten=spec.fit_lighten))
     if spec.feather:
         vf.append(_feather_to_black(spec.feather))
     if spec.vignette is not None:
