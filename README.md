@@ -159,10 +159,13 @@ say which:
 
 `taken` is the capture time as Google Photos has it, local to where it
 was taken, to the second (the same value `sources.lock.yaml` records).
+If even that ties - a race photographer's site can hand out different
+pictures under the same name and time - add `size: [w, h]`, the item's
+size in pixels (one of the two is enough when it alone tells them apart).
 That's what keeps such a project buildable from its YAML alone: without
 it, the only way to point at the right one would be a local copy of the
 file, which a fresh checkout doesn't have. In the lock and on disk the
-item is then known as `<name>@<taken>`, so two same-named items never
+item is then known as `<name>@<taken>#<w>x<h>`, so two same-named items never
 overwrite each other.
 
 The album can also be given by **name**, before it exists:

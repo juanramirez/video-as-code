@@ -638,3 +638,18 @@ def test_a_same_named_derive_input_is_stored_under_its_name_and_time(tmp_path: P
     )
     fetch.fetch(path)
     assert (tmp_path / "assets" / "IMG-WA0003_20150308T152351.jpg").read_bytes() == b"MARCH"
+
+
+def test_fetch_tells_apart_same_named_same_time_items_by_size(tmp_path: Path, monkeypatch):
+    album = SameNameAlbum()
+    album.items = [  # a race photographer's two pictures: same name, same time, different size
+        gphotos.AlbumItem(media_id="mRun", base_url="https://x/run", is_video=False, width=1024, height=683, taken_ms=album.MARCH),
+        gphotos.AlbumItem(media_id="mFin", base_url="https://x/fin", is_video=False, width=1082, height=720, taken_ms=album.MARCH),
+    ]
+    album.body = {"mRun": b"RUNNING", "mFin": b"FINISHER"}
+    album.install(monkeypatch)
+    path = _same_name_project(
+        tmp_path, "  - {id: finish, source: {name: IMG-WA0003.jpg, taken: '2015-03-08 15:23:51', size: [1082, 720]}}\n"
+    )
+    fetch.fetch(path)
+    assert (tmp_path / "assets" / "20150308_finish.jpg").read_bytes() == b"FINISHER"

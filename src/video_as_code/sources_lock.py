@@ -1,7 +1,8 @@
 """`sources.lock.yaml`: what `fetch` knows about each album item a project
 uses, keyed by its original file name (BinClipSpec.source) - or, for an
-item named with its capture time too (`source: {name, taken}`, needed when
-several album items share a file name), by `<name>@<taken>` (source_key):
+item named with its capture time and/or size too (`source: {name, taken,
+size}`, needed when several album items share a file name), by
+`<name>@<taken>#<w>x<h>` (source_key):
 
     items:
       PXL_20250830_085416309.mp4:
@@ -80,22 +81,35 @@ def taken_local(taken_ms: int, tz_offset_ms: int) -> str:
 # An album item is named by its original file name; when several items of
 # the album share it (cameras restart their numbering, WhatsApp reuses
 # names like IMG-20150308-WA0003.jpg on different phones), by that name and
-# its capture time - `source: {name, taken}` - which becomes one string key,
-# `<name>@<taken>`, everywhere a source is keyed (the lock, fetch's jobs,
-# derive inputs). `taken` is local to where it was taken, as in the lock.
-_KEY_SEP = "@"
+# its capture time - `source: {name, taken}` - and, if even that ties (a
+# race photographer's site hands out pictures with the same name and
+# time), its size in pixels - `size: [w, h]`. That becomes one string key,
+# `<name>@<taken>#<w>x<h>` (each part only if given), everywhere a source
+# is keyed (the lock, fetch's jobs, derive inputs). `taken` is local to
+# where it was taken, as in the lock.
+_KEY_RE = re.compile(r"^(?P<name>.+?)(@(?P<taken>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}))?(#(?P<w>\d+)x(?P<h>\d+))?$")
 
 
-def source_key(name: str, taken: Optional[str] = None) -> str:
-    return f"{name}{_KEY_SEP}{taken}" if taken else name
+def source_key(name: str, taken: Optional[str] = None, size: Optional[tuple[int, int]] = None) -> str:
+    return name + (f"@{taken}" if taken else "") + (f"#{size[0]}x{size[1]}" if size else "")
+
+
+def _parts(key: str) -> tuple[str, Optional[str], Optional[tuple[int, int]]]:
+    m = _KEY_RE.match(key)
+    if not m or not (m["taken"] or m["w"]):
+        return key, None, None
+    return m["name"], m["taken"], (int(m["w"]), int(m["h"])) if m["w"] else None
 
 
 def split_source(key: str) -> tuple[str, Optional[str]]:
     """(original file name, capture time or None) of a source key."""
-    name, sep, taken = key.rpartition(_KEY_SEP)
-    if sep and _TAKEN_RE.match(taken):
-        return name, taken
-    return key, None
+    name, taken, _ = _parts(key)
+    return name, taken
+
+
+def source_size(key: str) -> Optional[tuple[int, int]]:
+    """The size in pixels a source key names its item by, if any."""
+    return _parts(key)[2]
 
 
 def source_file_name(key: str) -> str:
@@ -103,11 +117,12 @@ def source_file_name(key: str) -> str:
     input no plain clip shares): the original name, plus its capture time
     when it had to be named with one - so two same-named items don't land
     on the same file."""
-    name, taken = split_source(key)
-    if not taken:
+    name, taken, size = _parts(key)
+    if not taken and not size:
         return name
     stem, suffix = Path(name).stem, Path(name).suffix
-    return f"{stem}_{taken.replace('-', '').replace(':', '')}{suffix}"
+    tag = "_".join(([taken.replace("-", "").replace(":", "")] if taken else []) + ([f"{size[0]}x{size[1]}"] if size else []))
+    return f"{stem}_{tag}{suffix}"
 
 
 def normalize_taken(value) -> Optional[str]:

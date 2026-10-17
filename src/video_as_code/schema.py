@@ -236,20 +236,27 @@ def _parse_album(raw, errors: list[str]) -> tuple[Optional[str], Optional[str]]:
 def _parse_source(raw, clip_id, errors: list[str]) -> Optional[str]:
     """A `source:` (a bin clip's, or a derive: input's) as the key it's
     known by (sources_lock.source_key): an album item's original file name,
-    or `{name, taken}` - that name plus its capture time, for when several
-    items of the album share the name and the name alone can't say which
-    one is meant. None (with the error) if it's neither."""
+    or `{name, taken, size}` - that name plus its capture time and/or its
+    size in pixels, for when several items of the album share the name and
+    the name alone can't say which one is meant. None (with the error) if
+    it's neither."""
+    size = None
     if isinstance(raw, dict):
         name, taken = raw.get("name"), sources_lock.normalize_taken(raw.get("taken"))
-        if set(raw) - {"name", "taken"} or not isinstance(name, str) or taken is None:
+        size = _number_pair(raw.get("size")) if raw.get("size") is not None else None
+        size = (int(size[0]), int(size[1])) if size and all(v > 0 and v == int(v) for v in size) else None
+        if (set(raw) - {"name", "taken", "size"} or not isinstance(name, str)
+                or (raw.get("taken") is not None and taken is None)
+                or (raw.get("size") is not None and size is None)
+                or (taken is None and size is None)):
             errors.append(msg("validation.source_map_invalid", id=clip_id, source=raw))
             return None
     else:
         name, taken = str(raw), None
-    if Path(name).name != name or name in ("", ".", "..") or "@" in name and taken is None and sources_lock.split_source(name)[1]:
+    if Path(name).name != name or name in ("", ".", "..") or sources_lock.source_key(name) != name or sources_lock._parts(name)[0] != name:
         errors.append(msg("validation.bin_source_not_a_name", id=clip_id, source=name))
         return None
-    return sources_lock.source_key(name, taken)
+    return sources_lock.source_key(name, taken, size)
 
 
 def _parse_reference(raw, errors: list[str]) -> tuple[Optional[tuple[str, ...]], str]:

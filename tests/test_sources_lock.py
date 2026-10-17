@@ -102,3 +102,13 @@ def test_local_name_of_a_keyed_source_uses_the_names_extension():
 )
 def test_normalize_taken(value, expected):
     assert sources_lock.normalize_taken(value) == expected
+
+
+def test_source_key_with_a_size_for_when_even_the_time_ties():
+    key = sources_lock.source_key("2023-04-28.jpg", "2015-12-08T20:54:57", (1024, 683))
+    assert key == "2023-04-28.jpg@2015-12-08T20:54:57#1024x683"
+    assert sources_lock.split_source(key) == ("2023-04-28.jpg", "2015-12-08T20:54:57")
+    assert sources_lock.source_size(key) == (1024, 683)
+    assert sources_lock.source_file_name(key) == "2023-04-28_20151208T205457_1024x683.jpg"
+    assert sources_lock.source_size(sources_lock.source_key("a.jpg", size=(5, 6))) == (5, 6)
+    assert sources_lock.source_size("a.jpg@2015-12-08T20:54:57") is None

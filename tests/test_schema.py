@@ -1945,6 +1945,8 @@ def test_reference_invalid(tmp_path: Path, reference: str):
         ("IMG-WA0003.jpg", "IMG-WA0003.jpg"),
         ("{name: IMG-WA0003.jpg, taken: '2015-03-08 15:23:51'}", "IMG-WA0003.jpg@2015-03-08T15:23:51"),
         ("{name: IMG-WA0003.jpg, taken: 2015-03-08 15:23:51}", "IMG-WA0003.jpg@2015-03-08T15:23:51"),  # unquoted: a YAML datetime
+        ("{name: a.jpg, taken: '2015-12-08 20:54:57', size: [1024, 683]}", "a.jpg@2015-12-08T20:54:57#1024x683"),
+        ("{name: a.jpg, size: [1024, 683]}", "a.jpg#1024x683"),
     ],
 )
 def test_source_by_name_or_by_name_and_capture_time(tmp_path: Path, source: str, key: str):
@@ -1956,7 +1958,7 @@ def test_source_by_name_or_by_name_and_capture_time(tmp_path: Path, source: str,
 
 @pytest.mark.parametrize(
     "source",
-    ["{name: a.jpg}", "{name: a.jpg, taken: '2015-03-08'}", "{taken: '2015-03-08 15:23:51'}", "{name: a.jpg, taken: '2015-03-08 15:23:51', x: 1}", "{name: dir/a.jpg, taken: '2015-03-08 15:23:51'}"],
+    ["{name: a.jpg}", "{name: a.jpg, taken: '2015-03-08'}", "{name: a.jpg, size: [0, 5]}", "{name: a.jpg, size: 5}", "a.jpg#10x10", "{taken: '2015-03-08 15:23:51'}", "{name: a.jpg, taken: '2015-03-08 15:23:51', x: 1}", "{name: dir/a.jpg, taken: '2015-03-08 15:23:51'}"],
 )
 def test_source_map_invalid(tmp_path: Path, source: str):
     with pytest.raises(ValidationErrors) as exc:

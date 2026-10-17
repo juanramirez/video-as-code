@@ -136,15 +136,18 @@ class _AlbumIndex:
 
     def find(self, key: str) -> Optional[gphotos.AlbumItem]:
         """The album item a source key names (sources_lock.source_key): by
-        original file name, and - if the key has one - capture time, which
-        tells apart items that share a name. With a plain name and several
+        original file name, and - if the key has them - capture time and
+        size, which tell apart items that share a name. With a plain name and several
         such items, the first found: the one taken closest to the time in
         its name."""
         name, taken = sources_lock.split_source(key)
+        size = sources_lock.source_size(key)
 
         def matches(item: gphotos.AlbumItem) -> bool:
-            return self._names.get(item.media_id) == name and (
-                taken is None or sources_lock.taken_local(item.taken_ms, item.tz_offset_ms) == taken
+            return (
+                self._names.get(item.media_id) == name
+                and (taken is None or sources_lock.taken_local(item.taken_ms, item.tz_offset_ms) == taken)
+                and (size is None or (item.width, item.height) == size)
             )
 
         candidates = gphotos.rank_by_name_time(self.items, name)
