@@ -60,6 +60,8 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         canonical["intra"] = True
     if spec.devignette is not None:
         canonical["devignette"] = spec.devignette
+    if spec.rotate:
+        canonical["rotate"] = spec.rotate
     if spec.fit:
         canonical["fit"] = list(spec.fit)
     if spec.fit_lighten:
@@ -293,6 +295,9 @@ def build_command(
 
     kind = output.suffix.lower()
     vf: list[str] = []
+    if spec.rotate:
+        # clockwise, before anything else: crop and the rest see the turned picture
+        vf.append({90: "transpose=1", 180: "hflip,vflip", 270: "transpose=2"}[spec.rotate])
     if spec.crop:
         x, y, w, h = spec.crop
         vf.append(f"crop={w}:{h}:{x}:{y}")
@@ -442,7 +447,7 @@ def build_cut_command(spec: DeriveSpec, input_path: Path, output: Path, has_audi
 
 def _ffmpeg_ops(spec: DeriveSpec) -> bool:
     return bool(
-        spec.trim or spec.cut or spec.crop or spec.scale or spec.devignette is not None or spec.fit
+        spec.rotate or spec.trim or spec.cut or spec.crop or spec.scale or spec.devignette is not None or spec.fit
         or spec.feather or spec.vignette is not None or spec.fps or spec.reverse or spec.volume is not None or spec.intra
     )
 

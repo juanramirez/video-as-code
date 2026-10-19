@@ -62,7 +62,9 @@ class DeriveSpec:
     (another bin clip's id, which may itself be derived). `motion: true`
     takes, instead of the input itself, the short video a phone's motion
     photo (Google's `.MP.jpg`) carries inside it. Then, applied in
-    this order: `trim` (source seconds [start, end)) and `cut` (source
+    this order: `rotate` (90, 180 or 270 degrees clockwise, of the picture as
+    it shows - EXIF orientation applied; then every later operation, `crop`
+    included, works on the turned picture), `trim` (source seconds [start, end)) and `cut` (source
     seconds [start, end) ranges REMOVED from the middle, picture and sound
     alike; both in the input's own seconds), `crop` (x, y, w, h,
     source pixels), `scale` (w, h; -1 keeps the aspect ratio),
@@ -93,6 +95,9 @@ class DeriveSpec:
     crop: Optional[tuple[int, int, int, int]] = None
     scale: Optional[tuple[int, int]] = None
     devignette: Optional[float] = None
+    # `rotate`: 90, 180 or 270 degrees clockwise, first of all - for a photo whose
+    # EXIF orientation is wrong (the camera's pixels were right; the tag turns them)
+    rotate: Optional[int] = None
     fit: Optional[tuple[int, int, str]] = None  # (w, h, "blur" | "black")
     # `fit: {lighten}`: how much to brighten the blurred copy around the
     # picture (0-1: every channel times 1 + 5 x lighten, so its colours

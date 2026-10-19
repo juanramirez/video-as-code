@@ -99,6 +99,9 @@ def test_derive_from_another_clip_follows_it(tmp_path: Path):
         (["{id: d, derive: {path: a.mp4, reverse: maybe}}"], "derive.reverse"),
         (["{id: d, derive: {path: a.mp4, intra: 1}}"], "derive.intra"),
         (["{id: d, derive: {path: a.mp4, volume: -1}}"], "derive.volume"),
+        (["{id: d, derive: {path: a.mp4, rotate: 45}}"], "derive.rotate"),
+        (["{id: d, derive: {path: a.mp4, rotate: -90}}"], "derive.rotate"),
+        (["{id: d, derive: {path: a.mp4, rotate: true}}"], "derive.rotate"),
         (["{id: d, derive: {path: a.mp4, devignette: 1}}"], "derive.devignette"),
         (["{id: d, derive: {path: a.mp4, devignette: 0}}"], "derive.devignette"),
         (["{id: d, derive: {path: a.mp4, devignette: true}}"], "derive.devignette"),
@@ -520,3 +523,27 @@ def test_derive_fit_lighten_keeps_the_surrounds_hue(tmp_path: Path):
                          capture_output=True, check=True).stdout
     r, g, b = rgb[0], rgb[1], rgb[2]
     assert r > 90 and r > g > b and b < 0.6 * r  # light brown: brighter, and still clearly brown
+
+
+def test_derive_rotate_turns_the_picture_clockwise_before_cropping(tmp_path: Path):
+    # 160x120: the left half white, the right half black
+    src = tmp_path / "half.png"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=160x120", "-vf",
+         "drawbox=x=0:y=0:w=80:h=120:color=white:t=fill", "-frames:v", "1", str(src)],
+        check=True,
+    )
+    project = _project(tmp_path, [
+        f"{{id: r180, derive: {{path: {src}, rotate: 180}}}}",
+        f"{{id: r90, derive: {{path: {src}, rotate: 90}}}}",
+        # turned first, then cropped: the crop's top-left corner is in the turned picture
+        f"{{id: r90crop, derive: {{path: {src}, rotate: 90, crop: {{x: 0, y: 0, w: 120, h: 40}}}}}}",
+    ])
+    load_and_resolve(project)
+    bins = _bin(project)
+    w, h, px = _gray_pixels(bins["r180"].path)
+    assert (w, h) == (160, 120) and px[60 * w + 10] < 30 and px[60 * w + 150] > 225  # now black left, white right
+    w, h, px = _gray_pixels(bins["r90"].path)
+    assert (w, h) == (120, 160) and px[10 * w + 60] > 225 and px[150 * w + 60] < 30  # clockwise: white on top
+    w, h, px = _gray_pixels(bins["r90crop"].path)
+    assert (w, h) == (120, 40) and min(px) > 225  # the top band of the turned picture: all white

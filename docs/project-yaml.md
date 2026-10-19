@@ -85,6 +85,7 @@ Then any of these operations, applied in this order:
 | Key | Example | Meaning |
 |---|---|---|
 | `motion` | `true` | Take the short video inside a phone's motion photo (`.MP.jpg`) instead of the photo; the result is an `.mp4`. |
+| `rotate` | `180` | Turn the picture 90, 180 or 270 degrees clockwise, before anything else (so `crop` works on the turned picture): for a photo whose EXIF orientation tag is wrong, shown upside down or on its side. |
 | `trim` | `[12, 16]` | Keep only these input seconds `[start, end)`. |
 | `cut` | `[[18.44, 20.36]]` | Remove these input-second ranges from the middle, picture and sound alike. |
 | `crop` | `{x: 0, y: 156, w: 4080, h: 2760}` | Keep this rectangle, in input pixels. |

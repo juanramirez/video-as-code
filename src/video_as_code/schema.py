@@ -415,7 +415,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_not_a_map", id=clip_id, value=data))
         return None
     n_errors = len(errors)
-    known = {"source", "path", "clip", "motion", "trim", "cut", "crop", "scale", "devignette", "fit", "feather", "vignette", "fps", "reverse", "volume", "upscale", "intra"}
+    known = {"source", "path", "clip", "motion", "rotate", "trim", "cut", "crop", "scale", "devignette", "fit", "feather", "vignette", "fps", "reverse", "volume", "upscale", "intra"}
     unknown = set(data) - known
     if unknown:
         errors.append(msg("validation.derive_unknown_keys", id=clip_id, keys=", ".join(sorted(unknown))))
@@ -467,6 +467,9 @@ def _parse_derive(
         # -1 on one side keeps the aspect ratio (ffmpeg's own convention)
         if scale is None or any(v == 0 or v < -1 for v in scale) or scale == (-1, -1):
             errors.append(msg("validation.derive_scale_invalid", id=clip_id, value=data["scale"]))
+    rotate = data.get("rotate")
+    if rotate is not None and (isinstance(rotate, bool) or rotate not in (90, 180, 270)):
+        errors.append(msg("validation.derive_rotate_invalid", id=clip_id, value=rotate))
     devignette = data.get("devignette")
     # the corners' brightness relative to the centre: 1 would be no
     # vignette at all, 0 black corners (nothing left to brighten)
@@ -524,7 +527,7 @@ def _parse_derive(
     if len(errors) > n_errors:
         return None
     if not (
-        motion or trim or cut or crop or scale or devignette is not None or fit or feather or vignette is not None or fps
+        motion or rotate or trim or cut or crop or scale or devignette is not None or fit or feather or vignette is not None or fps
         or reverse or volume is not None or upscale or intra
     ):
         errors.append(msg("validation.derive_does_nothing", id=clip_id))
@@ -538,6 +541,7 @@ def _parse_derive(
         crop=crop,
         scale=scale,
         devignette=float(devignette) if devignette is not None else None,
+        rotate=int(rotate) if rotate is not None else None,
         fit=fit,
         fit_lighten=fit_lighten,
         feather=feather,
