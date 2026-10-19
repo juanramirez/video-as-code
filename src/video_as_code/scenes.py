@@ -255,7 +255,7 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             if val is None:
                 return None
             if not (isinstance(val, (list, tuple)) and len(val) == 2):
-                errors.append(msg("validation.pair_invalid", ctx=entry_ctx, key=key))
+                errors.append(msg("validation.pair_invalid", ctx=entry_ctx, field=key))
                 return None
             return (float(val[0]), float(val[1]))
 

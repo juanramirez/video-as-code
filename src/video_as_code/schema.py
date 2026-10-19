@@ -176,7 +176,7 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
     required = ["id", "title", "fps", "width", "height"]
     for key in required:
         if key not in data:
-            errors.append(msg("validation.project_field_required", key=key))
+            errors.append(msg("validation.project_field_required", field=key))
     if errors:
         # Can't build a ProjectSpec without the bare minimum.
         return ProjectSpec(
@@ -808,7 +808,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         if val is None:
             return None
         if not (isinstance(val, (list, tuple)) and len(val) == 2):
-            errors.append(msg("validation.pair_invalid", ctx=ctx, key=key))
+            errors.append(msg("validation.pair_invalid", ctx=ctx, field=key))
             return None
         return (float(val[0]), float(val[1]))
 
@@ -923,7 +923,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         if val is None:
             return None
         if not (isinstance(val, (list, tuple)) and len(val) == 4):
-            errors.append(msg("validation.quad_invalid", ctx=ctx, key=key))
+            errors.append(msg("validation.quad_invalid", ctx=ctx, field=key))
             return None
         return (float(val[0]), float(val[1]), float(val[2]), float(val[3]))
 

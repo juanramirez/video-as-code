@@ -1964,3 +1964,50 @@ def test_source_map_invalid(tmp_path: Path, source: str):
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(_write_yaml(tmp_path, _album_project("https://photos.app.goo.gl/x", f"  - {{id: c0, source: {source}}}")))
     assert "'source'" in str(exc.value)
+
+
+# Messages whose template names a field: their placeholder must not be called `key`, the name of msg()'s own first
+# parameter, or reporting the problem raises TypeError instead of listing it.
+def test_missing_project_field_reported(tmp_path: Path):
+    path = _write_yaml(tmp_path, """
+project: {id: p1, fps: 25, width: 320, height: 240}
+timeline:
+  tracks: []
+""")
+    with pytest.raises(ValidationErrors) as exc:
+        load_yaml(path)
+    assert "project.title" in str(exc.value)
+
+
+def test_bad_pair_reported(tmp_path: Path, assets_dir: Path):
+    path = _write_yaml(tmp_path, f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / 'tone.mp3'}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: tone, start: 0, duration: 1, position: [10]}}
+""")
+    with pytest.raises(ValidationErrors) as exc:
+        load_yaml(path)
+    assert ".position" in str(exc.value)
+
+
+def test_bad_quad_reported(tmp_path: Path, assets_dir: Path):
+    path = _write_yaml(tmp_path, f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: tone
+    path: {assets_dir / 'tone.mp3'}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: tone, start: 0, duration: 1, ken_burns_from: [0, 0, 10]}}
+""")
+    with pytest.raises(ValidationErrors) as exc:
+        load_yaml(path)
+    assert ".ken_burns_from" in str(exc.value)
