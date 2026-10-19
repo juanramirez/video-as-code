@@ -88,7 +88,7 @@ Then any of these operations, applied in this order:
 | `trim` | `[12, 16]` | Keep only these input seconds `[start, end)`. |
 | `cut` | `[[18.44, 20.36]]` | Remove these input-second ranges from the middle, picture and sound alike. |
 | `crop` | `{x: 0, y: 156, w: 4080, h: 2760}` | Keep this rectangle, in input pixels. |
-| `scale` | `[1920, 1080]` | Resize; `-1` on one side keeps the aspect ratio. |
+| `scale` | `[1920, 1080]` | Resize; `-1` on one side keeps the aspect ratio. Two sizes of another shape stretch the picture to it (square pixels: it shows at that shape). |
 | `devignette` | `0.81` | Undo a vignette baked into the input (a shot taken from an old edit, say): how bright its corners are relative to its centre, between 0 and 1. |
 | `fit` | `{size: [1440, 960], background: blur}` | Make the whole picture fit inside `size`, centred, and fill the rest: `blur` (the default) with a blurred copy of the picture enlarged to cover it, `black` with black. Fits a portrait photo into a landscape frame without cropping it. With `blur`, `lighten: 0.35` (0-1) brightens the blurred copy - every channel times 1 + 5 x `lighten`, so its colours stay (a dark brown turns light brown, not grey) - for a dark picture (a cave, a night shot) whose blurred surround would otherwise look like plain black. |
 | `feather` | `16` | Soft edges: the picture fades out over its last that many pixels on every side, to black (and, with `fit: blur`, the picture itself also melts into its blurred surround). |

@@ -302,7 +302,10 @@ def build_command(
         # aspect ratio, rounded to even" (plain -1 may give an odd size)
         if kind == ".mp4":
             w, h = (-2 if w == -1 else w), (-2 if h == -1 else h)
-        vf.append(f"scale={w}:{h}")
+        # setsar=1: a scale to another shape is meant to stretch the picture;
+        # without it ffmpeg keeps the old shape in the sample aspect ratio, and
+        # players show that again (narrower or flatter than asked for)
+        vf.append(f"scale={w}:{h},setsar=1")
     if spec.devignette is not None:
         # ffmpeg's vignette darkens by cos(angle * d)^4, d being the distance
         # from the centre over the corner's (a natural lens falloff), so

@@ -244,6 +244,18 @@ def test_derive_crop_scale_fps_on_a_silent_video(tmp_path: Path, assets_dir: Pat
     assert video["r_frame_rate"] == "10/1"
 
 
+def test_derive_scale_to_another_shape_stretches_it(tmp_path: Path, assets_dir: Path):
+    # 200x100 scaled to 100x100: square pixels, so it shows square (not 2:1 again through the sample aspect ratio)
+    crop = "{x: 10, y: 10, w: 200, h: 100}"
+    project = _project(
+        tmp_path, [f"{{id: square, derive: {{path: {assets_dir / 'clip.mp4'}, crop: {crop}, scale: [100, 100]}}}}"]
+    )
+    load_and_resolve(project)
+    (video,) = _probe(_bin(project)["square"].path)["streams"]
+    assert (video["width"], video["height"]) == (100, 100)
+    assert video.get("sample_aspect_ratio", "1:1") == "1:1"
+
+
 def test_derive_intra_makes_every_frame_a_keyframe(tmp_path: Path, assets_dir: Path):
     project = _project(tmp_path, [f"{{id: still, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0, 1], intra: true}}}}"])
     load_and_resolve(project)
