@@ -108,6 +108,11 @@ def test_derive_from_another_clip_follows_it(tmp_path: Path):
         (["{id: d, derive: {path: a.mp4, fit: {size: [0, 10]}}}"], "derive.fit"),
         (["{id: d, derive: {path: a.mp4, fit: {size: [16, 9], background: white}}}"], "derive.fit"),
         (["{id: d, derive: {path: a.mp4, fit: [16, 9]}}"], "derive.fit"),
+        (["{id: d, derive: {path: a.mp4, fit: {size: [16, 9], background: black, margin: 2}}}"], "derive.fit"),
+        (["{id: d, derive: {path: a.mp4, fit: {size: [16, 9], margin: 5}}}"], "derive.fit"),
+        (["{id: d, derive: {path: a.mp4, fit: {size: [16, 9], radius: 2.5}}}"], "derive.fit"),
+        (["{id: d, derive: {path: a.mp4, fit: {size: [16, 9], shadow: 1}}}"], "derive.fit"),
+        (["{id: d, derive: {path: a.mp4, fit: {size: [16, 9], dim: 0.2, lighten: 0.2}}}"], "derive.fit"),
         (["{id: d, derive: {path: a.mp4, vignette: 1}}"], "derive.vignette"),
         (["{id: d, derive: {path: a.mp4, feather: 0}}"], "derive.feather"),
         (["{id: d, derive: {path: a.mp4, feather: 2.5}}"], "derive.feather"),
@@ -547,3 +552,20 @@ def test_derive_rotate_turns_the_picture_clockwise_before_cropping(tmp_path: Pat
     assert (w, h) == (120, 160) and px[10 * w + 60] > 225 and px[150 * w + 60] < 30  # clockwise: white on top
     w, h, px = _gray_pixels(bins["r90crop"].path)
     assert (w, h) == (120, 40) and min(px) > 225  # the top band of the turned picture: all white
+
+
+def test_derive_fit_card_rounds_shades_and_dims(tmp_path: Path):
+    # a white 100x100 picture as a card on a 300x200 frame: 20 px margin, corners rounded to 30 px, a shadow, the
+    # blurred copy around it (white too) dimmed to half
+    white = tmp_path / "white.png"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=white:s=100x100", "-frames:v", "1", str(white)], check=True)
+    fit = "{size: [300, 200], background: blur, margin: 20, radius: 30, edge: 2, shadow: 0.5, dim: 0.5}"
+    project = _project(tmp_path, [f"{{id: card, derive: {{path: {white}, fit: {fit}}}}}"])
+    load_and_resolve(project)
+    w, h, px = _gray_pixels(_bin(project)["card"].path)
+    assert (w, h) == (300, 200)
+    # the card is 160x160 (200 less 2 x 20), centred: x 70-229, y 20-179
+    assert px[100 * w + 150] > 240                      # its middle: the picture itself
+    assert px[22 * w + 72] < 200                        # inside its bounding box, but outside the rounded corner
+    assert 100 < px[100 * w + 3] < 160                  # far from it: the copy, dimmed to about half
+    assert px[100 * w + 68] < px[100 * w + 3] - 8       # just beside it (its blur is ~3 px at this width): the shadow

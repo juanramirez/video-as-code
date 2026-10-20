@@ -479,6 +479,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_devignette_invalid", id=clip_id, value=devignette))
     fit = None
     fit_lighten = None
+    fit_card: dict = {}
     if data.get("fit") is not None:
         # {size: [w, h], background: blur | black, lighten}: the whole picture
         # inside w x h, what's left filled with a blurred copy of itself
@@ -487,13 +488,22 @@ def _parse_derive(
         size = _number_pair(raw.get("size")) if isinstance(raw, dict) else None
         background = raw.get("background", "blur") if isinstance(raw, dict) else None
         lighten = raw.get("lighten") if isinstance(raw, dict) else None
-        ok = isinstance(raw, dict) and not set(raw) - {"size", "background", "lighten"}
+        card = {k: raw.get(k) for k in ("margin", "radius", "edge", "shadow", "dim")} if isinstance(raw, dict) else {}
+        ok = isinstance(raw, dict) and not set(raw) - {"size", "background", "lighten", "margin", "radius", "edge", "shadow", "dim"}
+        # the card options: whole pixels (margin, radius, edge) or 0-1 (shadow, dim), blur only; not dim and lighten together
+        is_num = lambda v: not isinstance(v, bool) and isinstance(v, (int, float))
+        ok = ok and all(v is None or (background == "blur" and is_num(v)) for v in card.values())
+        ok = ok and all(card[k] is None or (card[k] == int(card[k]) and card[k] >= 0) for k in ("margin", "radius", "edge"))
+        ok = ok and all(card[k] is None or 0 <= card[k] < 1 for k in ("shadow", "dim"))
+        ok = ok and not (card["dim"] and lighten)
+        ok = ok and (not card["margin"] or (size is not None and 2 * card["margin"] < min(size)))
         ok = ok and size is not None and all(v > 0 and v == int(v) for v in size) and background in derive_mod.FIT_BACKGROUNDS
         ok = ok and (lighten is None or (background == "blur" and not isinstance(lighten, bool)
                                          and isinstance(lighten, (int, float)) and 0 <= lighten < 1))
         if ok:
             fit = (int(size[0]), int(size[1]), background)
             fit_lighten = float(lighten) if lighten else None
+            fit_card = {k: (int(v) if k in ("margin", "radius", "edge") else float(v)) for k, v in card.items() if v}
         else:
             errors.append(msg("validation.derive_fit_invalid", id=clip_id, value=raw))
     feather = data.get("feather")
@@ -544,6 +554,11 @@ def _parse_derive(
         rotate=int(rotate) if rotate is not None else None,
         fit=fit,
         fit_lighten=fit_lighten,
+        fit_margin=fit_card.get("margin"),
+        fit_radius=fit_card.get("radius"),
+        fit_edge=fit_card.get("edge"),
+        fit_shadow=fit_card.get("shadow"),
+        fit_dim=fit_card.get("dim"),
         feather=feather,
         vignette=float(vignette) if vignette is not None else None,
         fps=float(fps) if fps is not None else None,

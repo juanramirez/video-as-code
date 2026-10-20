@@ -103,6 +103,15 @@ class DeriveSpec:
     # picture (0-1: every channel times 1 + 5 x lighten, so its colours
     # stay) - for a dark picture, whose surround would otherwise look black
     fit_lighten: Optional[float] = None
+    # `fit: {margin, radius, edge, shadow, dim}` (blur only): the picture as a card on
+    # its blurred copy - at least `margin` px of it all round, corners rounded to
+    # `radius` px, its edge softened over `edge` px, a soft `shadow` (0-1) under it,
+    # and the blurred copy darkened by `dim` (0-1) so the card stands out
+    fit_margin: Optional[int] = None
+    fit_radius: Optional[int] = None
+    fit_edge: Optional[int] = None
+    fit_shadow: Optional[float] = None
+    fit_dim: Optional[float] = None
     feather: Optional[int] = None  # px
     vignette: Optional[float] = None
     fps: Optional[float] = None

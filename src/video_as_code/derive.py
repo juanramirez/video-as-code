@@ -66,6 +66,9 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         canonical["fit"] = list(spec.fit)
     if spec.fit_lighten:
         canonical["fit_lighten"] = spec.fit_lighten
+    for key in ("fit_margin", "fit_radius", "fit_edge", "fit_shadow", "fit_dim"):
+        if getattr(spec, key):
+            canonical[key] = getattr(spec, key)
     if spec.feather:
         canonical["feather"] = spec.feather
     if spec.vignette is not None:
@@ -221,6 +224,8 @@ FIT_BACKGROUNDS = ("blur", "black")
 # How blurred `fit`'s `blur` background is: gblur's sigma as a fraction of
 # the output's width - enough that nothing in it reads as a second picture.
 _FIT_BLUR_SIGMA = 1 / 40
+# the card shadow's blur, as a fraction of the output width (~19 px at 1920)
+_FIT_SHADOW_SIGMA = 1 / 100
 
 
 def _feather_ramp(n: int) -> str:
@@ -250,28 +255,70 @@ def _gain_filter(gain: float) -> str:
     return "".join(steps)
 
 
-def _fit_filter(w: int, h: int, background: str, feather: Optional[int] = None, lighten: Optional[float] = None) -> str:
-    """`fit`: the picture scaled to fit inside w x h, centred, the rest
-    black or - `blur` - a copy of it scaled to COVER w x h (cropped to it)
-    and blurred, brightened by `lighten` (each channel times 1 + 5 x
-    lighten, which keeps its colours - a dark brown turns light brown, not
-    grey - so a dark picture doesn't sit on what looks like black).
+def _card_ramp(n: int, radius: int) -> str:
+    """geq expression, 0 at the picture's outermost pixels to 1 at `n`
+    pixels in, like _feather_ramp, but along a rectangle whose corners are
+    rounded to `radius` px: within a corner's square the depth is the
+    radius minus the distance to the corner circle's centre."""
+    dx = f"max(abs(X-(W-1)/2)-((W-1)/2-{radius}),0)"
+    dy = f"max(abs(Y-(H-1)/2)-((H-1)/2-{radius}),0)"
+    depth = f"if(gt({dx},0)*gt({dy},0),{radius}-hypot({dx},{dy}),min(min(X,W-1-X),min(Y,H-1-Y)))"
+    m = f"clip(({depth})/{n},0,1)"
+    return f"({m})*({m})*(3-2*({m}))"
+
+
+def _fit_filter(
+    w: int,
+    h: int,
+    background: str,
+    feather: Optional[int] = None,
+    lighten: Optional[float] = None,
+    margin: Optional[int] = None,
+    radius: Optional[int] = None,
+    edge: Optional[int] = None,
+    shadow: Optional[float] = None,
+    dim: Optional[float] = None,
+) -> str:
+    """`fit`: the picture scaled to fit inside w x h (less `margin` px all
+    round), centred, the rest black or - `blur` - a copy of it scaled to
+    COVER w x h (cropped to it) and blurred, brightened by `lighten` (each
+    channel times 1 + 5 x lighten, which keeps its colours - a dark brown
+    turns light brown, not grey - so a dark picture doesn't sit on what
+    looks like black) or darkened by `dim` (times 1 - dim).
+    With `radius` the picture's corners are rounded (its edge softened over
+    `edge` px, else just anti-aliased - `feather` would also fade the whole
+    frame's border to black) and with `shadow` (0-1) a soft
+    shadow - its own rounded shape, blurred - darkens the copy under it:
+    the picture as a card on its blurred copy, whatever its shape.
     A branching graph, but still one input and one output, so it chains
     like any single filter (-vf and the gif graph alike)."""
-    fg = f"scale={w}:{h}:force_original_aspect_ratio=decrease"
-    if background == "blur" and feather:
-        # the picture's own edges melt into the blurred copy around it
-        fg += f",format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='255*{_feather_ramp(feather)}'"
+    iw, ih = w - 2 * (margin or 0), h - 2 * (margin or 0)
+    fg = f"scale={iw}:{ih}:force_original_aspect_ratio=decrease"
+    if background == "blur" and (feather or radius or edge):
+        # the picture's own edges (rounded, with radius) melt into the blurred copy around it
+        ramp = _card_ramp(edge or feather or 1, radius or 0) if (radius or edge) else _feather_ramp(feather)
+        fg += f",format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='255*{ramp}'"
     if background == "black":
         return f"{fg},pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black"
     sigma = max(1.0, w * _FIT_BLUR_SIGMA)
-    return (
-        f"split=2[fitbg][fitfg];"
+    bg = (
         f"[fitbg]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},gblur=sigma={sigma:g}"
         # every channel times the same gain: brighter, same hue (raising the black point instead greys it)
         + (_gain_filter(1 + 5 * lighten) if lighten else "")
-        + "[fitbg2];"
-        f"[fitfg]{fg}[fitfg2];[fitbg2][fitfg2]overlay=(W-w)/2:(H-h)/2"
+        + (f",colorchannelmixer=rr={1 - dim:g}:gg={1 - dim:g}:bb={1 - dim:g}" if dim else "")
+    )
+    if not shadow:
+        return f"split=2[fitbg][fitfg];{bg}[fitbg2];[fitfg]{fg}[fitfg2];[fitbg2][fitfg2]overlay=(W-w)/2:(H-h)/2"
+    if not (feather or radius or edge):
+        fg += ",format=rgba"  # an alpha plane, for the shadow's shape
+    spread = max(1.0, w * _FIT_SHADOW_SIGMA)
+    return (
+        f"split=2[fitbg][fitfg];{bg},format=gbrp[fitbg2];"
+        f"[fitfg]{fg},split=2[fitcard][fitsh];"
+        # the card's own shape, placed where it will sit, blurred: where it's dark, the copy darkens
+        f"[fitsh]format=rgba,alphaextract,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,gblur=sigma={spread:g},format=gbrp[fitsh2];"
+        f"[fitbg2][fitsh2]blend=all_expr='A*(1-{shadow:g}*B/255)'[fitbg3];"
+        f"[fitbg3][fitcard]overlay=(W-w)/2:(H-h)/2"
     )
 
 
@@ -320,7 +367,8 @@ def build_command(
         angle = math.acos(spec.devignette ** 0.25)
         vf.append(f"vignette=angle={angle:.6f}:mode=backward")
     if spec.fit:
-        vf.append(_fit_filter(*spec.fit, feather=spec.feather, lighten=spec.fit_lighten))
+        vf.append(_fit_filter(*spec.fit, feather=spec.feather, lighten=spec.fit_lighten, margin=spec.fit_margin,
+                              radius=spec.fit_radius, edge=spec.fit_edge, shadow=spec.fit_shadow, dim=spec.fit_dim))
     if spec.feather:
         vf.append(_feather_to_black(spec.feather))
     if spec.vignette is not None:
