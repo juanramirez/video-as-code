@@ -569,3 +569,23 @@ def test_derive_fit_card_rounds_shades_and_dims(tmp_path: Path):
     assert px[22 * w + 72] < 200                        # inside its bounding box, but outside the rounded corner
     assert 100 < px[100 * w + 3] < 160                  # far from it: the copy, dimmed to about half
     assert px[100 * w + 68] < px[100 * w + 3] - 8       # just beside it (its blur is ~3 px at this width): the shadow
+
+
+def test_derive_fit_card_on_a_video_keeps_its_shape_on_every_frame(tmp_path: Path):
+    # the card's rounded mask and shadow are computed on the first frame and reused: a white 1 s video at 10 fps as the
+    # card above must look the same on its last frame as on its first
+    white = tmp_path / "white.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=white:s=100x100:r=10:d=1",
+                    "-pix_fmt", "yuv420p", str(white)], check=True)
+    fit = "{size: [300, 200], background: blur, margin: 20, radius: 30, edge: 2, shadow: 0.5, dim: 0.5}"
+    project = _project(tmp_path, [f"{{id: card, derive: {{path: {white}, fit: {fit}}}}}"])
+    load_and_resolve(project)
+    w, h, px = _gray_pixels(_bin(project)["card"].path)
+    frames = len(px) // (w * h)
+    assert (w, h, frames) == (300, 200, 10)
+    for f in (0, frames - 1):
+        o = f * w * h
+        assert px[o + 100 * w + 150] > 240                       # the picture
+        assert px[o + 22 * w + 72] < 200                         # outside the rounded corner
+        assert 100 < px[o + 100 * w + 3] < 160                   # the dimmed copy
+        assert px[o + 100 * w + 68] < px[o + 100 * w + 3] - 8    # the shadow
