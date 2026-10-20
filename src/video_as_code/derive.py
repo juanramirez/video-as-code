@@ -294,10 +294,10 @@ def _fit_filter(
     like any single filter (-vf and the gif graph alike)."""
     iw, ih = w - 2 * (margin or 0), h - 2 * (margin or 0)
     fg = f"scale={iw}:{ih}:force_original_aspect_ratio=decrease"
-    if background == "blur" and (feather or radius or edge):
-        # the picture's own edges (rounded, with radius) melt into the blurred copy around it
-        ramp = _card_ramp(edge or feather or 1, radius or 0) if (radius or edge) else _feather_ramp(feather)
-        fg += f",format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='255*{ramp}'"
+    card = background == "blur" and bool(radius or edge or shadow)
+    if background == "blur" and feather and not card:
+        # the picture's own edges melt into the blurred copy around it
+        fg += f",format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='255*{_feather_ramp(feather)}'"
     if background == "black":
         return f"{fg},pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black"
     sigma = max(1.0, w * _FIT_BLUR_SIGMA)
@@ -307,19 +307,33 @@ def _fit_filter(
         + (_gain_filter(1 + 5 * lighten) if lighten else "")
         + (f",colorchannelmixer=rr={1 - dim:g}:gg={1 - dim:g}:bb={1 - dim:g}" if dim else "")
     )
-    if not shadow:
+    if not card:
         return f"split=2[fitbg][fitfg];{bg}[fitbg2];[fitfg]{fg}[fitfg2];[fitbg2][fitfg2]overlay=(W-w)/2:(H-h)/2"
-    if not (feather or radius or edge):
-        fg += ",format=rgba"  # an alpha plane, for the shadow's shape
+    # The card: its rounded mask - and the shadow made of it - depend only on its size, the same in every frame of a
+    # clip, so they're computed ONCE, on the first frame, and repeated (loop) for the rest: a per-pixel geq on every
+    # frame of a video made it ~1 frame/s.
+    ramp = _card_ramp(edge or feather or 1, radius or 0)
     spread = max(1.0, w * _FIT_SHADOW_SIGMA)
-    return (
-        f"split=2[fitbg][fitfg];{bg},format=gbrp[fitbg2];"
-        f"[fitfg]{fg},split=2[fitcard][fitsh];"
-        # the card's own shape, placed where it will sit, blurred: where it's dark, the copy darkens
-        f"[fitsh]format=rgba,alphaextract,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,gblur=sigma={spread:g},format=gbrp[fitsh2];"
-        f"[fitbg2][fitsh2]blend=all_expr='A*(1-{shadow:g}*B/255)'[fitbg3];"
-        f"[fitbg3][fitcard]overlay=(W-w)/2:(H-h)/2"
+    graph = (
+        f"split=2[fitbg][fitfg];{bg}" + (",format=gbrp" if shadow else "") + "[fitbg2];"
+        f"[fitfg]{fg},format=rgba,split=2[fitpic][fitm0];"
+        f"[fitm0]trim=end_frame=1,format=gray,geq=lum='255*{ramp}'"
+        + (",split=2[fitm1][fitm2];[fitm1]" if shadow else ",")
+        + "loop=loop=-1:size=1[fitmask];"
+        "[fitpic][fitmask]alphamerge=shortest=1[fitcard];"
     )
+    if shadow:
+        graph += (
+            # the card's own shape, placed where it will sit, blurred: where it's dark, the copy darkens
+            # (as a ready-made factor, 255 x (1 - shadow x mask), so each frame takes a plain multiply, not an expression)
+            f"[fitm2]pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:black,gblur=sigma={spread:g},lut=y='255-{shadow:g}*val',"
+            "format=gbrp,loop=loop=-1:size=1[fitsh];"
+            "[fitbg2][fitsh]blend=all_mode=multiply:shortest=1[fitbg3];"
+            "[fitbg3][fitcard]overlay=(W-w)/2:(H-h)/2"
+        )
+    else:
+        graph += "[fitbg2][fitcard]overlay=(W-w)/2:(H-h)/2"
+    return graph
 
 
 def build_command(
