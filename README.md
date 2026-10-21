@@ -162,11 +162,25 @@ was taken, to the second (the same value `sources.lock.yaml` records).
 If even that ties - a race photographer's site can hand out different
 pictures under the same name and time - add `size: [w, h]`, the item's
 size in pixels (one of the two is enough when it alone tells them apart).
+And if even the size ties - two different pictures saved again on the
+same day can share name, time and size - add `id:`, the album item's own
+id (the `media_id` that `sources.lock.yaml` records for it, `AF1Qip...`):
+
+```yaml
+  - id: cake
+    source: {name: 2023-04-28.jpg, id: AF1QipExampleExampleExampleExampleExample}
+```
+
+It names exactly one item, so it's enough on its own; `fetch` still checks
+that the item's name (and `taken`/`size`, if given) match, and reports it as
+not found otherwise. The id only lasts while the item stays in the album:
+removed and added again, it gets a new one - which is why name, time and
+size remain the usual way.
 That's what keeps such a project buildable from its YAML alone: without
 it, the only way to point at the right one would be a local copy of the
 file, which a fresh checkout doesn't have. In the lock and on disk the
-item is then known as `<name>@<taken>#<w>x<h>`, so two same-named items never
-overwrite each other.
+item is then known as `<name>@<taken>#<w>x<h>!<id>` (each part only if
+given), so two same-named items never overwrite each other.
 
 The album can also be given by **name**, before it exists:
 

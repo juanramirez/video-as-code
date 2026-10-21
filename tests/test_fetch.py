@@ -653,3 +653,51 @@ def test_fetch_tells_apart_same_named_same_time_items_by_size(tmp_path: Path, mo
     )
     fetch.fetch(path)
     assert (tmp_path / "assets" / "20150308_finish.jpg").read_bytes() == b"FINISHER"
+
+
+def _twins_album() -> SameNameAlbum:
+    album = SameNameAlbum()
+    album.items = [  # two pictures saved again the same day: same name, same time, same size - only their ids differ
+        gphotos.AlbumItem(media_id="AF1QipTwinA", base_url="https://x/a", is_video=False, width=540, height=720, taken_ms=album.MARCH),
+        gphotos.AlbumItem(media_id="AF1QipTwinB", base_url="https://x/b", is_video=False, width=540, height=720, taken_ms=album.MARCH),
+    ]
+    album.body = {"AF1QipTwinA": b"TWIN A", "AF1QipTwinB": b"TWIN B"}
+    return album
+
+
+def test_fetch_tells_apart_items_alike_in_everything_by_their_album_id(tmp_path: Path, monkeypatch):
+    _twins_album().install(monkeypatch)
+    path = _same_name_project(
+        tmp_path,
+        "  - {id: second, source: {name: IMG-WA0003.jpg, id: AF1QipTwinB}}\n"
+        "  - {id: d, derive: {source: {name: IMG-WA0003.jpg, taken: '2015-03-08 15:23:51', id: AF1QipTwinA}, scale: [10, 10]}}\n",
+    )
+    monkeypatch.setattr(fetch.derive, "ensure_all", lambda *a, **k: [])
+    fetch.fetch(path)
+    assert (tmp_path / "assets" / "20150308_second.jpg").read_bytes() == b"TWIN B"
+    assert (tmp_path / "assets" / "IMG-WA0003_20150308T152351_QipTwinA.jpg").read_bytes() == b"TWIN A"
+    assert _lock(tmp_path)["IMG-WA0003.jpg!AF1QipTwinB"]["media_id"] == "AF1QipTwinB"
+
+
+def test_an_album_id_whose_name_or_time_dont_match_is_not_found(tmp_path: Path, monkeypatch):
+    _twins_album().install(monkeypatch)
+    path = _same_name_project(
+        tmp_path,
+        "  - {id: x, source: {name: other.jpg, id: AF1QipTwinA}}\n"
+        "  - {id: y, source: {name: IMG-WA0003.jpg, taken: '2015-05-05 05:05:05', id: AF1QipTwinA}}\n"
+        "  - {id: z, source: {name: IMG-WA0003.jpg, id: AF1QipNotThere}}\n",
+    )
+    with pytest.raises(fetch.FetchError) as exc:
+        fetch.fetch(path)
+    for key in ("other.jpg!AF1QipTwinA", "IMG-WA0003.jpg@2015-05-05T05:05:05!AF1QipTwinA", "IMG-WA0003.jpg!AF1QipNotThere"):
+        assert key in str(exc.value)
+    assert not (tmp_path / "assets").exists() or not any((tmp_path / "assets").iterdir())
+
+
+def test_a_key_with_an_album_id_goes_by_it_whatever_the_lock_says(tmp_path: Path, monkeypatch):
+    _twins_album().install(monkeypatch)
+    path = _same_name_project(tmp_path, "  - {id: second, source: {name: IMG-WA0003.jpg, id: AF1QipTwinB}}\n")
+    (tmp_path / "sources.lock.yaml").write_text(  # an entry pointing at the other twin (edited by hand, say)
+        "items:\n  IMG-WA0003.jpg!AF1QipTwinB: {media_id: AF1QipTwinA}\n", encoding="utf-8")
+    fetch.fetch(path)
+    assert (tmp_path / "assets" / "20150308_second.jpg").read_bytes() == b"TWIN B"

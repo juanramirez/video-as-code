@@ -1,8 +1,8 @@
 """`sources.lock.yaml`: what `fetch` knows about each album item a project
 uses, keyed by its original file name (BinClipSpec.source) - or, for an
-item named with its capture time and/or size too (`source: {name, taken,
-size}`, needed when several album items share a file name), by
-`<name>@<taken>#<w>x<h>` (source_key):
+item named with its capture time, size and/or album item id too (`source:
+{name, taken, size, id}`, needed when several album items share a file
+name), by `<name>@<taken>#<w>x<h>!<id>` (source_key):
 
     items:
       PXL_20250830_085416309.mp4:
@@ -83,27 +83,36 @@ def taken_local(taken_ms: int, tz_offset_ms: int) -> str:
 # names like IMG-20150308-WA0003.jpg on different phones), by that name and
 # its capture time - `source: {name, taken}` - and, if even that ties (a
 # race photographer's site hands out pictures with the same name and
-# time), its size in pixels - `size: [w, h]`. That becomes one string key,
-# `<name>@<taken>#<w>x<h>` (each part only if given), everywhere a source
-# is keyed (the lock, fetch's jobs, derive inputs). `taken` is local to
-# where it was taken, as in the lock.
-_KEY_RE = re.compile(r"^(?P<name>.+?)(@(?P<taken>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}))?(#(?P<w>\d+)x(?P<h>\d+))?$")
+# time), its size in pixels - `size: [w, h]`; and if even that ties (two
+# different pictures saved again on the same day: same name, time and
+# size), the album item's own id - `id: AF1Qip...`, the `media_id` the
+# lock records - which names exactly one. That becomes one string key,
+# `<name>@<taken>#<w>x<h>!<id>` (each part only if given), everywhere a
+# source is keyed (the lock, fetch's jobs, derive inputs). `taken` is
+# local to where it was taken, as in the lock.
+_KEY_RE = re.compile(
+    r"^(?P<name>.+?)(@(?P<taken>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}))?(#(?P<w>\d+)x(?P<h>\d+))?(!(?P<id>[A-Za-z0-9_-]+))?$"
+)
+MEDIA_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")  # what an album item id looks like (`AF1Qip...`)
 
 
-def source_key(name: str, taken: Optional[str] = None, size: Optional[tuple[int, int]] = None) -> str:
-    return name + (f"@{taken}" if taken else "") + (f"#{size[0]}x{size[1]}" if size else "")
+def source_key(
+    name: str, taken: Optional[str] = None, size: Optional[tuple[int, int]] = None, media_id: Optional[str] = None
+) -> str:
+    return (name + (f"@{taken}" if taken else "") + (f"#{size[0]}x{size[1]}" if size else "")
+            + (f"!{media_id}" if media_id else ""))
 
 
-def _parts(key: str) -> tuple[str, Optional[str], Optional[tuple[int, int]]]:
+def _parts(key: str) -> tuple[str, Optional[str], Optional[tuple[int, int]], Optional[str]]:
     m = _KEY_RE.match(key)
-    if not m or not (m["taken"] or m["w"]):
-        return key, None, None
-    return m["name"], m["taken"], (int(m["w"]), int(m["h"])) if m["w"] else None
+    if not m or not (m["taken"] or m["w"] or m["id"]):
+        return key, None, None, None
+    return m["name"], m["taken"], (int(m["w"]), int(m["h"])) if m["w"] else None, m["id"]
 
 
 def split_source(key: str) -> tuple[str, Optional[str]]:
     """(original file name, capture time or None) of a source key."""
-    name, taken, _ = _parts(key)
+    name, taken, _, _ = _parts(key)
     return name, taken
 
 
@@ -112,16 +121,23 @@ def source_size(key: str) -> Optional[tuple[int, int]]:
     return _parts(key)[2]
 
 
+def source_media_id(key: str) -> Optional[str]:
+    """The album item id a source key names its item by, if any."""
+    return _parts(key)[3]
+
+
 def source_file_name(key: str) -> str:
     """A file name for an album item stored under its own name (a derive:
-    input no plain clip shares): the original name, plus its capture time
-    when it had to be named with one - so two same-named items don't land
-    on the same file."""
-    name, taken, size = _parts(key)
-    if not taken and not size:
+    input no plain clip shares): the original name, plus its capture time,
+    size and/or id when it had to be named with them - so two same-named
+    items don't land on the same file."""
+    name, taken, size, media_id = _parts(key)
+    if not taken and not size and not media_id:
         return name
     stem, suffix = Path(name).stem, Path(name).suffix
-    tag = "_".join(([taken.replace("-", "").replace(":", "")] if taken else []) + ([f"{size[0]}x{size[1]}"] if size else []))
+    # (an id's last 8 characters: Google's ids differ there, and the whole one is ~44 long)
+    tag = "_".join(([taken.replace("-", "").replace(":", "")] if taken else []) + ([f"{size[0]}x{size[1]}"] if size else [])
+                   + ([media_id[-8:]] if media_id else []))
     return f"{stem}_{tag}{suffix}"
 
 

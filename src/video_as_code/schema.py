@@ -236,19 +236,21 @@ def _parse_album(raw, errors: list[str]) -> tuple[Optional[str], Optional[str]]:
 def _parse_source(raw, clip_id, errors: list[str]) -> Optional[str]:
     """A `source:` (a bin clip's, or a derive: input's) as the key it's
     known by (sources_lock.source_key): an album item's original file name,
-    or `{name, taken, size}` - that name plus its capture time and/or its
-    size in pixels, for when several items of the album share the name and
-    the name alone can't say which one is meant. None (with the error) if
-    it's neither."""
-    size = None
+    or `{name, taken, size, id}` - that name plus its capture time, its
+    size in pixels and/or its album item id (the lock's `media_id`), for
+    when several items of the album share the name and the name alone
+    can't say which one is meant. None (with the error) if it's neither."""
+    size = media_id = None
     if isinstance(raw, dict):
         name, taken = raw.get("name"), sources_lock.normalize_taken(raw.get("taken"))
         size = _number_pair(raw.get("size")) if raw.get("size") is not None else None
         size = (int(size[0]), int(size[1])) if size and all(v > 0 and v == int(v) for v in size) else None
-        if (set(raw) - {"name", "taken", "size"} or not isinstance(name, str)
+        media_id = raw.get("id")
+        if (set(raw) - {"name", "taken", "size", "id"} or not isinstance(name, str)
                 or (raw.get("taken") is not None and taken is None)
                 or (raw.get("size") is not None and size is None)
-                or (taken is None and size is None)):
+                or (media_id is not None and not (isinstance(media_id, str) and sources_lock.MEDIA_ID_RE.match(media_id)))
+                or (taken is None and size is None and media_id is None)):
             errors.append(msg("validation.source_map_invalid", id=clip_id, source=raw))
             return None
     else:
@@ -256,7 +258,7 @@ def _parse_source(raw, clip_id, errors: list[str]) -> Optional[str]:
     if Path(name).name != name or name in ("", ".", "..") or sources_lock.source_key(name) != name or sources_lock._parts(name)[0] != name:
         errors.append(msg("validation.bin_source_not_a_name", id=clip_id, source=name))
         return None
-    return sources_lock.source_key(name, taken, size)
+    return sources_lock.source_key(name, taken, size, media_id)
 
 
 def _parse_reference(raw, errors: list[str]) -> tuple[Optional[tuple[str, ...]], str]:

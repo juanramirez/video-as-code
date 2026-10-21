@@ -139,9 +139,13 @@ class _AlbumIndex:
         original file name, and - if the key has them - capture time and
         size, which tell apart items that share a name. With a plain name and several
         such items, the first found: the one taken closest to the time in
-        its name."""
+        its name. A key with an album item id names that item - as long as
+        its name (and time and size, if given) are that item's too: a typo
+        in either is reported as not found rather than downloading
+        something else."""
         name, taken = sources_lock.split_source(key)
         size = sources_lock.source_size(key)
+        media_id = sources_lock.source_media_id(key)
 
         def matches(item: gphotos.AlbumItem) -> bool:
             return (
@@ -150,6 +154,12 @@ class _AlbumIndex:
                 and (size is None or (item.width, item.height) == size)
             )
 
+        if media_id is not None:
+            item = self.by_media_id(media_id)
+            if item is not None and item.media_id not in self._names:
+                self._names[item.media_id] = gphotos.original_filename(item)
+                self._save_names()
+            return item if item is not None and matches(item) else None
         candidates = gphotos.rank_by_name_time(self.items, name)
         for item in candidates:  # names already known cost nothing
             if matches(item):
@@ -375,7 +385,11 @@ def _download(
         if name in failed:
             continue  # another clip with the same source already failed it
         try:
-            item = index.by_media_id(entry["media_id"]) if entry.get("media_id") else None
+            # (a key with an id goes by that id, whatever an older lock entry says)
+            if entry.get("media_id") and not sources_lock.source_media_id(name):
+                item = index.by_media_id(entry["media_id"])
+            else:
+                item = None
             if item is None:
                 item = index.find(name)
             if item is None:

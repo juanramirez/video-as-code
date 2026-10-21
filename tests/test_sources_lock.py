@@ -112,3 +112,17 @@ def test_source_key_with_a_size_for_when_even_the_time_ties():
     assert sources_lock.source_file_name(key) == "2023-04-28_20151208T205457_1024x683.jpg"
     assert sources_lock.source_size(sources_lock.source_key("a.jpg", size=(5, 6))) == (5, 6)
     assert sources_lock.source_size("a.jpg@2015-12-08T20:54:57") is None
+
+
+def test_source_key_with_an_album_item_id_for_when_even_the_size_ties():
+    key = sources_lock.source_key("2023-04-28.jpg", "2014-06-15T17:46:28", (540, 720), "AF1QipExample_cake01")
+    assert key == "2023-04-28.jpg@2014-06-15T17:46:28#540x720!AF1QipExample_cake01"
+    assert sources_lock.split_source(key) == ("2023-04-28.jpg", "2014-06-15T17:46:28")
+    assert sources_lock.source_size(key) == (540, 720)
+    assert sources_lock.source_media_id(key) == "AF1QipExample_cake01"
+    assert sources_lock.source_file_name(key) == "2023-04-28_20140615T174628_540x720_e_cake01.jpg"
+    only_id = sources_lock.source_key("a.jpg", media_id="AF1Qip-x")  # the id alone is enough
+    assert only_id == "a.jpg!AF1Qip-x" and sources_lock.split_source(only_id) == ("a.jpg", None)
+    assert sources_lock.source_media_id(only_id) == "AF1Qip-x"
+    assert sources_lock.source_media_id("a.jpg@2015-12-08T20:54:57") is None
+    assert sources_lock.split_source("wow!.jpg") == ("wow!.jpg", None)  # a ! not followed by an id is part of the name
