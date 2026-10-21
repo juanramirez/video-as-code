@@ -41,7 +41,7 @@ see below.
 PATH — it's not bundled with `video-as-code`. It's equivalent to running
 `video-as-code build` and then `melt output.kdenlive -consumer avformat:output.mp4`
 yourself, minus the intermediate `.kdenlive` file (built to a temp
-directory and discarded). `VIDEO_AS_CODE_MELT` points at another `melt`
+directory and discarded); `-o`'s folder is created if it doesn't exist. `VIDEO_AS_CODE_MELT` points at another `melt`
 - e.g. an MLT built from source, newer than the distribution's (set
 `MLT_REPOSITORY` for its plugins, as melt itself expects).
 
@@ -213,7 +213,11 @@ still missing from the album are cut out of meanwhile):
 
 It's downloaded whole - from YouTube, video and sound merged into an mp4 -
 once; delete the file to download it again. `build`/`render` don't need it
-unless a clip cuts from it.
+unless a clip cuts from it. `url:` can be a list, tried in order; YouTube
+re-encodes its videos now and then, so while shots are cut from it, put an
+exact copy first (e.g. a Google Drive link to the file the project was
+made with) and YouTube after it. Its size and sha256 go in the lock's
+`reference:` section, and `fetch` says so when a download isn't that file.
 
 What isn't in the album - typically the music - can come from links
 instead, tried in order until one works:

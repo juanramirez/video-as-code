@@ -16,6 +16,10 @@ name), by `<name>@<taken>#<w>x<h>!<id>` (source_key):
         ext: .m4a
         size: 4560825
         sha256: 7e3e...
+    reference:                       # project.sources.reference, if any
+      url: https://drive.google.com/...
+      size: 25525608
+      sha256: 68d7...
 
 Machine-written by `fetch` (one per directory, shared by a project and
 its preview variants) and meant to be committed. Besides making later
@@ -57,15 +61,29 @@ def read_links(base_dir: Path) -> dict[str, dict]:
     return _read_section(base_dir, "links")
 
 
-def write(base_dir: Path, entries: Optional[dict[str, dict]] = None, links: Optional[dict[str, dict]] = None) -> None:
+def read_reference(base_dir: Path) -> dict:
+    """The lock's project.sources.reference entry; {} if there's none."""
+    return _read_section(base_dir, "reference")
+
+
+def write(
+    base_dir: Path,
+    entries: Optional[dict[str, dict]] = None,
+    links: Optional[dict[str, dict]] = None,
+    reference: Optional[dict] = None,
+) -> None:
     """Rewrites the lock; a section passed as None keeps what's on disk."""
     if entries is None:
         entries = read(base_dir)
     if links is None:
         links = read_links(base_dir)
+    if reference is None:
+        reference = read_reference(base_dir)
     data: dict = {"items": {name: entries[name] for name in sorted(entries)}}
     if links:
         data["links"] = {clip_id: links[clip_id] for clip_id in sorted(links)}
+    if reference:
+        data["reference"] = reference
     (base_dir / LOCK_NAME).write_text(
         _HEADER + yaml.safe_dump(data, sort_keys=False, allow_unicode=True), encoding="utf-8"
     )

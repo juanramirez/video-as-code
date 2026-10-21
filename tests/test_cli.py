@@ -83,6 +83,23 @@ def test_render_end_to_end(tmp_path: Path, assets_dir: Path, melt, monkeypatch):
     assert output.exists() and output.stat().st_size > 0
 
 
+def test_render_creates_the_output_folder(tmp_path: Path, assets_dir: Path, melt, monkeypatch):
+    """`-o output/x.mp4` in a fresh clone, where output/ doesn't exist yet."""
+    exe, extra_env = melt
+    monkeypatch.setattr(probe, "find_melt", lambda: exe)
+    for k, v in extra_env.items():
+        monkeypatch.setenv(k, v)
+
+    yaml_path = _write_simple_project(tmp_path, assets_dir)
+    output = tmp_path / "output" / "new" / "out.mp4"
+
+    assert cli.main(["render", str(yaml_path), "-o", str(output)]) == 0
+    assert output.exists() and output.stat().st_size > 0
+    output.unlink()
+    assert cli.main(["render", str(yaml_path), "-o", str(output), "--split"]) == 0
+    assert output.exists() and output.stat().st_size > 0
+
+
 def test_render_keep_kdenlive(tmp_path: Path, assets_dir: Path, melt, monkeypatch):
     """`-k`/`--keep-kdenlive` (new this cycle) should leave the
     intermediate .kdenlive next to the YAML instead of discarding it in a

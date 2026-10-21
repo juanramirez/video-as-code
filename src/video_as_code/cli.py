@@ -242,6 +242,7 @@ def cmd_render(args: argparse.Namespace) -> int:
     if melt is None:
         print(msg("cli.render_missing_melt"), file=sys.stderr)
         return 1
+    output.parent.mkdir(parents=True, exist_ok=True)  # (e.g. output/ in a fresh clone)
     original = resolved
     resolved = _with_proxies(resolved, args.proxy)
     if resolved is None:

@@ -18,7 +18,8 @@ cached in `.fetch_cache/names.json` so it's never asked twice.
 `url:` clips (links.py) are downloaded too, each from the first of its
 links that works, and recorded in the lock's `links:` section; one that's
 on disk, matches the lock and came from one of its current links isn't
-downloaded again.
+downloaded again. So is project.sources.reference, in its `reference:`
+section.
 
 What can't be fetched doesn't stop the rest: each failure (an album
 name that isn't there, a download that broke, a clip none of whose links
@@ -279,9 +280,17 @@ def _download_reference(
     """project.sources.reference: the video this project remakes, downloaded
     (the whole video, not just its sound) if it isn't at `path` yet - tried
     link by link. Returns why it couldn't be had, or None. Once there it's
-    kept as is: delete it to download it again."""
+    kept as is: delete it to download it again.
+
+    Its size and sha256 go in the lock's `reference:` section (a file that
+    was already there is recorded the first time too), so a download that
+    isn't the same file - YouTube re-encodes its videos now and then - is
+    reported: shots cut from it would no longer come out the same."""
     target = base_dir / path
+    entry = sources_lock.read_reference(base_dir)
     if target.is_file():
+        if not entry.get("sha256"):
+            sources_lock.write(base_dir, reference={"size": target.stat().st_size, "sha256": gphotos.sha256_of(target)})
         result.up_to_date.append(REFERENCE_ID)
         return None
     errors: list[str] = []
@@ -298,6 +307,10 @@ def _download_reference(
             continue
         if got != target:
             got.replace(target)
+        sha256 = gphotos.sha256_of(target)
+        if entry.get("sha256") and entry["sha256"] != sha256:
+            report(msg("fetch.link_changed", id=REFERENCE_ID))
+        sources_lock.write(base_dir, reference={"url": url, "size": target.stat().st_size, "sha256": sha256})
         result.downloaded.append(REFERENCE_ID)
         return None
     return msg("fetch.links_failed", id=REFERENCE_ID, errors="\n  ".join(errors))

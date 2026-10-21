@@ -570,6 +570,45 @@ def test_fetch_rejects_a_reference_that_comes_with_another_extension(tmp_path: P
     assert not list((tmp_path / "reference").iterdir())
 
 
+def test_fetch_locks_the_reference_and_reports_a_download_that_differs(tmp_path: Path, monkeypatch):
+    """The reference's size and sha256 go in the lock's `reference:`
+    section; downloaded again (the file deleted) as something else - a
+    re-encode on YouTube - fetch says so and locks the new one."""
+    content = [b"VIDEO"]
+
+    def download(url, dest_dir, stem, video=False):
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        (dest_dir / f"{stem}.mp4").write_bytes(content[0])
+        return dest_dir / f"{stem}.mp4"
+
+    monkeypatch.setattr(fetch.links, "download", download)
+    path = _project_with_reference(tmp_path, "https://drive.google.com/file/d/x/view")
+    fetch.fetch(path)
+    assert fetch.sources_lock.read_reference(tmp_path) == {
+        "url": "https://drive.google.com/file/d/x/view",
+        "size": 5,
+        "sha256": hashlib.sha256(b"VIDEO").hexdigest(),
+    }
+
+    (tmp_path / "reference" / "reference.mp4").unlink()
+    content[0] = b"OTHER VIDEO"
+    reports: list[str] = []
+    fetch.fetch(path, on_progress=reports.append)
+    assert msg("fetch.link_changed", id=fetch.REFERENCE_ID) in reports
+    assert fetch.sources_lock.read_reference(tmp_path)["sha256"] == hashlib.sha256(b"OTHER VIDEO").hexdigest()
+
+
+def test_fetch_locks_a_reference_that_was_already_there(tmp_path: Path, monkeypatch):
+    def download(url, dest_dir, stem, video=False):
+        raise AssertionError("already there: nothing to download")
+
+    monkeypatch.setattr(fetch.links, "download", download)
+    (tmp_path / "reference").mkdir()
+    (tmp_path / "reference" / "reference.mp4").write_bytes(b"MINE")
+    assert fetch.fetch(_project_with_reference(tmp_path, "https://youtu.be/x")).up_to_date == [fetch.REFERENCE_ID]
+    assert fetch.sources_lock.read_reference(tmp_path) == {"size": 4, "sha256": hashlib.sha256(b"MINE").hexdigest()}
+
+
 class SameNameAlbum:
     """Two different photos that share a file name, taken a month apart
     (as WhatsApp or a camera that restarted its numbering produce)."""
