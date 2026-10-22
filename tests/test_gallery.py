@@ -156,6 +156,12 @@ def test_tweaks_from_ranges():
     assert gallery._tweaks(entry) == [{"level": 11.25}, {"u": 64}, {"flag": True}]
 
 
+def test_audio_analysers_listed_without_a_preview():
+    for name in ("avfilter.astats", "audiolevel", "sox.stats", "avfilter.ebur128"):
+        assert gallery._AUDIO_ANALYSIS.match(name), name
+    assert not gallery._AUDIO_ANALYSIS.match("avfilter.aecho")
+
+
 def test_clip_keys_that_change_over_time_apart():
     sections = {e.name: e.section for e in gallery.CATALOG}
     assert sections["color_grade_keyframes"] == sections["speed"] == sections["fade_in / fade_out"] == "clip_time"

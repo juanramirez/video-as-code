@@ -354,7 +354,9 @@ def melt_entries(cache: Optional[Path] = None) -> tuple[Entry, ...]:
             if why:
                 entries.append(Entry("melt_filters", service, snippet, "", render=False, unavailable=why, **info))
                 continue
-            if meta["tags"] == ["Audio"]:
+            if meta["tags"] == ["Audio"] and _AUDIO_ANALYSIS.match(service):  # (they measure: nothing to hear)
+                entries.append(Entry("melt_analysis", service, snippet, "", render=False, **info))
+            elif meta["tags"] == ["Audio"]:
                 entries.append(replace(_audio(service, f'melt: ["{service}"]'), snippet=snippet, **info))
             else:
                 source = "interlaced" if _DEINTERLACERS.search(service) else "video"
@@ -384,6 +386,14 @@ _ANALYSIS = re.compile(
     r"^(avfilter\.(datascope|oscilloscope|pixscope|vectorscope|waveform|histogram|thistogram|ciescope|graphmonitor"
     r"|showinfo|showpalette|signalstats|(?!edge)\w*detect|bbox|idet|readeia608|readvitc|entropy|scdet|siti|\w*stats"
     r"|metadata|sidedata)|frei0r\.(facedetect|(measure_)?pr0be|(measure_)?pr0file|rgbparade|vectorscope))$"
+)
+
+
+# audio filters that measure: levels, loudness, silences - listed with the
+# analysis ones, without a preview (they change nothing to listen to)
+_AUDIO_ANALYSIS = re.compile(
+    r"^(audiolevel|sox\.stats|avfilter\.(ashowinfo|asidedata|aspectralstats|astats|drmeter|silencedetect|volumedetect"
+    r"|ebur128|aphasemeter|replaygain|ametadata))$"
 )
 
 
