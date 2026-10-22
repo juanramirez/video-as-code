@@ -61,6 +61,7 @@ class Entry:
     melt_catalog: bool = False  # one of melt's services as they come (see melt_entries)
     render: bool = True  # (an audio filter has nothing to show)
     source: str = "a"  # the sample a clip entry plays (see _clip)
+    unavailable: Optional[str] = None  # why it can't work in a render of this project's (see _unavailable)
 
 
 def _indent(text: str, spaces: int) -> str:
@@ -287,12 +288,20 @@ def melt_entries(cache: Optional[Path] = None) -> tuple[Entry, ...]:
             }
             if kind == "transition":
                 snippet = f"transition: melt/{service}"
+                why = _unavailable(service)
+                if why:
+                    entries.append(Entry("melt_transitions", service, snippet, "", render=False, unavailable=why, **info))
+                    continue
                 if meta["tags"] == ["Audio"]:  # (a sound transition: mix - listed)
                     entries.append(Entry("melt_audio", service, snippet, "", render=False, **info))
                 else:
                     entries.append(replace(_scene(service, f'transition: "melt/{service}"', section="melt_transitions"), snippet=snippet, **info))
                 continue
             snippet = f"melt:\n  - {service}"
+            why = _unavailable(service)
+            if why:
+                entries.append(Entry("melt_filters", service, snippet, "", render=False, unavailable=why, **info))
+                continue
             if meta["tags"] == ["Audio"]:
                 entries.append(replace(_audio(service, f'melt: ["{service}"]'), snippet=snippet, **info))
             else:
@@ -306,6 +315,26 @@ def melt_entries(cache: Optional[Path] = None) -> tuple[Entry, ...]:
 # those that undo interlacing over a sample whose lines are combed - and
 # flagged progressive, or melt itself would deinterlace it first
 _DEINTERLACERS = re.compile(r"yadif|bwdif|w3fdif|estdif|kerndeint|mcdeint|nnedi|deinterlace|telecide|fieldorder|fieldmatch|phase|pullup|detelecine|dejudder|separatefields|weave")
+# ffmpeg filters that run on a device: they take frames already on it,
+# which melt's bridge to ffmpeg (avfilter.*) doesn't give them
+_HARDWARE = (
+    ("cuda", "CUDA (NVIDIA)"), ("npp", "NPP (NVIDIA)"), ("vaapi", "VA-API"), ("vulkan", "Vulkan"),
+    ("opencl", "OpenCL"), ("qsv", "Intel Quick Sync"), ("vdpau", "VDPAU"), ("hwupload", "a hardware device"),
+    ("hwdownload", "a hardware device"), ("hwmap", "a hardware device"),
+)
+
+
+def _unavailable(service: str) -> Optional[str]:
+    """Why `service` can't work in a render of this project's, if it can't:
+    an ffmpeg filter for a device, or one of movit's - MLT's GPU mode,
+    which renders GPU textures, not pictures: in melt's plain render
+    their "pictures" are a texture's bytes, stripes of colour."""
+    if service.startswith("movit."):
+        return msg("gallery.needs_movit")
+    api = next((api for key, api in _HARDWARE if key in service), None)
+    return msg("gallery.needs_hardware", api=api) if api else None
+
+
 _BASELINES = {source: _clip(f"unfiltered {source}", "", source=source) for source in ("video", "interlaced")}
 _SOUND_BASELINE = _audio("original", "")  # the sample sound as it is - shown, to compare with
 _SAME_DB = 40.0  # frames this close (PSNR) look the same
@@ -827,6 +856,9 @@ def _page(
                 if entry.section != section:
                     continue
                 classes, badge = [], ""
+                if entry.unavailable:
+                    classes.append("unavailable")
+                    badge = f'<span class="badge">{html.escape(msg("gallery.unavailable_badge"))}</span>'
                 if out is None:
                     media = ""
                 elif out.name in errors:
@@ -846,16 +878,20 @@ def _page(
                     key = f"gallery.about.{_slug(entry.name)}"
                     if key in i18n.CATALOGS["en"]:
                         entry = replace(entry, description=msg(key))
-                if entry.title or entry.description or entry.tweaked or "unchanged" in classes:
+                if entry.title or entry.description or entry.tweaked or "unchanged" in classes or entry.unavailable:
                     title = entry.title if entry.title and entry.title.lower() != entry.name.lower() else ""
                     note = ""
-                    if entry.tweaked:
+                    if entry.unavailable:
+                        note = entry.unavailable
+                    elif entry.tweaked:
                         note = msg("gallery.tweaked", values=entry.tweaked)
                     elif "unchanged" in classes:
                         note = msg("gallery.needs_values")
                     text = " - ".join(t for t in (note, title, entry.description) if t)
                     about = f'<p class="about" title="{html.escape(text)}">{html.escape(text)}</p>'
                 attrs = f' class="{" ".join(classes)}"' if classes else ""
+                if entry.unavailable:  # (why it's grey, on the whole card)
+                    attrs += f' title="{html.escape(entry.unavailable)}"'
                 items.append(
                     f'<figure{attrs}>{media}<figcaption>{html.escape(entry.name)}{badge}</figcaption>{about}'
                     f"<pre><code>{html.escape(entry.snippet)}</code></pre></figure>"
@@ -938,7 +974,8 @@ figcaption { font-weight: 600; overflow-wrap: anywhere; }
 .about { margin: 0; font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3;
          -webkit-box-orient: vertical; overflow: hidden; }
 label.hide { display: inline-flex; gap: 6px; align-items: center; margin-left: 12px; color: var(--muted); }
-body.hide-unchanged figure.unchanged { display: none; }
+body.hide-unchanged figure.unchanged, body.hide-unchanged figure.unavailable { display: none; }
+figure.unavailable { opacity: .5; filter: grayscale(1); }
 audio { width: 100%; }
 pre { margin: 0; padding: 6px 8px; background: var(--code); border-radius: 4px; overflow-x: auto; cursor: copy;
       font: 12px/1.4 ui-monospace, monospace; }

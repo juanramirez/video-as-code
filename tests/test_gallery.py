@@ -98,6 +98,7 @@ def test_melt_entries_by_kind(monkeypatch):
         avfilter_negate=("filter", ["Video"]), avfilter_aecho=("filter", ["Audio"]),
         luma_x=("transition", ["Video"]), mix_x=("transition", ["Audio"]),
         frei0r_gltransition=("transition", ["Video"]),
+        avfilter_scale_cuda=("filter", ["Video"]), movit_blur=("filter", ["Video"]),
     ))
     by_name = {e.name: e for e in gallery.melt_entries()}
     assert "frei0r.gltransition" not in by_name  # (its own section)
@@ -107,6 +108,8 @@ def test_melt_entries_by_kind(monkeypatch):
     assert by_name["luma.x"].snippet == "transition: melt/luma.x"
     assert by_name["mix.x"].section == "melt_audio" and not by_name["mix.x"].render
     assert by_name["avfilter.negate"].source == "video"  # (melt's filters play over the video sample)
+    for name in ("avfilter.scale_cuda", "movit.blur"):  # can't work in a plain melt render: listed, greyed
+        assert by_name[name].unavailable and not by_name[name].render
 
 
 def test_melt_section_tells_what_changes_nothing(tmp_path: Path, melt, monkeypatch):
