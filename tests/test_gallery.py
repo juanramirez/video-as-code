@@ -224,6 +224,10 @@ def test_a_card_knows_its_key():
     assert gallery.doc_key(card("derive:\n  openshot:\n    - {effect: Wave}"), known) == "openshot"
     assert gallery.doc_key(card("melt:\n  - brightness: {level: 2}"), known) == "melt"
     assert gallery.doc_key(card("transition: gl\ngl: cube\ngl_params: {persp: 1}"), known) == "gl"
+    assert gallery.doc_key(card("transition: dissolve"), known) == "transition"
+    known |= {"type", "text", "shadow", "overlay_text", "overlay_font_size"}
+    assert gallery.doc_key(card("type: title\ntext: Hello\nshadow: true"), known) == "text"
+    assert gallery.doc_key(card("overlay_text: Hi\noverlay_font_size: 40"), known) == "overlay_text"
     assert gallery.doc_key(card("speed: 2"), known) is None
 
 

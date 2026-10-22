@@ -780,12 +780,19 @@ def card_id(entry: Entry) -> str:
 _MINOR_KEYS = {"transition_properties", "transition_duration", "duration", "start", "clip", "path", "params", "gl_params"}
 
 
+# keys that only say what kind of thing follows: the one after them says more
+_CONTAINER_KEYS = {"transition", "derive", "type"}
+
+
 def doc_key(entry: Entry, known) -> Optional[str]:
-    """The key of the reference `entry` shows: of its snippet's keys, the
-    most specific one the reference has (`luma` rather than `transition`,
-    derive:'s `openshot` rather than `derive`)."""
+    """The key of the reference `entry` shows: the first of its snippet's
+    keys the reference has - past `transition`, `derive` or `type` when
+    another follows (`luma` rather than `transition`, derive:'s
+    `openshot`, a title's `text`), and past the minor ones (`font_size`
+    after `overlay_text`)."""
     keys = [k for k in re.findall(r"(?m)^\s*([a-z_]+):", entry.snippet) if k in known and k not in _MINOR_KEYS]
-    return keys[-1] if keys else None
+    specific = [k for k in keys if k not in _CONTAINER_KEYS]
+    return (specific or keys or [None])[0]
 
 
 def _preview_key(entry: Entry, samples: dict[str, Path], base: str) -> str:
