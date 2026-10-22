@@ -27,6 +27,7 @@ from . import upscale as upscale_mod
 from .errors import ValidationErrors
 from .i18n import msg
 from . import gltransitions, glfilters, lumas, meltpass
+from . import openshot_effects as openshot_mod
 from . import presets as presets_mod
 from .models import (
     AFFINE_STYLES,
@@ -561,7 +562,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_not_a_map", id=clip_id, value=data))
         return None
     n_errors = len(errors)
-    known = {"source", "path", "clip", "motion", "rotate", "trim", "cut", "crop", "scale", "devignette", "fit", "feather", "vignette", "fps", "reverse", "volume", "upscale", "intra"}
+    known = {"source", "path", "clip", "motion", "rotate", "trim", "cut", "crop", "scale", "devignette", "fit", "feather", "vignette", "fps", "reverse", "volume", "upscale", "intra", "openshot"}
     unknown = set(data) - known
     if unknown:
         errors.append(msg("validation.derive_unknown_keys", id=clip_id, keys=", ".join(sorted(unknown))))
@@ -680,11 +681,14 @@ def _parse_derive(
     # x4 only: it's what the realesrgan-x4plus model does (see upscale.py)
     if upscale is not None and (isinstance(upscale, bool) or upscale != upscale_mod.FACTOR):
         errors.append(msg("validation.derive_upscale_invalid", id=clip_id, value=upscale, factor=upscale_mod.FACTOR))
+    openshot = openshot_mod.parse(data["openshot"], f"bin[{clip_id}].derive", errors) if data.get("openshot") is not None else ()
+    if openshot and upscale:  # (two external programs in a row: not supported)
+        errors.append(msg("validation.derive_openshot_upscale", id=clip_id))
     if len(errors) > n_errors:
         return None
     if not (
         motion or rotate or trim or cut or crop or scale or devignette is not None or fit or feather or vignette is not None or fps
-        or reverse or volume is not None or upscale or intra
+        or reverse or volume is not None or upscale or intra or openshot
     ):
         errors.append(msg("validation.derive_does_nothing", id=clip_id))
         return None
@@ -713,6 +717,7 @@ def _parse_derive(
         upscale=int(upscale) if upscale is not None else None,
         motion=motion,
         intra=intra,
+        openshot=openshot,
     )
 
 

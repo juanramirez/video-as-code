@@ -265,12 +265,11 @@ melt 7.32.0, not assumed.
   photos), the README staying as GitHub's front page. Its own section
   in the README saying what it builds and where. Markdown to HTML via
   an optional `markdown` dependency, or a small converter of our own.
-- **Effects from libopenshot** (its Wave, AnalogTape, Sphere,
-  LensFlare...): as a `derive:` operation that renders a clip through
-  libopenshot (python3-openshot, Python 3.14, run as a separate
-  process like Real-ESRGAN), since a frei0r/MLT bridge would mix Qt 5
-  (libopenshot) and Qt 6 (MLT) in one process. Its transitions are
-  covered already (`luma: openshot/<name>`).
+- **`derive: {ffmpeg: "<filtergraph>"}`**: an ffmpeg filtergraph written
+  by hand, for what neither derive:'s own operations nor melt's
+  `avfilter.*` bridge (single input, and some filters it handles badly)
+  can do - several inputs, `xfade`, a `lut3d` with options melt doesn't
+  pass.
 - **`lut:` from a LUT pack by name**, and a gallery card per LUT found
   next to the project.
 

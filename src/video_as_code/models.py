@@ -120,6 +120,9 @@ class DeriveSpec:
     upscale: Optional[int] = None
     motion: bool = False
     intra: bool = False
+    # `openshot`: libopenshot's effects, last of all (openshot_effects.py) -
+    # each effect as JSON, as checked
+    openshot: tuple[str, ...] = ()
 
 
 @dataclass

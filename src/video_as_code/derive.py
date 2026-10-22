@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from . import probe, sources_lock
+from . import openshot_effects as openshot_mod
 from . import upscale as upscale_mod
 from .errors import KdenliveAsCodeError
 from .i18n import msg
@@ -56,6 +57,8 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         canonical["cut"] = [list(r) for r in spec.cut]
     if spec.upscale:
         canonical["upscale"] = spec.upscale
+    if spec.openshot:
+        canonical["openshot"] = list(spec.openshot)
     if spec.intra:
         canonical["intra"] = True
     if spec.devignette is not None:
@@ -565,7 +568,20 @@ def generate(
             intermediates.append(cut_file)
             _run(clip_id, build_cut_command(spec, input_path, cut_file, _has_audio(input_path)), cut_file)
             source, spec = cut_file, dataclasses.replace(spec, trim=None, cut=None)
-        if spec.upscale:
+        if spec.openshot:
+            # libopenshot's effects last, on what the rest made of the input
+            # (openshot_effects.py)
+            rest = dataclasses.replace(spec, openshot=())
+            if _ffmpeg_ops(rest):
+                pre = output.with_name(f"{output.stem}.pre{output.suffix}")
+                intermediates.append(pre)
+                _run_ffmpeg(clip_id, rest, source, pre)
+                source = pre
+            try:
+                openshot_mod.render(clip_id, spec.openshot, source, tmp)
+            except openshot_mod.OpenShotError as exc:
+                raise DeriveError(str(exc)) from exc
+        elif spec.upscale:
             if output.suffix.lower() not in (".png", ".gif"):
                 raise DeriveError(msg("derive.upscale_stills_only", id=clip_id))
             if _ffmpeg_ops(spec):  # the other operations first, on the small picture

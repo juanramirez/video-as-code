@@ -1351,3 +1351,12 @@ whole video can be built from a fresh checkout anywhere.
   glitch, kaleidoscope, vhs - each checked to compile and draw by a real
   render) and the user's own `.glsl` files (`glfilters.py`,
   `tests/test_gltransitions.py`).
+- **libopenshot's effects: `derive: {openshot: [...]}`** — **implemented**
+  (2026-10-22): its 29 effects (video and audio) applied, in order, to a
+  clip when it's generated, after derive:'s ffmpeg operations
+  (`openshot_effects.py`). libopenshot's bindings are for the system's
+  Python and its Qt 5 can't share a process with MLT's Qt 6, so a script
+  of its own (`openshot_render.py`) runs with that Python - also to
+  describe its catalog, which validates each effect and property (kept
+  in the user cache per libopenshot version). Checked by real render:
+  Negate on a video and on a still (`tests/test_openshot_effects.py`).

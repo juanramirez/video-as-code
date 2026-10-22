@@ -484,6 +484,22 @@ over a clip's picture on the GPU, with `time` and `progress` to animate
 it - through the plugin `video-as-code install-gl-transitions` builds.
 See `docs/project-yaml.md`.
 
+### libopenshot's effects: `derive: {openshot: [...]}`
+
+OpenShot's effects - Wave, AnalogTape, LensFlare, SphericalProjection,
+Pixelate... and its audio ones (Echo, Robotization...) - applied to a
+clip when it's generated, by libopenshot itself:
+
+```yaml
+- id: wavy
+  derive:
+    path: media/sea.mp4
+    openshot: [{effect: Wave, amplitude: 0.6, wavelength: {0: 0.06, 3: 0.2}}, {effect: AnalogTape}]
+```
+
+It needs `python3-openshot` (which `openshot-qt` brings); it runs in a
+process of its own, with the system's Python. See `docs/project-yaml.md`.
+
 ### `video-as-code gallery`: every transition and effect, in the browser
 
 Opens a page with everything a project YAML can ask for - the
