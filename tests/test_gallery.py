@@ -153,7 +153,9 @@ def test_tweaks_from_ranges():
         (("default", "'1'"), ("name", "av.s"), ("type", "string")),
         (("default", 1.0), ("maximum", 15.0), ("minimum", 0.0), ("name", "end (*DEPRECATED*)"), ("type", "float")),
     ))
-    assert gallery._tweaks(entry) == [{"level": 11.25}, {"u": 64}, {"flag": True}]
+    # the far end of each range first, then the near ends
+    assert gallery._tweaks(entry) == [{"level": 11.25}, {"u": 64}, {"flag": True}, {"level": 3.75}, {"u": 191}]
+    assert gallery._tweaks(entry, tries=2) == [{"level": 11.25}, {"u": 64}]
 
 
 def test_audio_analysers_listed_without_a_preview():

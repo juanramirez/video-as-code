@@ -462,12 +462,23 @@ def _unchanged(entry: Entry, out: Path, baselines: dict[str, Path], sound_baseli
     return _frames_psnr(out, 1.5, baselines[entry.source], 1.5) > _SAME_DB
 
 
-def _tweaks(entry: Entry, tries: int = 3) -> list[dict]:
+def _tweaks(entry: Entry, tries: int = 5) -> list[dict]:
     """Other values to show `entry` with, when at its defaults it changes
     nothing: one parameter at a time, a number toward the far end of its
     range from its default (3/4 of the way up from a low one, 1/4 from a
     high one), a true/false the other way - those melt gives a range or a
-    type for; at most `tries`."""
+    type for; then each number toward its near end too (a parameter that
+    only shows below its default); at most `tries`."""
+    far, near = [], []
+    for values, other in _tweak_pairs(entry):
+        far.append(values)
+        if other is not None:
+            near.append(other)
+    return (far + near)[:tries]
+
+
+def _tweak_pairs(entry: Entry) -> list[tuple[dict, Optional[dict]]]:
+    """(far end, near end or None) for each parameter that has them."""
     out = []
     for param in (dict(p) for p in entry.params):
         if "DEPRECATED" in param["name"]:
@@ -481,15 +492,18 @@ def _tweaks(entry: Entry, tries: int = 3) -> list[dict]:
                 start = float(default) if default is not None else float(low)
             except (TypeError, ValueError):
                 start = float(low)
-            value = low + (high - low) * (0.75 if start - low <= (high - low) / 2 else 0.25)
+            up = start - low <= (high - low) / 2
+            value = low + (high - low) * (0.75 if up else 0.25)
+            other = low + (high - low) * (0.25 if up else 0.75)
             value = round(value) if kind == "integer" else round(value, 3)
+            other = round(other) if kind == "integer" else round(other, 3)
             if value == start:
                 continue
+            out.append(({param["name"]: value}, None if other == start else {param["name"]: other}))
+            continue
         else:
             continue
-        out.append({param["name"]: value})
-        if len(out) == tries:
-            break
+        out.append(({param["name"]: value}, None))
     return out
 
 
@@ -841,7 +855,7 @@ def build(
 
     # those that change nothing at their defaults: shown with other values,
     # the first that does change something (_tweaks) - or, if none, marked
-    tweaks_file = root / "tweaks.json"
+    tweaks_file = root / "tweaks-2.json"  # (-2: both ends of a range tried since)
     try:
         tweaks: dict[str, Optional[dict]] = json.loads(tweaks_file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
