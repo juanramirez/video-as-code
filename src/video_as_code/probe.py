@@ -50,6 +50,25 @@ def find_melt() -> str | None:
     return shutil.which("melt") or shutil.which("melt-7")
 
 
+def frei0r_dirs(root: Path = Path("/")) -> list[str]:
+    """Where frei0r plugins are, for FREI0R_PATH. MLT's frei0r module
+    only looks in /usr/lib/frei0r-1, /usr/local/lib/frei0r-1 and
+    ~/.frei0r-1/lib - not Debian/Ubuntu's multiarch
+    /usr/lib/<triplet>/frei0r-1, where the frei0r-plugins package puts
+    them: found 2026-10-22, with Ubuntu's own melt 7.36 listing no
+    frei0r filter at all, so every frei0r-backed one (iris, flip,
+    glitch, delaygrab, cairogradient, chroma_key) rendered as nothing,
+    silently. Setting FREI0R_PATH replaces those defaults, so they're
+    kept in it too."""
+    candidates = [
+        *sorted((root / "usr" / "lib").glob("*/frei0r-1")),
+        root / "usr" / "lib" / "frei0r-1",
+        root / "usr" / "local" / "lib" / "frei0r-1",
+        Path.home() / ".frei0r-1" / "lib",
+    ]
+    return [str(d) for d in candidates if d.is_dir()]
+
+
 def melt_env(base: dict[str, str] | None = None, mlt_data: Path | None = None) -> dict[str, str]:
     """Environment to run `melt` with: the caller's own (or `base`), plus
     `LC_ALL=C`.
@@ -62,9 +81,15 @@ def melt_env(base: dict[str, str] | None = None, mlt_data: Path | None = None) -
     like 2.0 and `gain: 1.5` like 1.0, and the AUDIO of a sped-up clip
     (timewarp, e.g. `speed: 1.08`) played at 1.0x, while video speed was
     unaffected - silently, with no error. Forcing the C locale for the
-    melt process makes every decimal in the XML mean what it says."""
+    melt process makes every decimal in the XML mean what it says.
+
+    Also FREI0R_PATH, unless the caller set it: see frei0r_dirs."""
     env = dict(os.environ if base is None else base)
     env["LC_ALL"] = "C"
+    if "FREI0R_PATH" not in env:
+        frei0r_path = frei0r_dirs()
+        if frei0r_path:
+            env["FREI0R_PATH"] = ":".join(frei0r_path)
     if mlt_data is not None:
         env["MLT_DATA"] = str(mlt_data)  # see mltdata.py
     return env

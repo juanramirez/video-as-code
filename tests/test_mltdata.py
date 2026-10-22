@@ -78,3 +78,16 @@ def test_default_cache_root_follows_xdg(tmp_path: Path, monkeypatch):
 def test_melt_env_sets_mlt_data_only_when_given(tmp_path: Path):
     assert "MLT_DATA" not in probe.melt_env({"PATH": os.environ.get("PATH", "")})
     assert probe.melt_env({}, mlt_data=tmp_path)["MLT_DATA"] == str(tmp_path)
+
+
+def test_frei0r_dirs_include_multiarch_and_keep_mlts_defaults(tmp_path: Path):
+    """Ubuntu's frei0r-plugins installs to /usr/lib/<triplet>/frei0r-1,
+    where MLT doesn't look (see probe.frei0r_dirs)."""
+    (tmp_path / "usr/lib/x86_64-linux-gnu/frei0r-1").mkdir(parents=True)
+    (tmp_path / "usr/lib/frei0r-1").mkdir(parents=True)
+    dirs = probe.frei0r_dirs(tmp_path)
+    assert dirs[:2] == [str(tmp_path / "usr/lib/x86_64-linux-gnu/frei0r-1"), str(tmp_path / "usr/lib/frei0r-1")]
+
+
+def test_melt_env_keeps_the_callers_frei0r_path():
+    assert probe.melt_env({"FREI0R_PATH": "/mine"})["FREI0R_PATH"] == "/mine"

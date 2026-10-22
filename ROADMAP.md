@@ -1243,3 +1243,11 @@ whole video can be built from a fresh checkout anywhere.
   by every YAML in the folder, so a project and its preview keep each
   other's files alive). A file seen for the first time only starts
   counting; one the lock doesn't know is never touched.
+- **frei0r with the distribution's melt** — **fixed** (2026-10-22): Ubuntu's
+  own melt 7.36 saw no frei0r plugin at all - they're in
+  /usr/lib/<triplet>/frei0r-1, where MLT doesn't look - so iris, flip,
+  glitch, delaygrab, cairogradient and chroma_key rendered as nothing
+  with it, silently (the tests didn't notice: they prefer a melt built
+  from source, given FREI0R_PATH). `probe.melt_env` now sets FREI0R_PATH
+  for every render, unless it's already set (`probe.frei0r_dirs`,
+  `tests/test_mltdata.py`).
