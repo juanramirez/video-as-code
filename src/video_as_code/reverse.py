@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from . import lumas, probe, titles, xmlgen
+from . import lumas, meltpass, probe, titles, xmlgen
 from .i18n import msg
 from .timecode import FrameRate, resolve_fps
 
@@ -99,6 +99,22 @@ def _pretty(el: ET.Element) -> str:
 
 def _props(el: ET.Element) -> dict[str, str]:
     return {p.get("name"): (p.text or "") for p in el.findall("property")}
+
+
+def _melt_properties(kind: str, props: dict[str, str], placement_keys: tuple[str, ...]) -> Optional[dict[str, str]]:
+    """A filter/transition's properties as a `melt:` entry's (meltpass.py)
+    - None unless the installed melt has its service and takes every one
+    of them (one that came from a newer melt, or kdenlive-only, stays raw)."""
+    service = props.get("mlt_service")
+    if not service or not meltpass.is_known(kind, service):
+        return None
+    properties = {
+        k: v for k, v in props.items()
+        if k not in ("mlt_service", *placement_keys) and not (k == "kdenlive_id" and v == service)
+    }
+    if meltpass.check(kind, service, properties, ""):
+        return None
+    return properties
 
 
 def _has_timeremap_link(producer_el: ET.Element) -> bool:
@@ -695,6 +711,11 @@ class Importer:
                 parsed_pk.append({"at": at_s, "position": [x, y], "size": [w, h]})
             return {"position_keyframes": parsed_pk}
 
+        # any other filter melt has, over the whole clip: a `melt:` entry
+        if (f_in, f_out) == (entry_in, entry_out):
+            properties = _melt_properties("filter", props, ())
+            if properties is not None:
+                return {"melt": [{service: properties or None}]}
         self.raw_items.append(RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service or "?", kid=kid or "?"), _pretty(filter_el)))
         return {}
 
@@ -819,7 +840,11 @@ class Importer:
                 placement["crop"] = {"top": top, "right": right, "bottom": bottom, "left": left}
 
             for filt in filters:
-                placement.update(self.convert_clip_filter(filt, in_frame, out_frame, entry_ctx))
+                converted = self.convert_clip_filter(filt, in_frame, out_frame, entry_ctx)
+                placement.setdefault("melt", []).extend(converted.pop("melt", []))
+                placement.update(converted)
+            if not placement.get("melt"):
+                placement.pop("melt", None)
 
             clips.append(placement)
             cursor += out_frame - in_frame + 1
@@ -848,26 +873,32 @@ class Importer:
 
         if service == "luma":
             luma_name = lumas.name_from_resource(props.get("resource", ""))
-            if luma_name is None:
-                return None
-            wipe = {"type": "wipe", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "luma": luma_name}
             try:
                 softness = float(props.get("softness", 0))
             except ValueError:
-                return None
-            if softness:
-                wipe["softness"] = softness
-            if props.get("invert", "0") not in ("", "0"):  # see xmlgen.py's wipe
-                wipe["reverse"] = True
-            return wipe
+                luma_name = None
+            if luma_name is not None:
+                wipe = {"type": "wipe", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "luma": luma_name}
+                if softness:
+                    wipe["softness"] = softness
+                if props.get("invert", "0") not in ("", "0"):  # see xmlgen.py's wipe
+                    wipe["reverse"] = True
+                return wipe
 
         if service == "affine":
             style = self._match_affine_style(props.get("rect", ""), end_frame - start_frame)
-            if style is None:
-                return None
-            return {"type": "affine", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "style": style}
+            if style is not None:
+                return {"type": "affine", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "style": style}
 
-        return None
+        # any other (a luma map or affine motion of someone else's
+        # included): as `melt/<service>`, if melt has it
+        properties = _melt_properties("transition", props, ("a_track", "b_track"))
+        if properties is None:
+            return None
+        transition = {"type": meltpass.PREFIX + service, "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s}
+        if properties:
+            transition["properties"] = properties
+        return transition
 
     def convert_cross_track_transitions(
         self, sequence: ET.Element, track_names_by_position: dict[int, str]
@@ -885,11 +916,13 @@ class Importer:
         silently lost. Reconstructing the original `scenes:` sugar (clip
         list, pacing) isn't attempted - only the transition itself,
         referencing the already-recognized track names. Anything that
-        doesn't match what this generator itself would produce (unknown
-        service, an out-of-range track position, a luma resource that
-        isn't one of this project's own lumas, an affine `rect` that
-        doesn't match the zoom/slide keyframe shape xmlgen.py emits)
-        falls back to the previous behavior: flagged into `raw_items`
+        doesn't match what this generator itself would produce (a luma
+        resource that isn't one of this project's own lumas, an affine
+        `rect` that doesn't match the zoom/slide keyframe shape xmlgen.py
+        emits, any other service) comes back as a `melt/<service>` entry
+        with its properties as they are (meltpass.py) when the installed
+        melt has it and takes them all; otherwise (that, or an
+        out-of-range track position) it's flagged into `raw_items`
         instead of guessed."""
         transitions_yaml: list[dict] = []
         for t in sequence.findall("transition"):

@@ -3065,3 +3065,36 @@ scenes:
         left, right = red_fraction_at(2.3, 0.03), red_fraction_at(2.3, 0.97)
         early, late = (left, right) if left_first else (right, left)
         assert early < 0.5 < late, f"[reverse={reverse_}] near the end: {left=:.2f} {right=:.2f}"
+
+
+def test_melt_filter_and_transition_render(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """`melt:` and `melt/<service>` (meltpass.py) do what the service does:
+    frei0r.invert0r turns the red still cyan, and `melt/luma` with no map
+    (MLT's plain dissolve) is halfway through at its middle."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - transition: melt/luma
+    transition_duration: 1.0
+    clips:
+      - {{path: {assets_dir / "photo.png"}, melt: [frei0r.invert0r]}}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive_path)
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+
+    r, g, b = _mean_rgb_at_x(rendered, timestamp=0.5, frac_x=0.5)
+    assert r < 40 and g > 200 and b > 200, f"expected the inverted red (cyan), got {(r, g, b)}"
+    # the transition spans [1.5, 2.5)s: cyan -> blue, halfway at 2.0
+    r, g, b = _mean_rgb_at_x(rendered, timestamp=2.0, frac_x=0.5)
+    assert 60 < g < 200 and b > 200, f"expected a mix of cyan and blue, got {(r, g, b)}"
+    r, g, b = _mean_rgb_at_x(rendered, timestamp=2.8, frac_x=0.5)
+    assert g < 40 and b > 200, f"expected blue after it, got {(r, g, b)}"

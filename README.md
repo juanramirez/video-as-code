@@ -394,6 +394,29 @@ OpenShot's `common/` (`fade`, `circle_in_to_out`/`circle_out_to_in`,
 `radial`, `linear_x` and `linear_y` already do; `openshot/fade` is all
 one shade, which MLT plays as a cut - use `transition: dissolve`.
 
+### `melt:` and `melt/<service>`: any MLT filter or transition
+
+For what there's no key of its own for: a clip's `melt:` takes any
+filter the `melt` that renders it has, by service name - frei0r's ~100,
+ffmpeg's as `avfilter.*`, MLT's own - and `transition: melt/<service>`
+any of its transitions:
+
+```yaml
+- clip: beach
+  start: 0
+  duration: 4
+  melt:
+    - frei0r.cartoon: {diffspace: 0.4}
+    - avfilter.hue: {av.h: "0=0;100=180"}
+```
+
+Values are written as they are, in MLT's own units and keyframe syntax.
+An unknown service or property is an error, with the closest names, so
+a typo doesn't render as nothing; `import` brings filters and
+transitions it doesn't otherwise recognize back as these entries,
+instead of `x_kdenlive_raw`, when the installed melt has them. See
+`docs/project-yaml.md`.
+
 ### `video-as-code gallery`: every transition and effect, in the browser
 
 Opens a page with everything a project YAML can ask for - the

@@ -143,7 +143,7 @@ def pack_tracks(project: ResolvedProject) -> ResolvedProject:
     for w in project.wipe_transitions:
         referenced_names.add(w.track_a)
         referenced_names.add(w.track_b)
-    for a in project.affine_transitions:
+    for a in [*project.affine_transitions, *project.melt_transitions]:
         referenced_names.add(a.track_a)
         referenced_names.add(a.track_b)
 

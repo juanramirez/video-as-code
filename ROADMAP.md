@@ -1271,3 +1271,16 @@ whole video can be built from a fresh checkout anywhere.
   user cache folder by project, samples, the package's code and melt;
   the wipe shapes are played by the page itself from their maps. The
   catalog is also checked to stay valid (`tests/test_gallery.py`).
+- **`melt:` and `melt/<service>`** — **implemented** (2026-10-22): any
+  filter (a clip's `melt:` list) or transition (`transition:
+  melt/<service>` on a scene, `type: melt/<service>` on `transitions:`)
+  of the installed melt, by service name, with its properties written
+  as given (`meltpass.py`). Checked against `melt -query`: an unknown
+  service or property is an error with the closest names (frei0r's
+  parameters by number or by name, both of which MLT takes), a service
+  melt doesn't describe takes any; with no melt, nothing is checked.
+  `import` now brings back filters over a whole clip and two-track
+  transitions it doesn't otherwise recognize as these entries, when the
+  installed melt has them and takes their properties, instead of
+  `x_kdenlive_raw` (`tests/test_meltpass.py`,
+  `tests/test_melt_validation.py::test_melt_filter_and_transition_render`).

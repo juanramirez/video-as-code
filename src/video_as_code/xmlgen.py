@@ -22,7 +22,7 @@ from typing import Optional
 
 from . import lumas
 from .ids import deterministic_document_id, deterministic_uuid
-from .models import ResolvedAffineTransition, ResolvedPlacement, ResolvedProject, ResolvedTrack
+from .models import MeltService, ResolvedAffineTransition, ResolvedPlacement, ResolvedProject, ResolvedTrack
 
 # Keyframed `rect` for each `transition: affine` style (scenes.py), 0-relative
 # to the transition's own `in` (confirmed empirically, same convention the
@@ -553,6 +553,17 @@ def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
         _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_melt_service(el: ET.Element, service: MeltService) -> None:
+    """A `melt:` filter or `melt/<service>` transition (meltpass.py): its
+    service and properties as given - and kdenlive_id, which kdenlive
+    looks it up by, unless given too."""
+    _prop(el, "mlt_service", service.service)
+    if not any(name == "kdenlive_id" for name, _ in service.properties):
+        _prop(el, "kdenlive_id", service.service)
+    for name, value in service.properties:
+        _prop(el, name, value)
+
+
 def _add_chroma_key_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
     """Green/blue-screen compositing via `frei0r.bluescreen0r` - this is
     kdenlive's own mechanism for it (confirmed: kdenlive's UI ships this
@@ -968,6 +979,8 @@ def _build_track(
             _add_mute_filter(ids, entry)
         if placement.gain is not None:
             _add_gain_filter(ids, entry, placement.gain)
+        for service in placement.melt_filters:
+            _add_melt_service(ET.SubElement(entry, "filter", {"id": ids.next("filter")}), service)
         cursor = placement.start_frame + placement.length_frames
 
     root.append(playlist_main)
@@ -1137,7 +1150,7 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     for _, tid in track_tractor_ids:
         ET.SubElement(sequence, "track", {"producer": tid})
 
-    if project.wipe_transitions or project.affine_transitions:
+    if project.wipe_transitions or project.affine_transitions or project.melt_transitions:
         # Must come before the a_track=0 compositing transitions below: MLT
         # applies a tractor's transitions in declaration order, and (found
         # empirically - see tests/test_melt_validation.py's wipe test)
@@ -1179,6 +1192,15 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
             _prop(t, "rect", _AFFINE_STYLE_RECT[a.style].format(first=0, last=a.end_frame - a.start_frame))
             _prop(t, "fill", 1)
             _prop(t, "distort", 0)
+        for m in project.melt_transitions:
+            t = ET.SubElement(
+                sequence,
+                "transition",
+                {"id": ids.next("transition"), "in": str(m.start_frame), "out": str(m.end_frame)},
+            )
+            _prop(t, "a_track", track_position[m.track_a])
+            _prop(t, "b_track", track_position[m.track_b])
+            _add_melt_service(t, m.melt)
 
     for pos, (kind, _) in enumerate(track_tractor_ids, start=1):
         t = ET.SubElement(sequence, "transition", {"id": ids.next("transition")})

@@ -118,10 +118,11 @@ from typing import Any, Optional
 
 from . import probe
 from .i18n import msg
-from . import lumas
+from . import lumas, meltpass
 from .models import (
     AFFINE_STYLES,
     AffineTransitionSpec,
+    MeltTransitionSpec,
     BinClipSpec,
     ClipPlacementSpec,
     ProjectDoc,
@@ -279,6 +280,9 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             else:
                 extras["chroma_key_distance"] = chroma_key_distance
 
+        if raw.get("melt") is not None:
+            extras["melt_filters"] = meltpass.parse_filters(raw.get("melt"), entry_ctx, errors)
+
         return extras
 
     track_clips: tuple[list[ClipPlacementSpec], list[ClipPlacementSpec]] = ([], [])
@@ -286,6 +290,7 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
     track_clips_burst: list[ClipPlacementSpec] = []
     wipe_transitions: list[WipeTransitionSpec] = []
     affine_transitions: list[AffineTransitionSpec] = []
+    melt_transitions: list[MeltTransitionSpec] = []
     cursor = 0.0  # global second at which the scenes block starts
 
     for s_idx, scene in enumerate(scenes_data):
@@ -300,14 +305,24 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             continue
 
         transition = scene.get("transition", "none")
-        if transition not in ("none", "dissolve", "wipe", "affine", "iris", "flip", *BURST_TRANSITIONS):
+        is_melt = isinstance(transition, str) and transition.startswith(meltpass.PREFIX)
+        if transition not in ("none", "dissolve", "wipe", "affine", "iris", "flip", *BURST_TRANSITIONS) and not is_melt:
             errors.append(msg("validation.scene_transition_invalid", ctx=ctx, transition=transition))
             continue
         overlap = (
             float(scene.get("transition_duration", DEFAULT_TRANSITION_DURATION))
-            if transition in ("dissolve", "wipe", "affine", "iris", "flip", *BURST_TRANSITIONS)
+            if transition in ("dissolve", "wipe", "affine", "iris", "flip", *BURST_TRANSITIONS) or is_melt
             else 0.0
         )
+        melt_service = None
+        if is_melt:
+            # any MLT transition between the two alternating tracks over
+            # each overlap, as wipe/affine - on sound too (`mix`)
+            melt_service = meltpass.parse_service(
+                "transition", transition[len(meltpass.PREFIX):], scene.get("transition_properties"), ctx, errors
+            )
+            if melt_service is None:
+                continue
         # `glitch` doesn't actually overlap clips in time (see
         # GLITCH_TRACK_NAME) - `overlap` above still carries the burst
         # duration for the fade_in/fade_out windows, but cumulative
@@ -436,6 +451,7 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                 reveal_style=reveal_style,
                 chroma_key=extras.get("chroma_key"),
                 chroma_key_distance=extras.get("chroma_key_distance", 0.35),
+                melt_filters=extras.get("melt_filters", ()),
             )
             if transition in BURST_TRANSITIONS:
                 track_clips_burst.append(placement)
@@ -455,6 +471,16 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                         luma=luma,
                         softness=luma_softness,
                         reverse=luma_reverse,
+                    )
+                )
+            if melt_service is not None and i > 0:
+                melt_transitions.append(
+                    MeltTransitionSpec(
+                        track_a=active_track_names[(i - 1) % 2],
+                        track_b=active_track_names[i % 2],
+                        start=start,
+                        end=start + overlap,
+                        melt=melt_service,
                     )
                 )
             if transition == "affine" and i > 0:
@@ -493,5 +519,6 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
         scenes_raw=[],
         wipe_transitions=doc.wipe_transitions + wipe_transitions,
         affine_transitions=doc.affine_transitions + affine_transitions,
+        melt_transitions=doc.melt_transitions + melt_transitions,
         guides=doc.guides,
     )

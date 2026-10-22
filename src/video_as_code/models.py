@@ -155,6 +155,14 @@ class BinClipSpec:
     background: tuple[int, int, int, int] = (0, 0, 0, 0)
 
 
+@dataclass(frozen=True)
+class MeltService:
+    """An MLT filter or transition by its service name, with its
+    properties as written to the XML (see meltpass.py)."""
+    service: str
+    properties: tuple[tuple[str, str], ...] = ()
+
+
 @dataclass
 class ClipPlacementSpec:
     clip: str
@@ -399,6 +407,9 @@ class ClipPlacementSpec:
     # project's preferred from-source dev melt build and the system's
     # stable one - no `crop`/`lut3d`-style build-specific issue.
     stabilize: Optional[bool] = None
+    # `melt:` - any MLT filter by service name, after the clip's own
+    # (see meltpass.py)
+    melt_filters: tuple["MeltService", ...] = ()
 
 
 @dataclass
@@ -428,6 +439,18 @@ class WipeTransitionSpec:
     luma: str  # one of lumas.AVAILABLE_LUMAS, or "openshot/<name>" (see lumas.py)
     softness: float = 0.0  # MLT luma's: 0 a hard edge, 1 the softest
     reverse: bool = False  # the map's light parts first instead of its dark ones
+
+
+@dataclass
+class MeltTransitionSpec:
+    """`transition: melt/<service>` on a scene, `type: melt/<service>` on
+    `transitions:` - any MLT transition between two tracks over a window,
+    emitted like a wipe (see meltpass.py)."""
+    track_a: str
+    track_b: str
+    start: float
+    end: float
+    melt: MeltService
 
 
 AFFINE_STYLES = ("zoom", "slide")  # shared with scenes.py and schema.py's `transitions:` parsing
@@ -474,6 +497,7 @@ class ProjectDoc:
     scenes_raw: list = field(default_factory=list)  # uncompiled; see scenes.py
     wipe_transitions: list[WipeTransitionSpec] = field(default_factory=list)
     affine_transitions: list[AffineTransitionSpec] = field(default_factory=list)
+    melt_transitions: list[MeltTransitionSpec] = field(default_factory=list)
     guides: list[GuideSpec] = field(default_factory=list)
 
 
@@ -576,6 +600,7 @@ class ResolvedPlacement:
     color_grade_keyframes: Optional[list[tuple[int, dict[str, tuple[float, float, float]]]]] = None
     # Video stabilization - see ClipPlacementSpec.
     stabilize: Optional[bool] = None
+    melt_filters: tuple["MeltService", ...] = ()  # see ClipPlacementSpec
 
     @property
     def length_frames(self) -> int:
@@ -621,6 +646,15 @@ class ResolvedAffineTransition:
 
 
 @dataclass
+class ResolvedMeltTransition:
+    track_a: str
+    track_b: str
+    start_frame: int
+    end_frame: int  # last included frame
+    melt: MeltService
+
+
+@dataclass
 class ResolvedGuide:
     frame: int
     text: str
@@ -640,6 +674,7 @@ class ResolvedProject:
     source_dir: Path
     wipe_transitions: list[ResolvedWipeTransition] = field(default_factory=list)
     affine_transitions: list[ResolvedAffineTransition] = field(default_factory=list)
+    melt_transitions: list[ResolvedMeltTransition] = field(default_factory=list)
     guides: list[ResolvedGuide] = field(default_factory=list)
     notes: Optional[str] = None
 

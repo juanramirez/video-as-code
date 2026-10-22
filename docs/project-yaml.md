@@ -195,6 +195,7 @@ required.
 | `overlay_font_size` | `48` | Its size. |
 | `overlay_color` | `[255, 255, 255, 255]` | Its colour. |
 | `overlay_background` | `[0, 0, 0, 0]` | Its background. |
+| `melt` | - | Any other MLT filter, by its service name: a list of `<service>: {<property>: <value>}` (see *`melt:` and `melt/<service>`* below). |
 
 ## `scenes:`
 
@@ -208,17 +209,18 @@ at second 0.
 | `clips` | *(required)* | The clips (below). |
 | `pacing` | `normal` | How long each clip lasts when `duration` isn't given: `energetic` (stills 1.5 s, videos up to 3 s), `normal` (3 s / up to 6 s) or `slow` (5 s / up to 10 s). A video shorter than its cap plays whole. |
 | `duration` | - | Total length of the scene, split evenly across its clips. |
-| `transition` | `none` | Between consecutive clips: `none`, `dissolve`, `wipe`, `affine`, `iris`, `flip`, `glitch`, `delaygrab` or `cairogradient`. All but `none`/`dissolve` need video. |
+| `transition` | `none` | Between consecutive clips: `none`, `dissolve`, `wipe`, `affine`, `iris`, `flip`, `glitch`, `delaygrab` or `cairogradient` - all but `none`/`dissolve` need video - or any MLT transition as `melt/<service>` (below). |
 | `transition_duration` | `1.0` | Length of each transition. |
 | `luma` | `linear_x` | With `wipe`: its shape - `linear_x`, `linear_y`, `diagonal`, `radial`, `square`, `clock`, `spiral`, `bars_horizontal`, `bars_vertical`, `checkerboard`, `heart` or `bowtie`; or, with openshot-qt installed, one of OpenShot's 412 as `openshot/<name>` (see the README's *OpenShot's transitions*). |
 | `luma_softness` | `0` | With `wipe`: how soft the edge between the two clips is, from `0` (hard) to `1`. |
 | `luma_reverse` | `false` | With `wipe`: the shape's light parts change first instead of its dark ones. |
 | `style` | `zoom` | With `affine`: `zoom` or `slide`. |
+| `transition_properties` | - | With `melt/<service>`: its properties, `{<property>: <value>}`. |
 
 A scene's clip is a file path (`photos/beach.jpg`, added to the bin by
 itself), `{path: ...}`, or `{clip: <bin id>}`; the two map forms may also
 carry `mute`, `speed` (with `preserve_pitch`), `position`, `size`,
-`chroma_key` and `chroma_key_distance`, as on a timeline clip.
+`chroma_key`, `chroma_key_distance` and `melt`, as on a timeline clip.
 
 ## `guides:`
 
@@ -237,10 +239,53 @@ A transition between two tracks over a time window, written directly
 
 | Key | Default | Meaning |
 |---|---|---|
-| `type` | *(required)* | `wipe` or `affine`. |
+| `type` | *(required)* | `wipe`, `affine` or `melt/<service>`. |
 | `track_a`, `track_b` | *(required)* | The two tracks, by `name`. |
 | `start`, `end` | *(required)* | The window, in timeline seconds. |
 | `luma` | `linear_x` | With `wipe`: its shape (see `scenes:`). |
 | `softness` | `0` | With `wipe`: as a scene's `luma_softness`. |
 | `reverse` | `false` | With `wipe`: as a scene's `luma_reverse`. |
 | `style` | `zoom` | With `affine`: `zoom` or `slide`. |
+| `properties` | - | With `melt/<service>`: its properties, `{<property>: <value>}`. |
+
+## `melt:` and `melt/<service>`
+
+For what there's no key of its own for: any filter or transition the
+`melt` that renders the project has (`melt -query filters`,
+`melt -query transitions` list them - frei0r's ~100, ffmpeg's as
+`avfilter.*`, MLT's own), by its service name.
+
+```yaml
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: beach
+          start: 0
+          duration: 4
+          melt:
+            - frei0r.cartoon: {diffspace: 0.4}
+            - avfilter.hue: {av.h: "0=0;100=180"}   # keyframes, MLT's own syntax
+            - frei0r.invert0r                       # no properties
+scenes:
+  - transition: melt/composite
+    transition_properties: {geometry: "0=50%/50%:0%x0%;-1=0/0:100%x100%"}
+    clips: [a.jpg, b.jpg]
+```
+
+Each `melt:` entry becomes one filter on the clip, after those of the
+clip's own keys, in the order given; a `melt/<service>` transition goes
+between the scene's two alternating tracks over each overlap (on
+`transitions:`, between `track_a` and `track_b` over `start`-`end`),
+with no fade on either clip, as `wipe` does. Values are written as they
+are: MLT's own units, ranges (frei0r's parameters go from 0 to 1) and
+keyframe syntax. A frei0r parameter may be named by its number or by its
+name (`melt -query filter=frei0r.cartoon` shows both).
+
+When there's a `melt` to ask, an unknown service or property is an error
+(with the closest names) instead of a render that silently does nothing;
+a service melt doesn't describe takes any property. Opened in kdenlive,
+a filter it has no description of renders but may not show in its
+effect stack. `import` brings any filter over the whole clip and any
+transition between two tracks that the installed melt has, and that it
+doesn't otherwise recognize, back as these entries.

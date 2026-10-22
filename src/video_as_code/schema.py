@@ -24,10 +24,11 @@ from . import probe, sources_lock, titles
 from . import upscale as upscale_mod
 from .errors import ValidationErrors
 from .i18n import msg
-from . import lumas
+from . import lumas, meltpass
 from .models import (
     AFFINE_STYLES,
     AffineTransitionSpec,
+    MeltTransitionSpec,
     BinClipSpec,
     ClipPlacementSpec,
     DeriveSpec,
@@ -35,6 +36,7 @@ from .models import (
     ProjectDoc,
     ProjectSpec,
     ResolvedAffineTransition,
+    ResolvedMeltTransition,
     ResolvedBinClip,
     ResolvedGuide,
     ResolvedPlacement,
@@ -115,12 +117,15 @@ def load_yaml(path: str | Path) -> ProjectDoc:
     track_names = {t.name for t in tracks}
     wipe_transitions: list[WipeTransitionSpec] = []
     affine_transitions: list[AffineTransitionSpec] = []
+    melt_transitions: list[MeltTransitionSpec] = []
     for idx, item in enumerate(transitions_data):
-        wipe, affine = _parse_transition(item, idx, track_names, errors)
-        if wipe is not None:
-            wipe_transitions.append(wipe)
-        if affine is not None:
-            affine_transitions.append(affine)
+        parsed = _parse_transition(item, idx, track_names, errors)
+        if isinstance(parsed, WipeTransitionSpec):
+            wipe_transitions.append(parsed)
+        elif isinstance(parsed, AffineTransitionSpec):
+            affine_transitions.append(parsed)
+        elif isinstance(parsed, MeltTransitionSpec):
+            melt_transitions.append(parsed)
 
     if errors:
         raise ValidationErrors(errors)
@@ -135,6 +140,7 @@ def load_yaml(path: str | Path) -> ProjectDoc:
         guides=guides,
         wipe_transitions=wipe_transitions,
         affine_transitions=affine_transitions,
+        melt_transitions=melt_transitions,
     )
 
 
@@ -1206,6 +1212,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         color_grade=color_grade,
         color_grade_keyframes=color_grade_keyframes,
         stabilize=stabilize,
+        melt_filters=meltpass.parse_filters(item.get("melt"), ctx, errors),
     )
 
 
@@ -1227,7 +1234,7 @@ def _parse_guide(item: Any, idx: int, errors: list[str]) -> GuideSpec | None:
 
 def _parse_transition(
     item: Any, idx: int, track_names: set[str], errors: list[str]
-) -> tuple[WipeTransitionSpec | None, AffineTransitionSpec | None]:
+) -> WipeTransitionSpec | AffineTransitionSpec | MeltTransitionSpec | None:
     """A top-level `transitions:` entry - the low-level, `scenes:`-free way
     to declare a cross-track `wipe`/`affine` transition directly between
     two `timeline.tracks:` (by name). This is what `reverse.py` emits for
@@ -1238,47 +1245,51 @@ def _parse_transition(
     ctx = f"transitions[{idx}]"
     if not isinstance(item, dict) or "type" not in item:
         errors.append(msg("validation.transition_missing_type", ctx=ctx, item=item))
-        return None, None
+        return None
     t_type = item["type"]
-    if t_type not in ("wipe", "affine"):
+    is_melt = isinstance(t_type, str) and t_type.startswith(meltpass.PREFIX)
+    if t_type not in ("wipe", "affine") and not is_melt:
         errors.append(msg("validation.transition_type_invalid", ctx=ctx, type=t_type))
-        return None, None
+        return None
 
     track_a, track_b = item.get("track_a"), item.get("track_b")
     if track_a not in track_names or track_b not in track_names:
         errors.append(msg("validation.transition_unknown_track", ctx=ctx, track_a=track_a, track_b=track_b))
-        return None, None
+        return None
 
     if "start" not in item or "end" not in item:
         errors.append(msg("validation.transition_missing_span", ctx=ctx))
-        return None, None
+        return None
     start, end = float(item["start"]), float(item["end"])
     if end <= start:
         errors.append(msg("validation.transition_end_not_after_start", ctx=ctx, start=start, end=end))
-        return None, None
+        return None
 
     if t_type == "wipe":
         luma = item.get("luma", "linear_x")
         problem = lumas.luma_problem(ctx, luma, "validation.transition_luma_invalid")
         if problem:
             errors.append(problem)
-            return None, None
+            return None
         softness = lumas.wipe_softness(item.get("softness", 0), ctx, "softness", errors)
         reverse = item.get("reverse", False)
         if not isinstance(reverse, bool):
             errors.append(msg("validation.wipe_reverse_invalid", ctx=ctx, field="reverse", value=reverse))
         if softness is None or not isinstance(reverse, bool):
-            return None, None
-        return (
-            WipeTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, luma=luma, softness=softness, reverse=reverse),
-            None,
-        )
+            return None
+        return WipeTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, luma=luma, softness=softness, reverse=reverse)
+
+    if is_melt:
+        service = meltpass.parse_service("transition", t_type[len(meltpass.PREFIX):], item.get("properties"), ctx, errors)
+        if service is None:
+            return None
+        return MeltTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, melt=service)
 
     style = item.get("style", "zoom")
     if style not in AFFINE_STYLES:
         errors.append(msg("validation.transition_style_invalid", ctx=ctx, style=style, valid=list(AFFINE_STYLES)))
-        return None, None
-    return None, AffineTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, style=style)
+        return None
+    return AffineTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, style=style)
 
 
 def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
@@ -1684,6 +1695,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     film_grain_brightness=placement.film_grain_brightness,
                     film_grain=placement.film_grain,
                     stabilize=placement.stabilize,
+                    melt_filters=placement.melt_filters,
                 )
             )
 
@@ -1748,6 +1760,16 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         )
         for a in doc.affine_transitions
     ]
+    resolved_melt_transitions = [
+        ResolvedMeltTransition(
+            track_a=t.track_a,
+            track_b=t.track_b,
+            start_frame=fps.seconds_to_frames(t.start),
+            end_frame=fps.seconds_to_frames(t.end) - 1,
+            melt=t.melt,
+        )
+        for t in doc.melt_transitions
+    ]
     resolved_guides = [
         ResolvedGuide(frame=fps.seconds_to_frames(g.at), text=g.text, category=g.category)
         for g in doc.guides
@@ -1765,6 +1787,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         source_dir=doc.source_path.parent,
         wipe_transitions=resolved_wipes,
         affine_transitions=resolved_affines,
+        melt_transitions=resolved_melt_transitions,
         guides=resolved_guides,
         notes=doc.project.notes,
     )
