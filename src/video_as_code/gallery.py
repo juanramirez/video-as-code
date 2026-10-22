@@ -212,6 +212,23 @@ SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "clip_time
 TABS = {"transitions": ("transitions", "lumas", "gl", "melt_transitions"), "effects": ("clip", "clip_time", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")}
 
 
+def lut_entries() -> tuple[Entry, ...]:
+    """One per LUT in the user's own folder (schema.lut_dirs), by name - its
+    file in the project text, so a changed LUT renders again."""
+    from .schema import lut_dirs
+
+    folder = lut_dirs(Path("."))[-1]
+    if not folder.is_dir():
+        return ()
+    out = []
+    for path in sorted(folder.iterdir()):
+        if path.suffix.lower() in (".cube", ".3dl", ".dat", ".m3d"):
+            entry = _clip(f"lut: {path.stem}", f"lut: {path.stem}")
+            stamp = f"# {path.name} {path.stat().st_size} {path.stat().st_mtime_ns}\n"
+            out.append(replace(entry, project=stamp + entry.project, description=msg("gallery.about_user_lut", path=path)))
+    return tuple(out)
+
+
 def gl_entries() -> tuple[Entry, ...]:
     """One per gl-transitions transition, with its defaults - once its
     plugin is built (gltransitions.py); none before."""
@@ -714,7 +731,7 @@ def build(
     melt_catalog = melt_entries(root / "melt-catalog.json")
     if melt_catalog:  # the references "no change" is told against
         melt_catalog = (replace(_SOUND_BASELINE, melt_catalog=True), *melt_catalog)
-    catalog = (*CATALOG, *gl_entries(), *melt_catalog)
+    catalog = (*CATALOG, *lut_entries(), *gl_entries(), *melt_catalog)
     baselines = {source: replace(e, melt_catalog=True) for source, e in _BASELINES.items()}
     previews = [(e, output(e)) for e in catalog if e.render]
     if melt_catalog:

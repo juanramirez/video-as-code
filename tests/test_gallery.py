@@ -30,7 +30,8 @@ def test_page_from_cached_renders(tmp_path: Path, melt, openshot_transitions, mo
     broken = gallery._clip("broken", "speed: 1000", source="video")
     by_name = {e.name: e for e in gallery.CATALOG}
     monkeypatch.setattr(gallery, "CATALOG", (by_name["dissolve"], by_name["fade_in / fade_out"], broken))
-    monkeypatch.setattr(gallery, "gl_entries", lambda: ())  # (whether or not this machine built the plugin)
+    monkeypatch.setattr(gallery, "gl_entries", lambda: ())
+    monkeypatch.setattr(gallery, "lut_entries", lambda: ())  # (whether or not this machine built the plugin)
     monkeypatch.setattr(gallery, "melt_entries", lambda cache=None: ())
     rendered = []
     real_render = gallery._render
@@ -58,6 +59,7 @@ def test_cli_gallery_without_opening(tmp_path: Path, melt, openshot_transitions,
     # (openshot_transitions: a cache folder of the test's own, and 2 OpenShot maps, not a real install's 412)
     monkeypatch.setattr(gallery, "CATALOG", (gallery.CATALOG[0],))
     monkeypatch.setattr(gallery, "gl_entries", lambda: ())
+    monkeypatch.setattr(gallery, "lut_entries", lambda: ())
     monkeypatch.setattr(gallery, "melt_entries", lambda cache=None: ())
     monkeypatch.setattr("webbrowser.open", lambda url: pytest.fail("opened the browser"))
     assert cli.main(["gallery", "--no-open"]) == 0
@@ -120,6 +122,7 @@ def test_melt_section_tells_what_changes_nothing(tmp_path: Path, melt, monkeypat
     hue, whose properties have none, is marked for setting them."""
     monkeypatch.setattr(gallery, "CATALOG", ())
     monkeypatch.setattr(gallery, "gl_entries", lambda: ())
+    monkeypatch.setattr(gallery, "lut_entries", lambda: ())
     real = {name: (kind, gallery._describe_service(kind, name)) for kind, name in (
         ("filter", "brightness"), ("filter", "avfilter.hue"), ("filter", "avfilter.negate"), ("filter", "avfilter.aecho"),
     )}
@@ -154,3 +157,12 @@ def test_clip_keys_that_change_over_time_apart():
     sections = {e.name: e.section for e in gallery.CATALOG}
     assert sections["color_grade_keyframes"] == sections["speed"] == sections["fade_in / fade_out"] == "clip_time"
     assert sections["position / size"] == sections["color_grade"] == sections["lut"] == "clip"
+
+
+def test_a_card_per_users_lut(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    folder = tmp_path / "video-as-code" / "luts"
+    folder.mkdir(parents=True)
+    (folder / "teal.cube").write_text("LUT_3D_SIZE 2\n" + "0 0 0\n" * 8, encoding="utf-8")
+    (entry,) = gallery.lut_entries()
+    assert entry.snippet == "lut: teal" and entry.section == "clip" and "teal.cube" in entry.description
