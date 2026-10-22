@@ -36,7 +36,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import gltransitions, lumas, meltpass, probe
+from . import glfilters, gltransitions, lumas, meltpass, probe
 from .errors import KdenliveAsCodeError
 from . import i18n
 from .i18n import msg
@@ -239,6 +239,18 @@ def lut_entries() -> tuple[Entry, ...]:
             stamp = f"# {path.name} {path.stat().st_size} {path.stat().st_mtime_ns}\n"
             out.append(replace(entry, project=stamp + entry.project, description=msg("gallery.about_user_lut", path=path)))
     return tuple(out)
+
+
+def glsl_entries() -> tuple[Entry, ...]:
+    """One per bundled `glsl:` shader (glfilters.py), with its defaults,
+    over the video sample - once its plugin is built."""
+    if not glfilters.installed():
+        return ()
+    return tuple(
+        replace(_clip(f"glsl: {name}", f"glsl: {name}", source="video"),
+                section="clip_time" if info.get("animated") else "clip", description=info.get("description", ""))
+        for name, info in glfilters.catalog().items()
+    )
 
 
 def gl_entries() -> tuple[Entry, ...]:
@@ -772,7 +784,7 @@ def build(
     melt_catalog = melt_entries(root / "melt-catalog.json")
     if melt_catalog:  # the references "no change" is told against
         melt_catalog = (replace(_SOUND_BASELINE, melt_catalog=True), *melt_catalog)
-    catalog = (*CATALOG, *lut_entries(), *gl_entries(), *melt_catalog)
+    catalog = (*CATALOG, *lut_entries(), *glsl_entries(), *gl_entries(), *melt_catalog)
     baselines = {source: replace(e, melt_catalog=True) for source, e in _BASELINES.items()}
     previews = [(e, output(e)) for e in catalog if e.render]
     if melt_catalog:
