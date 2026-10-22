@@ -137,7 +137,6 @@ def test_transitions_between_parts(trip: Path):
 def test_cli_part_and_what_doesnt_go_into_parts_yet(trip: Path, capsys):
     assert cli.main(["build", str(trip), "--part", "intro"]) == 0
     assert (trip.parent / "trip-intro.kdenlive").exists()
-    assert cli.main(["render", str(trip), "--split"]) == 1
 
 
 def test_a_part_file_reads_as_the_project_it_is_part_of(trip: Path, capsys):
@@ -192,3 +191,40 @@ def test_proxy_goes_into_the_parts(trip: Path, assets_dir: Path):
     peak_seq = proxied.bin_clips[1].sequence.bin_clips[0].sequence
     (copy,) = [p.bin_clip for t in peak_seq.tracks for p in t.placements if "clip" in p.bin_clip.id or p.bin_clip.id.endswith(":v")]
     assert copy.path.parent == trip.parent / "mountains" / proxies.PROXY_DIR
+
+
+def test_split_render_of_parts(trip: Path, tmp_path: Path, melt, monkeypatch):
+    """render --split cuts a project with parts into segments on the whole
+    timeline - a part's clips counted where the part plays - and comes out
+    as the whole render does: blue, the dissolve halfway, green, yellow."""
+    exe, env = melt
+    monkeypatch.setenv("VIDEO_AS_CODE_MELT", exe)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    out = tmp_path / "split.mp4"
+    assert cli.main(["render", str(trip), "-o", str(out), "--split", "--max-mem", "1", "--no-prune"]) == 0
+
+    def rgb(t: float) -> tuple[int, int, int]:
+        data = subprocess.run(["ffmpeg", "-v", "error", "-ss", str(t), "-i", str(out), "-frames:v", "1", "-vf", "scale=1:1",
+                               "-f", "rawvideo", "-pix_fmt", "rgb24", "-"], capture_output=True, check=True).stdout
+        return data[0], data[1], data[2]
+
+    assert rgb(2.5)[2] > 200 and rgb(2.5)[1] < 40
+    r, g, b = rgb(3.5)
+    assert 20 < g < 110 and 60 < b < 200, (r, g, b)
+    assert rgb(4.5)[1] > 100 and rgb(5.5)[0] > 200
+
+
+def test_split_trim_counts_a_parts_clips_where_it_plays(trip: Path, tmp_path: Path):
+    from video_as_code import splitrender
+
+    out = tmp_path / "trip.kdenlive"
+    xmlgen.write(load_and_resolve(trip), out)
+    root = xmlgen.ET.parse(out).getroot()
+    entries = splitrender._timeline_entries(root)
+    paths = {e.get("id"): next((p.text for p in e if p.get("name") == "resource"), "") for e in root if e.tag in ("chain", "producer")}
+    yellow = [(a, b) for a, b, pid in entries if paths.get(pid, "").endswith("yellow.png")]
+    assert yellow == [(125, 149)]  # (5-6 s: the mountains start at 3 s, yellow 2 s into them)
+    trimmed = splitrender.trim(root, 0, 20, margin=0)
+    kept = {paths.get(e.get("producer"), "") for pl in trimmed.iter("playlist") if pl.get("id") != "main_bin" for e in pl.iter("entry")}
+    assert not any(k.endswith(("green.png", "yellow.png")) for k in kept)  # (the mountains don't play in 0-20)

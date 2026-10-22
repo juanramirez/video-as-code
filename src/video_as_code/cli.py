@@ -142,18 +142,6 @@ def cmd_install_gl(args: argparse.Namespace) -> int:
     return 0
 
 
-def _parts_unsupported(yaml_path: Path, args: argparse.Namespace) -> bool:
-    """Whether a project of several files (parts.py) asks for what doesn't
-    go into its parts yet - after saying so."""
-    if not parts.has_parts(yaml_path):
-        return False
-    for option, wanted in (("--split", getattr(args, "split", False)),):
-        if wanted:
-            print(msg("cli.parts_unsupported", option=option), file=sys.stderr)
-            return True
-    return False
-
-
 def _output(yaml_path: Path, args: argparse.Namespace, suffix: str) -> Path:
     """-o, else the project file's name - and the part's, with --part."""
     if args.output:
@@ -171,8 +159,6 @@ def cmd_fetch(args: argparse.Namespace) -> int:
 def cmd_build(args: argparse.Namespace) -> int:
     yaml_path = Path(args.project)
     output = _output(yaml_path, args, ".kdenlive")
-    if _parts_unsupported(yaml_path, args):
-        return 1
     if args.fetch and not _run_fetch(yaml_path):
         return 1
     try:
@@ -293,8 +279,6 @@ def cmd_import(args: argparse.Namespace) -> int:
 def cmd_render(args: argparse.Namespace) -> int:
     yaml_path = Path(args.project)
     output = _output(yaml_path, args, ".mp4")
-    if _parts_unsupported(yaml_path, args):
-        return 1
     if args.fetch and not _run_fetch(yaml_path):
         return 1
 

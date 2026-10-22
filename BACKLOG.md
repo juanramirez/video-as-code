@@ -66,10 +66,9 @@ code itself already marks the boundary.
   the same way, via `projects/`.
 
 - **`parts:` and the rest of the tool** (since 2026-10-22, ROADMAP.md):
-  `--split` (a segment cut across nested sequences) and `import` of a
-  `.kdenlive` with nested sequences (into parts, or at least keeping
-  them whole) - the first stops with a clear "not yet" today. (fetch,
-  autoprune and --proxy go into the parts since.)
+  `import` of a `.kdenlive` with nested sequences (into parts, or at
+  least keeping them whole). (fetch, autoprune, --proxy and --split go
+  into the parts since.)
 - **Gallery follow-ups**: audio analysis filters (astats, ebur128,
   volumedetect...) in the analysis section rather than the audio one;
   more than three tries for filters whose ranged parameters didn't

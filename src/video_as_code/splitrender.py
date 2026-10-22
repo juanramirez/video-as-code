@@ -111,9 +111,60 @@ def _entry_length(entry: ET.Element, by_id: dict[str, ET.Element]) -> int:
     return int(o) - int(i) + 1
 
 
-def _timeline_entries(root: ET.Element) -> list[tuple[int, int, str]]:
-    """(first frame, last frame, producer id) of every playlist entry."""
+def _placements(root: ET.Element) -> dict[str, list[tuple[int, int, int]]]:
+    """Where each playlist's frames are on the whole timeline: playlist id
+    -> [(offset, first, last)] - its local frames first..last play at
+    offset + local. One (0, whole) for a plain project; a project in
+    several files (parts.py) has its parts' sequences nested, each a
+    tractor placed in its parent's track by an entry (in, out at a local
+    position), so its playlists count from the part's own start."""
     by_id = {e.get("id"): e for e in root if e.get("id")}
+    wrapper = next((t for t in root.findall("tractor")
+                    if any(p.get("name") == "kdenlive:projectTractor" for p in t.findall("property"))), None)
+    top = wrapper.find("track").get("producer") if wrapper is not None and wrapper.find("track") is not None else None
+
+    def playlists_of(sequence_id: str) -> list[str]:
+        out = []
+        for track in by_id[sequence_id].findall("track"):
+            t = by_id.get(track.get("producer"))
+            if t is not None and t.tag == "tractor":
+                out += [x.get("producer") for x in t.findall("track")]
+        return out
+
+    places: dict[str, list[tuple[int, int, int]]] = {}
+    pending = [(top, 0, 0, 1 << 40)] if top in by_id else []
+    seen_sequences = set()
+    while pending:
+        seq, offset, lo, hi = pending.pop()
+        seen_sequences.add(seq)
+        for pid in playlists_of(seq):
+            places.setdefault(pid, []).append((offset, lo, hi))
+            pos = 0
+            for child in by_id[pid] if pid in by_id else []:
+                if child.tag == "blank":
+                    pos += int(child.get("length"))
+                elif child.tag == "entry":
+                    n = _entry_length(child, by_id)
+                    nested = by_id.get(child.get("producer"))
+                    if nested is not None and nested.tag == "tractor":
+                        first_in = int(child.get("in") or nested.get("in") or 0)
+                        a, b = max(pos, lo), min(pos + n - 1, hi)
+                        if a <= b:  # (the part of it this window sees)
+                            pending.append((nested.get("id"), offset + pos - first_in, a - pos + first_in, b - pos + first_in))
+                    pos += n
+    # any playlist not reached that way (no project tractor: a plain or
+    # hand-made file) on the whole timeline, as before
+    for playlist in root.findall("playlist"):
+        if playlist.get("id") != "main_bin" and playlist.get("id") not in places:
+            places[playlist.get("id")] = [(0, 0, 1 << 40)]
+    return places
+
+
+def _timeline_entries(root: ET.Element) -> list[tuple[int, int, str]]:
+    """(first frame, last frame, producer id) of every playlist entry, on
+    the whole timeline (a part's, where it plays - _placements)."""
+    by_id = {e.get("id"): e for e in root if e.get("id")}
+    places = _placements(root)
     entries = []
     for playlist in root.findall("playlist"):
         if playlist.get("id") == "main_bin":
@@ -124,7 +175,10 @@ def _timeline_entries(root: ET.Element) -> list[tuple[int, int, str]]:
                 pos += int(child.get("length"))
             elif child.tag == "entry":
                 n = _entry_length(child, by_id)
-                entries.append((pos, pos + n - 1, child.get("producer")))
+                for offset, lo, hi in places.get(playlist.get("id"), []):
+                    a, b = max(pos, lo), min(pos + n - 1, hi)
+                    if a <= b:
+                        entries.append((offset + a, offset + b, child.get("producer")))
                 pos += n
     return entries
 
@@ -145,6 +199,7 @@ def trim(root: ET.Element, first: int, last: int, audio_only: bool = False, marg
         if audio_only
         else set()
     )
+    places = _placements(root)
     for playlist in root.findall("playlist"):
         if playlist.get("id") == "main_bin":
             continue
@@ -155,7 +210,12 @@ def trim(root: ET.Element, first: int, last: int, audio_only: bool = False, marg
                 pos += int(child.get("length"))
             elif child.tag == "entry":
                 n = _entry_length(child, by_id)
-                if blank_all or pos + n - 1 < lo or pos > hi:
+                # (on the whole timeline: a part's playlist where its part plays)
+                touches = any(
+                    max(pos, a) <= min(pos + n - 1, b) and offset + max(pos, a) <= hi and offset + min(pos + n - 1, b) >= lo
+                    for offset, a, b in places.get(playlist.get("id"), [(0, 0, 1 << 40)])
+                )
+                if blank_all or not touches:
                     playlist.remove(child)
                     playlist.insert(i, ET.Element("blank", length=str(n)))
                 pos += n

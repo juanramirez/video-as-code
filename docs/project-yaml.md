@@ -432,6 +432,7 @@ scenes:
   asked for in the terminal is written into the part's file, where the
   clip is. Old files are pruned before a render in each part's folder;
   not with `--part`, whose render doesn't read the other parts' files.
-- `--proxy` makes each part's light copies in that part's own `.proxies/`.
-- Not yet: `--split` on a project with parts says so and stops; `import`
-  keeps nested sequences in `x_kdenlive_raw`.
+- `--proxy` makes each part's light copies in that part's own `.proxies/`;
+  `--split` cuts segments on the whole timeline, a part's clips counted
+  where the part plays.
+- Not yet: `import` keeps nested sequences in `x_kdenlive_raw`.

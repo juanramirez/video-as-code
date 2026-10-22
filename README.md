@@ -465,8 +465,8 @@ parts:
 Each part is a nested sequence in kdenlive; its paths are relative to
 its own file, its bin ids are its own, and the main file's presets reach
 it. `video-as-code render trip.yaml --part mountains/all` renders one
-part alone; `fetch` and `--proxy` work on each part in its own folder.
-Not yet with `--split`. See
+part alone; `fetch` and `--proxy` work on each part in its own folder,
+and `--split` too. See
 `docs/project-yaml.md`.
 
 ### `video-as-code gallery`: every transition and effect, in the browser
