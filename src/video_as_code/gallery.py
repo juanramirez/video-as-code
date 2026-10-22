@@ -14,11 +14,11 @@ changed is rendered.
 
 The wipe shapes (`luma:` - this project's own and OpenShot's, lumas.py)
 are the exception: 424 renders would take long, and they're plain
-masks, so the page plays them itself - a pixel turns from the first
-clip's colour to the second's as the wipe passes its grey level,
-darkest first, as MLT's `luma` does (softened a little). Their
-thumbnails are made from the user's own openshot-qt install, never
-checked in: OpenShot's maps are GPL-3.0+.
+masks, so the page plays them itself, each over and over while it's
+on screen, from one sample picture to the other: a pixel changes as
+the wipe passes its grey level, darkest first, as MLT's `luma` does
+(softened a little). Their thumbnails are made from the user's own
+openshot-qt install, never checked in: OpenShot's maps are GPL-3.0+.
 """
 from __future__ import annotations
 
@@ -284,8 +284,18 @@ def _render(entry: Entry, samples: dict[str, Path], work: Path, output: Path) ->
 
 
 def _thumbnail(source: Path, output: Path) -> None:
+    """A wipe shape's map, stretched to 16:9 as MLT stretches it to the frame."""
     w, h = THUMB_SIZE
     _ffmpeg(["-i", str(source), "-frames:v", "1", "-vf", f"scale={w}:{h},format=gray", "-q:v", "4", str(output)])
+
+
+def _picture_thumbnail(source: Path, output: Path) -> None:
+    """A sample picture the wipe shapes play between, filling the frame."""
+    w, h = THUMB_SIZE
+    _ffmpeg([
+        "-i", str(source), "-frames:v", "1",
+        "-vf", f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}", "-q:v", "3", str(output),
+    ])
 
 
 def build(
@@ -326,6 +336,14 @@ def build(
         with ThreadPoolExecutor(max_workers=4) as pool:
             list(pool.map(run, todo))
 
+    # the wipe shapes play from one sample picture to the other
+    pictures = []
+    for key in ("a", "b"):
+        thumb = files / f"sample-{key}-{hashlib.sha256(_file_key(samples[key]).encode()).hexdigest()[:16]}.jpg"
+        if not thumb.exists():
+            _picture_thumbnail(samples[key], thumb)
+        pictures.append(thumb)
+
     luma_cards = []
     to_thumb = []
     for name, source in lumas.all_lumas():
@@ -340,7 +358,7 @@ def build(
             list(pool.map(lambda st: _thumbnail(*st), to_thumb))
 
     # only what this page uses stays (older generations, a removed entry)
-    wanted = {out.name for _, out in previews} | {thumb.name for _, thumb in luma_cards}
+    wanted = {out.name for _, out in previews} | {thumb.name for _, thumb in luma_cards} | {p.name for p in pictures}
     for path in files.iterdir():
         if path.name not in wanted:
             path.unlink()
@@ -349,13 +367,19 @@ def build(
     shutil.rmtree(work, ignore_errors=True)
 
     page = root / "index.html"
-    page.write_text(_page(previews, errors, luma_cards, root), encoding="utf-8")
+    page.write_text(_page(previews, errors, luma_cards, pictures, root), encoding="utf-8")
     return page
 
 
 # --- page --------------------------------------------------------------------
 
-def _page(previews: list[tuple[Entry, Path]], errors: dict[str, str], luma_cards: list[tuple[str, Path]], root: Path) -> str:
+def _page(
+    previews: list[tuple[Entry, Path]],
+    errors: dict[str, str],
+    luma_cards: list[tuple[str, Path]],
+    pictures: list[Path],
+    root: Path,
+) -> str:
     def rel(path: Path) -> str:
         return html.escape(path.relative_to(root).as_posix())
 
@@ -368,7 +392,9 @@ def _page(previews: list[tuple[Entry, Path]], errors: dict[str, str], luma_cards
                 for name, thumb in luma_cards
             )
             hint = msg("gallery.lumas_hint")
+            extra = f' data-from="{rel(pictures[0])}" data-to="{rel(pictures[1])}"'
         else:
+            extra = ""
             items = []
             for entry, out in previews:
                 if entry.section != section:
@@ -384,7 +410,7 @@ def _page(previews: list[tuple[Entry, Path]], errors: dict[str, str], luma_cards
             cards = "\n".join(items)
             hint = msg(f"gallery.hint_{section}")
         sections.append(
-            f'<section data-section="{section}"><h2>{html.escape(msg(f"gallery.section_{section}"))}</h2>'
+            f'<section data-section="{section}"{extra}><h2>{html.escape(msg(f"gallery.section_{section}"))}</h2>'
             f'<p>{html.escape(hint)}</p><div class="grid">{cards}</div></section>'
         )
     return (
@@ -394,6 +420,8 @@ def _page(previews: list[tuple[Entry, Path]], errors: dict[str, str], luma_cards
         .replace("{filter}", html.escape(msg("gallery.filter")))
         .replace("{copy}", json.dumps(msg("gallery.copy")))
         .replace("{copied}", json.dumps(msg("gallery.copied")))
+        .replace("{thumb_w}", str(THUMB_SIZE[0]))
+        .replace("{thumb_h}", str(THUMB_SIZE[1]))
         .replace("{sections}", "\n".join(sections))
     )
 
@@ -425,6 +453,7 @@ video, canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9;
 figcaption { font-weight: 600; }
 pre { margin: 0; padding: 6px 8px; background: var(--code); border-radius: 4px; overflow-x: auto; cursor: copy;
       font: 12px/1.4 ui-monospace, monospace; }
+figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .failed { aspect-ratio: 16 / 9; overflow: auto; color: var(--bad); font-size: 12px; }
 .failed pre { cursor: auto; white-space: pre-wrap; }
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg);
@@ -449,41 +478,70 @@ const seen = new IntersectionObserver((entries) => {
   }
 });
 document.querySelectorAll("video").forEach((v) => seen.observe(v));
-// wipe shapes: played here, see gallery.py
-const A = [214, 96, 60], B = [47, 111, 214], SOFT = 0.08;
-function paint(state, pos) {
+// wipe shapes: played here, from one sample picture to the other, as
+// MLT's luma does - a pixel changes when the wipe passes its grey level,
+// darkest first (see gallery.py)
+const lumaSection = document.querySelector('section[data-section="lumas"]');
+const W = {thumb_w}, H = {thumb_h}, SOFT = 0.03, CYCLE = 2600, HOLD = 450;
+const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function pixels(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement("canvas"); c.width = W; c.height = H;
+      const ctx = c.getContext("2d"); ctx.drawImage(img, 0, 0, W, H);
+      resolve(ctx.getImageData(0, 0, W, H).data);
+    };
+    img.src = src;
+  });
+}
+function paint(state, pos, from, to) {
   const { ctx, luma, out } = state, d = out.data, p = pos * (1 + SOFT);
   for (let i = 0; i < luma.length; i++) {
     const m = Math.min(1, Math.max(0, (p - luma[i]) / SOFT)), j = i * 4;
-    d[j] = A[0] + (B[0] - A[0]) * m; d[j + 1] = A[1] + (B[1] - A[1]) * m;
-    d[j + 2] = A[2] + (B[2] - A[2]) * m; d[j + 3] = 255;
+    d[j] = from[j] + (to[j] - from[j]) * m; d[j + 1] = from[j + 1] + (to[j + 1] - from[j + 1]) * m;
+    d[j + 2] = from[j + 2] + (to[j + 2] - from[j + 2]) * m; d[j + 3] = 255;
   }
   ctx.putImageData(out, 0, 0);
 }
-function load(canvas) {
-  const img = new Image();
-  img.onload = () => {
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const luma = new Float32Array(canvas.width * canvas.height);
-    for (let i = 0; i < luma.length; i++) luma[i] = px[i * 4] / 255;
-    const state = { ctx, luma, out: ctx.createImageData(canvas.width, canvas.height), raf: 0 };
-    paint(state, 0.5);
-    const fig = canvas.parentElement;
-    fig.addEventListener("pointerenter", () => {
-      const t0 = performance.now();
-      const step = (t) => { paint(state, Math.min(1, ((t - t0) / 1500) % 1.4)); state.raf = requestAnimationFrame(step); };
-      state.raf = requestAnimationFrame(step);
-    });
-    fig.addEventListener("pointerleave", () => { cancelAnimationFrame(state.raf); paint(state, 0.5); });
-  };
-  img.src = canvas.dataset.src;
+function position(t) {  // hold the first picture, wipe, hold the second
+  const k = t % CYCLE;
+  return Math.min(1, Math.max(0, (k - HOLD) / (CYCLE - 2 * HOLD)));
 }
-const lazy = new IntersectionObserver((entries) => {
-  for (const e of entries) if (e.isIntersecting) { lazy.unobserve(e.target); load(e.target); }
-}, { rootMargin: "400px" });
-document.querySelectorAll("canvas").forEach((c) => lazy.observe(c));
+Promise.all([pixels(lumaSection.dataset.from), pixels(lumaSection.dataset.to)]).then(([from, to]) => {
+  const playing = new Set(), states = new Map();
+  async function load(canvas) {
+    const data = await pixels(canvas.dataset.src);
+    const luma = new Float32Array(W * H);
+    for (let i = 0; i < luma.length; i++) luma[i] = data[i * 4] / 255;
+    const ctx = canvas.getContext("2d");
+    const state = { ctx, luma, out: ctx.createImageData(W, H) };
+    states.set(canvas, state);
+    paint(state, 0.5, from, to);
+    if (still) {  // reduced motion: only while pointed at
+      const fig = canvas.parentElement;
+      fig.addEventListener("pointerenter", () => playing.add(canvas));
+      fig.addEventListener("pointerleave", () => { playing.delete(canvas); paint(state, 0.5, from, to); });
+    } else if (canvas.dataset.visible) playing.add(canvas);
+  }
+  const seen = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      const canvas = e.target;
+      if (e.isIntersecting) {
+        canvas.dataset.visible = "1";
+        if (!states.has(canvas)) load(canvas);
+        else if (!still) playing.add(canvas);
+      } else { delete canvas.dataset.visible; if (!still) playing.delete(canvas); }
+    }
+  }, { rootMargin: "100px" });
+  lumaSection.querySelectorAll("canvas").forEach((c) => seen.observe(c));
+  const frame = (t) => {
+    const pos = position(t);
+    for (const canvas of playing) if (!canvas.closest("figure").hidden) paint(states.get(canvas), pos, from, to);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+});
 // click a snippet to copy it
 const toast = document.querySelector(".toast");
 for (const pre of document.querySelectorAll("figure > pre")) {

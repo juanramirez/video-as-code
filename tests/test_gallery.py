@@ -39,7 +39,7 @@ def test_page_from_cached_renders(tmp_path: Path, melt, openshot_transitions, mo
     assert sorted(rendered) == sorted(["dissolve", "fade_in / fade_out", "broken"])
     assert text.count("<video") == 2  # the broken one shows its error instead
     assert "speed" in text and "luma: openshot/ramp_left" in text
-    for src in ("files/dissolve-", "files/luma-openshot-ramp-left-"):
+    for src in ("files/dissolve-", "files/luma-openshot-ramp-left-", 'data-from="files/sample-a-', 'data-to="files/sample-b-'):
         assert src in text
     files = page.parent / "files"
     assert sum(1 for f in files.iterdir() if f.suffix == ".mp4") == 2
