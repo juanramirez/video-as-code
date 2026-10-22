@@ -444,6 +444,16 @@ play over photos of Ubuntu's own wallpapers when they're installed
 pictures; `--with photo.jpg` (or a video) puts your own under them.
 Links at the top jump to each section.
 
+Besides this project's own keys, the page has every filter and
+transition the installed `melt` has (`melt:` and `melt/<service>`), at
+their defaults: video ones over the pictures, audio filters over a
+sample sound (a plucked arpeggio, to listen to), each with melt's own
+description, and marked when at its defaults it changes nothing - an
+option hides those. melt is asked about its services once per version
+(`melt-catalog.json` in the cache), and their previews depend on melt
+and the samples only, so a change to this project doesn't render them
+again.
+
 The first run renders ~40 previews and makes the wipe shapes'
 thumbnails (a minute or two); everything is cached in
 `~/.cache/video-as-code/gallery/`, so it then opens at once, and after

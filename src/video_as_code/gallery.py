@@ -23,6 +23,7 @@ openshot-qt install, never checked in: OpenShot's maps are GPL-3.0+.
 from __future__ import annotations
 
 import base64
+import functools
 import hashlib
 import html
 import json
@@ -35,7 +36,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import gltransitions, lumas, probe
+from . import gltransitions, lumas, meltpass, probe
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .mltdata import default_cache_root
@@ -52,6 +53,10 @@ class Entry:
     name: str
     snippet: str  # the YAML shown, to copy
     project: str  # the whole project rendered for the preview, with {a} {b} {video} ... placeholders
+    title: str = ""  # melt's own title and description, for its catalog's entries
+    description: str = ""
+    melt_catalog: bool = False  # one of melt's services as they come (see melt_entries)
+    render: bool = True  # (an audio filter has nothing to show)
 
 
 def _indent(text: str, spaces: int) -> str:
@@ -185,7 +190,7 @@ CATALOG: tuple[Entry, ...] = (
     _title("title card", 'text: "Hello"\nfont_size: 40\nbackground: [0, 0, 0, 120]'),
 )
 
-SECTIONS = ("transitions", "lumas", "gl", "clip", "derive", "title")
+SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "derive", "title", "melt_filters", "melt_audio")
 
 
 def gl_entries() -> tuple[Entry, ...]:
@@ -194,6 +199,148 @@ def gl_entries() -> tuple[Entry, ...]:
     if not gltransitions.installed():
         return ()
     return tuple(_scene(name, f"transition: gl\ngl: {name}", section="gl") for name in gltransitions.catalog())
+
+
+def _audio(name: str, keys: str) -> Entry:
+    """Keys on a clip of the sample sound, on an audio track."""
+    project = _HEADER + f"""bin:
+  - {{id: sound, path: "{{sound}}"}}
+timeline:
+  tracks:
+    - type: audio
+      clips:
+        - clip: sound
+          start: 0
+          duration: 4
+{_indent(keys, 10)}
+"""
+    return Entry("melt_audio", name, keys.strip(), project)
+
+
+def _describe_service(kind: str, service: str) -> dict:
+    """melt's title, description and tags of one service."""
+    meta = meltpass._query(f"{kind}={service}")
+    meta = meta if isinstance(meta, dict) else {}
+    return {
+        "title": str(meta.get("title") or ""),
+        "description": " ".join(str(meta.get("description") or "").split()),
+        "tags": [str(t) for t in meta.get("tags") or []],
+    }
+
+
+def _melt_catalog(cache: Optional[Path] = None) -> dict[str, dict[str, dict]]:
+    """{"filter"|"transition": {service: {title, description, tags}}} of
+    the installed melt - asked once per melt (675 `melt -query` take
+    minutes), kept in `cache`."""
+    key = f"{probe.find_melt()}\n{_melt_version()}"
+    if cache is not None:
+        try:
+            stored = json.loads(cache.read_text(encoding="utf-8"))
+            if stored.get("melt") == key:
+                return stored["services"]
+        except (OSError, ValueError, AttributeError, KeyError):
+            pass
+    pairs = [(kind, service) for kind in ("transition", "filter") for service in sorted(meltpass._services(kind) or ())]
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        described = list(pool.map(lambda pair: _describe_service(*pair), pairs))
+    services: dict[str, dict[str, dict]] = {"transition": {}, "filter": {}}
+    for (kind, service), info in zip(pairs, described):
+        services[kind][service] = info
+    if cache is not None:
+        cache.write_text(json.dumps({"melt": key, "services": services}, indent=1), encoding="utf-8")
+    return services
+
+
+def melt_entries(cache: Optional[Path] = None) -> tuple[Entry, ...]:
+    """Every filter and transition the installed melt has, as `melt:` and
+    `melt/<service>` (meltpass.py) take them, at their defaults: the video
+    ones over the sample pictures, the audio filters over the sample
+    sound. Their previews depend on melt and the samples only, not on
+    this package's code (melt_catalog)."""
+    entries = []
+    for kind, services in _melt_catalog(cache).items():
+        for service, meta in services.items():
+            if service == gltransitions.SERVICE:  # (it needs a shader: its own section)
+                continue
+            info = {"title": meta["title"], "description": meta["description"], "melt_catalog": True}
+            if kind == "transition":
+                snippet = f"transition: melt/{service}"
+                if meta["tags"] == ["Audio"]:  # (a sound transition: mix - listed)
+                    entries.append(Entry("melt_audio", service, snippet, "", render=False, **info))
+                else:
+                    entries.append(replace(_scene(service, f'transition: "melt/{service}"', section="melt_transitions"), snippet=snippet, **info))
+                continue
+            snippet = f"melt:\n  - {service}"
+            if meta["tags"] == ["Audio"]:
+                entries.append(replace(_audio(service, f'melt: ["{service}"]'), snippet=snippet, **info))
+            else:
+                entries.append(replace(_clip(service, f'melt: ["{service}"]'), section="melt_filters", snippet=snippet, **info))
+    return tuple(entries)
+
+
+_BASELINE = _clip("baseline", "")  # the still with no filter, for "no visible change"
+_SOUND_BASELINE = _audio("original", "")  # the sample sound as it is - shown, to compare with
+_SAME_DB = 40.0  # frames this close (PSNR) look the same
+
+
+def _frames_psnr(a: Path, at_a: float, b: Path, at_b: float) -> float:
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "info", "-ss", str(at_a), "-i", str(a), "-ss", str(at_b), "-i", str(b),
+             "-frames:v", "1", "-lavfi", "[0][1]psnr", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return 0.0
+    found = re.search(r"average:(inf|[\d.]+)", result.stderr)
+    if not found:
+        return 0.0
+    return float("inf") if found.group(1) == "inf" else float(found.group(1))
+
+
+def _samples_of(path: Path) -> list[int]:
+    data = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(path), "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "-"],
+        capture_output=True, timeout=60,
+    ).stdout
+    return [int.from_bytes(data[i:i + 2], "little", signed=True) for i in range(0, len(data) - 1, 2)]
+
+
+def _sounds_the_same(a: Path, b: Path) -> bool:
+    """Whether two renders' sound differs by under 1% of the level."""
+    try:
+        x, y = _samples_of(a), _samples_of(b)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    n = min(len(x), len(y))
+    if not n:
+        return False
+    level = (sum(v * v for v in y[:n]) / n) ** 0.5 or 1.0
+    diff = (sum((x[i] - y[i]) ** 2 for i in range(n)) / n) ** 0.5
+    return diff < 0.01 * level
+
+
+def _unchanged(entry: Entry, out: Path, baseline: Path, sound_baseline: Path) -> bool:
+    """Whether `entry`, at its defaults, changes nothing: a filter's frame
+    like the unfiltered one (its sound like the sample's, for an audio
+    one), a transition's middle like its start or end."""
+    if entry.section == "melt_audio":
+        return _sounds_the_same(out, sound_baseline)
+    if entry.section == "melt_transitions":
+        middle = 2.2  # (_scene: 4.4 s, the clips overlapping around it)
+        return _frames_psnr(out, middle, out, 0.4) > _SAME_DB or _frames_psnr(out, middle, out, 4.2) > _SAME_DB
+    return _frames_psnr(out, 1.5, baseline, 1.5) > _SAME_DB
+
+
+@functools.lru_cache(maxsize=None)
+def _melt_version() -> str:
+    melt = probe.find_melt()
+    try:
+        result = subprocess.run([str(melt), "--version"], capture_output=True, text=True, env=probe.melt_env(), timeout=30)
+        return (result.stdout or result.stderr).strip().splitlines()[0]
+    except (OSError, IndexError, subprocess.TimeoutExpired):
+        return ""
 
 
 # --- samples -----------------------------------------------------------------
@@ -231,6 +378,16 @@ def _recipes() -> dict[str, list[str]]:
         "-f", "lavfi", "-i", "color=c=0xd04040:s=240x240:rate=25",
         "-filter_complex", "[0][1]overlay=x='90+t*150':y=150", "-t", "4", "-pix_fmt", "yuv420p",
     ]
+    # the sound the audio filters play over: a plucked arpeggio (C E G C,
+    # a note every half second, each dying away) with a soft noise hit on
+    # every second beat - echoes, reverbs and distortions all show on it
+    note = "if(lt(mod(t,2),0.5),261.63,if(lt(mod(t,2),1),329.63,if(lt(mod(t,2),1.5),392,523.25)))"
+    pluck = f"0.5*sin(2*PI*{note}*t)*exp(-5*mod(t,0.5))"
+    hit = "0.25*(random(0)*2-1)*exp(-30*mod(t-0.5,1))*gte(t,0.5)"
+    sound = [
+        "-f", "lavfi", "-i", f"aevalsrc=exprs='{pluck}+{hit}|{pluck}+{hit}':s=44100:d=4",
+        "-c:a", "aac", "-b:a", "128k",
+    ]
     photos = _photos()
     if photos is None:
         return {
@@ -243,6 +400,7 @@ def _recipes() -> dict[str, list[str]]:
                 "-vf", f"crop={w}:{h}:x='70+60*sin(t*9)':y='40+35*sin(t*13)'", "-pix_fmt", "yuv420p",
             ],
             "green.mp4": green,
+            "sound.m4a": sound,
         }
     return {
         "a.png": ["-i", str(photos["a"]), "-frames:v", "1", "-vf", fill],
@@ -261,6 +419,7 @@ def _recipes() -> dict[str, list[str]]:
             "-pix_fmt", "yuv420p",
         ],
         "green.mp4": green,
+        "sound.m4a": sound,
     }
 
 
@@ -344,6 +503,9 @@ def _preview_key(entry: Entry, samples: dict[str, Path], base: str) -> str:
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()[:16]
 
 
+_RENDER_TIMEOUT_S = 180  # (a filter of melt's may hang on a still)
+
+
 def _render(entry: Entry, samples: dict[str, Path], work: Path, output: Path) -> Optional[str]:
     """Renders `entry` to `output`; the error, if it didn't."""
     project = entry.project
@@ -356,11 +518,18 @@ def _render(entry: Entry, samples: dict[str, Path], work: Path, output: Path) ->
     yaml_path = folder / "project.yaml"
     yaml_path.write_text(project, encoding="utf-8")
     partial = output.with_name(output.stem + ".partial.mp4")
-    result = subprocess.run(
-        [sys.executable, "-m", "video_as_code.cli", "render", str(yaml_path), "-o", str(partial), "--no-prune"],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "video_as_code.cli", "render", str(yaml_path), "-o", str(partial), "--no-prune"],
+            capture_output=True,
+            text=True,
+            errors="replace",  # (a filter of melt's may print bytes that aren't UTF-8)
+            timeout=_RENDER_TIMEOUT_S,
+            cwd=folder,  # (some write files where they run: vidstab its .trf)
+        )
+    except subprocess.TimeoutExpired:
+        partial.unlink(missing_ok=True)
+        return msg("gallery.timed_out", seconds=_RENDER_TIMEOUT_S)
     if result.returncode != 0 or not partial.exists():
         partial.unlink(missing_ok=True)
         return (result.stderr or result.stdout).strip() or "melt failed"
@@ -398,8 +567,22 @@ def build(
     work.mkdir(parents=True, exist_ok=True)
     samples = _with_own(_make_samples(root / "samples"), own)
     base = _code_key() + "\n" + str(probe.find_melt())
+    melt_base = f"melt catalog 1\n{probe.find_melt()}\n{_melt_version()}"
 
-    previews = [(e, files / f"{_slug(e.section)}-{_slug(e.name)}-{_preview_key(e, samples, base)}.mp4") for e in (*CATALOG, *gl_entries())]
+    def output(e: Entry) -> Path:
+        key = _preview_key(e, samples, melt_base if e.melt_catalog else base)
+        return files / f"{_slug(e.section)}-{_slug(e.name)}-{key}.mp4"
+
+    melt_catalog = melt_entries(root / "melt-catalog.json")
+    if melt_catalog:  # the references "no change" is told against
+        melt_catalog = (replace(_SOUND_BASELINE, melt_catalog=True), *melt_catalog)
+    catalog = (*CATALOG, *gl_entries(), *melt_catalog)
+    baseline = replace(_BASELINE, melt_catalog=True)
+    previews = [(e, output(e)) for e in catalog if e.render]
+    if melt_catalog:
+        previews.append((baseline, output(baseline)))
+    baseline_out = output(baseline)
+    sound_baseline_out = output(replace(_SOUND_BASELINE, melt_catalog=True))
     errors_file = root / "errors.json"
     try:
         errors: dict[str, str] = json.loads(errors_file.read_text(encoding="utf-8"))
@@ -420,6 +603,23 @@ def build(
     if todo:
         with ThreadPoolExecutor(max_workers=4) as pool:
             list(pool.map(run, todo))
+
+    # which of melt's services show nothing at their defaults
+    notes_file = root / "unchanged.json"
+    try:
+        unchanged: dict[str, bool] = json.loads(notes_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        unchanged = {}
+    to_check = [
+        (e, out) for e, out in previews
+        if e.melt_catalog and e is not baseline and e.name != _SOUND_BASELINE.name
+        and out.exists() and out.name not in unchanged
+    ]
+    if to_check:
+        on_progress(msg("gallery.progress_unchanged", n=len(to_check)))
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for (e, out), same in zip(to_check, pool.map(lambda item: _unchanged(*item, baseline_out, sound_baseline_out), to_check)):
+                unchanged[out.name] = same
 
     # the wipe shapes play from one sample picture to the other
     pictures = []
@@ -444,6 +644,8 @@ def build(
 
     # only what this page uses stays (older generations, a removed entry)
     wanted = {out.name for _, out in previews} | {thumb.name for _, thumb in luma_cards} | {p.name for p in pictures}
+    unchanged = {k: v for k, v in unchanged.items() if k in wanted}
+    notes_file.write_text(json.dumps(unchanged, indent=1), encoding="utf-8")
     for path in files.iterdir():
         if path.name not in wanted:
             path.unlink()
@@ -452,7 +654,9 @@ def build(
     shutil.rmtree(work, ignore_errors=True)
 
     page = root / "index.html"
-    page.write_text(_page(previews, errors, luma_cards, pictures, root), encoding="utf-8")
+    shown = [(e, out) for e, out in previews if e is not baseline]
+    shown += [(e, None) for e in catalog if not e.render]
+    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged), encoding="utf-8")
     return page
 
 
@@ -464,6 +668,7 @@ def _page(
     luma_cards: list[tuple[str, Path]],
     pictures: list[Path],
     root: Path,
+    unchanged: Optional[dict[str, bool]] = None,
 ) -> str:
     def rel(path: Path) -> str:
         return html.escape(path.relative_to(root).as_posix())
@@ -490,12 +695,27 @@ def _page(
             for entry, out in previews:
                 if entry.section != section:
                     continue
-                if out.name in errors:
+                classes, badge = [], ""
+                if out is None:
+                    media = ""
+                elif out.name in errors:
                     media = f'<div class="failed"><strong>{html.escape(msg("gallery.failed"))}</strong><pre>{html.escape(errors[out.name])}</pre></div>'
                 else:
-                    media = f'<video src="{rel(out)}" muted loop playsinline preload="none"></video>'
+                    if entry.section == "melt_audio":
+                        media = f'<audio src="{rel(out)}" controls preload="none"></audio>'
+                    else:
+                        media = f'<video src="{rel(out)}" muted loop playsinline preload="none"></video>'
+                    if (unchanged or {}).get(out.name):
+                        classes.append("unchanged")
+                        badge = f'<span class="badge">{html.escape(msg("gallery.unchanged"))}</span>'
+                about = ""
+                if entry.title or entry.description:
+                    title = entry.title if entry.title and entry.title.lower() != entry.name.lower() else ""
+                    text = " - ".join(t for t in (title, entry.description) if t)
+                    about = f'<p class="about" title="{html.escape(text)}">{html.escape(text)}</p>'
+                attrs = f' class="{" ".join(classes)}"' if classes else ""
                 items.append(
-                    f'<figure>{media}<figcaption>{html.escape(entry.name)}</figcaption>'
+                    f'<figure{attrs}>{media}<figcaption>{html.escape(entry.name)}{badge}</figcaption>{about}'
                     f"<pre><code>{html.escape(entry.snippet)}</code></pre></figure>"
                 )
             cards = "\n".join(items)
@@ -513,6 +733,7 @@ def _page(
         .replace("{title}", html.escape(msg("gallery.title")))
         .replace("{intro}", html.escape(msg("gallery.intro")))
         .replace("{filter}", html.escape(msg("gallery.filter")))
+        .replace("{hide_unchanged}", html.escape(msg("gallery.hide_unchanged")))
         .replace("{copy}", json.dumps(msg("gallery.copy")))
         .replace("{copied}", json.dumps(msg("gallery.copied")))
         .replace("{thumb_w}", str(THUMB_SIZE[0]))
@@ -543,13 +764,20 @@ nav a:hover { border-color: var(--muted); }
 section { scroll-margin-top: 170px; }
 h2 { font-size: 16px; margin: 32px 0 4px; }
 p { margin: 0 0 12px; color: var(--muted); }
-input { width: 100%; max-width: 320px; padding: 6px 10px; font: inherit; border: 1px solid var(--line);
+input[type="search"] { width: 100%; max-width: 320px; padding: 6px 10px; font: inherit; border: 1px solid var(--line);
         border-radius: 6px; background: var(--card); color: var(--fg); }
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
 figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px;
          display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 video, canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 4px; background: #000; }
-figcaption { font-weight: 600; }
+figcaption { font-weight: 600; overflow-wrap: anywhere; }
+.badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-weight: 400;
+         font-size: 11px; color: var(--muted); border: 1px solid var(--line); }
+.about { margin: 0; font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3;
+         -webkit-box-orient: vertical; overflow: hidden; }
+label.hide { display: inline-flex; gap: 6px; align-items: center; margin-left: 12px; color: var(--muted); }
+body.hide-unchanged figure.unchanged { display: none; }
+audio { width: 100%; }
 pre { margin: 0; padding: 6px 8px; background: var(--code); border-radius: 4px; overflow-x: auto; cursor: copy;
       font: 12px/1.4 ui-monospace, monospace; }
 figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -566,6 +794,7 @@ figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 <p>{intro}</p>
 <nav>{nav}</nav>
 <input type="search" placeholder="{filter}" aria-label="{filter}">
+<label class="hide"><input type="checkbox"> {hide_unchanged}</label>
 </header>
 {sections}
 <div class="toast" role="status"></div>
@@ -652,7 +881,10 @@ for (const pre of document.querySelectorAll("figure > pre")) {
     }).catch(() => {});
   });
 }
-document.querySelector("input").addEventListener("input", (e) => {
+document.querySelector("label.hide input").addEventListener("change", (e) => {
+  document.body.classList.toggle("hide-unchanged", e.target.checked);
+});
+document.querySelector('input[type="search"]').addEventListener("input", (e) => {
   const q = e.target.value.toLowerCase();
   for (const fig of document.querySelectorAll("figure")) fig.hidden = !fig.textContent.toLowerCase().includes(q);
   for (const sec of document.querySelectorAll("section"))
