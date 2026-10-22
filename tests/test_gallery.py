@@ -97,7 +97,7 @@ def test_melt_entries_by_kind(monkeypatch):
     monkeypatch.setattr(gallery, "_melt_catalog", lambda cache=None: _catalog(
         avfilter_negate=("filter", ["Video"]), avfilter_aecho=("filter", ["Audio"]),
         luma_x=("transition", ["Video"]), mix_x=("transition", ["Audio"]),
-        frei0r_gltransition=("transition", ["Video"]),
+        frei0r_gltransition=("transition", ["Video"]), avfilter_datascope=("filter", ["Video"]),
         avfilter_scale_cuda=("filter", ["Video"]), movit_blur=("filter", ["Video"]),
     ))
     by_name = {e.name: e for e in gallery.melt_entries()}
@@ -107,6 +107,7 @@ def test_melt_entries_by_kind(monkeypatch):
     assert by_name["avfilter.aecho"].section == "melt_audio" and by_name["avfilter.aecho"].render
     assert by_name["luma.x"].snippet == "transition: melt/luma.x"
     assert by_name["mix.x"].section == "melt_audio" and not by_name["mix.x"].render
+    assert by_name["avfilter.datascope"].section == "melt_analysis"  # (measures; doesn't change the picture)
     assert by_name["avfilter.negate"].source == "video"  # (melt's filters play over the video sample)
     for name in ("avfilter.scale_cuda", "movit.blur"):  # can't work in a plain melt render: listed, greyed
         assert by_name[name].unavailable and not by_name[name].render

@@ -196,9 +196,9 @@ CATALOG: tuple[Entry, ...] = (
     _title("title card", 'text: "Hello"\nfont_size: 40\nbackground: [0, 0, 0, 120]'),
 )
 
-SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "derive", "title", "melt_filters", "melt_audio")
+SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")
 # the page's two tabs: what goes between clips, and what goes on one
-TABS = {"transitions": ("transitions", "lumas", "gl", "melt_transitions"), "effects": ("clip", "derive", "title", "melt_filters", "melt_audio")}
+TABS = {"transitions": ("transitions", "lumas", "gl", "melt_transitions"), "effects": ("clip", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")}
 
 
 def gl_entries() -> tuple[Entry, ...]:
@@ -306,7 +306,8 @@ def melt_entries(cache: Optional[Path] = None) -> tuple[Entry, ...]:
                 entries.append(replace(_audio(service, f'melt: ["{service}"]'), snippet=snippet, **info))
             else:
                 source = "interlaced" if _DEINTERLACERS.search(service) else "video"
-                entries.append(replace(_clip(service, f'melt: ["{service}"]', source=source), section="melt_filters", snippet=snippet, **info))
+                section = "melt_analysis" if _ANALYSIS.match(service) else "melt_filters"
+                entries.append(replace(_clip(service, f'melt: ["{service}"]', source=source), section=section, snippet=snippet, **info))
     return tuple(entries)
 
 
@@ -321,6 +322,16 @@ _HARDWARE = (
     ("cuda", "CUDA (NVIDIA)"), ("npp", "NPP (NVIDIA)"), ("vaapi", "VA-API"), ("vulkan", "Vulkan"),
     ("opencl", "OpenCL"), ("qsv", "Intel Quick Sync"), ("vdpau", "VDPAU"), ("hwupload", "a hardware device"),
     ("hwdownload", "a hardware device"), ("hwmap", "a hardware device"),
+)
+
+
+# filters that measure rather than change: scopes and graphs drawn over the
+# picture, detectors that only note what they find (edgedetect, despite its
+# name, draws the edges: an effect)
+_ANALYSIS = re.compile(
+    r"^(avfilter\.(datascope|oscilloscope|pixscope|vectorscope|waveform|histogram|thistogram|ciescope|graphmonitor"
+    r"|showinfo|showpalette|signalstats|(?!edge)\w*detect|bbox|idet|readeia608|readvitc|entropy|scdet|siti|\w*stats"
+    r"|metadata|sidedata)|frei0r\.(facedetect|(measure_)?pr0be|(measure_)?pr0file|rgbparade|vectorscope))$"
 )
 
 
@@ -728,7 +739,7 @@ def build(
         unchanged = {}
     to_check = [
         (e, out) for e, out in previews
-        if e.melt_catalog and e not in baselines.values() and e.name != _SOUND_BASELINE.name
+        if e.melt_catalog and e not in baselines.values() and e.name != _SOUND_BASELINE.name and e.section != "melt_analysis"
         and out.exists() and out.name not in unchanged
     ]
     if to_check:
