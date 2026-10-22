@@ -106,6 +106,7 @@ def test_melt_entries_by_kind(monkeypatch):
     assert by_name["avfilter.aecho"].section == "melt_audio" and by_name["avfilter.aecho"].render
     assert by_name["luma.x"].snippet == "transition: melt/luma.x"
     assert by_name["mix.x"].section == "melt_audio" and not by_name["mix.x"].render
+    assert by_name["avfilter.negate"].source == "video"  # (melt's filters play over the video sample)
 
 
 def test_melt_section_tells_what_changes_nothing(tmp_path: Path, melt, monkeypatch):

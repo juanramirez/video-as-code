@@ -60,6 +60,7 @@ class Entry:
     tweaked: Optional[str] = None  # with which values its preview is, when not its defaults
     melt_catalog: bool = False  # one of melt's services as they come (see melt_entries)
     render: bool = True  # (an audio filter has nothing to show)
+    source: str = "a"  # the sample a clip entry plays (see _clip)
 
 
 def _indent(text: str, spaces: int) -> str:
@@ -92,13 +93,14 @@ def _clip(name: str, keys: str, source: str = "a", background: bool = False) -> 
         if background
         else ""
     )
+    interlaced = '  - {id: interlaced, path: "{interlaced}"}\n' if source == "interlaced" else ""
     project = _HEADER + f"""bin:
   - {{id: a, path: "{{a}}"}}
   - {{id: b, path: "{{b}}"}}
   - {{id: video, path: "{{video}}"}}
   - {{id: shaky, path: "{{shaky}}"}}
   - {{id: green, path: "{{green}}"}}
-timeline:
+{interlaced}timeline:
   tracks:
 {below}    - type: video
       clips:
@@ -108,7 +110,7 @@ timeline:
 """
     if "duration:" not in keys and "out:" not in keys:
         project += "          duration: 3\n"
-    return Entry("clip", name, keys.strip(), project)
+    return Entry("clip", name, keys.strip(), project, source=source)
 
 
 def _derive(name: str, keys: str, source: str = "portrait") -> Entry:
@@ -294,11 +296,17 @@ def melt_entries(cache: Optional[Path] = None) -> tuple[Entry, ...]:
             if meta["tags"] == ["Audio"]:
                 entries.append(replace(_audio(service, f'melt: ["{service}"]'), snippet=snippet, **info))
             else:
-                entries.append(replace(_clip(service, f'melt: ["{service}"]'), section="melt_filters", snippet=snippet, **info))
+                source = "interlaced" if _DEINTERLACERS.search(service) else "video"
+                entries.append(replace(_clip(service, f'melt: ["{service}"]', source=source), section="melt_filters", snippet=snippet, **info))
     return tuple(entries)
 
 
-_BASELINE = _clip("baseline", "")  # the still with no filter, for "no visible change"
+# melt's filters play over the video sample, not a still: many work on
+# what moves (a still gave baltan 9 different frames in 75, nervous one);
+# those that undo interlacing over a sample whose lines are combed - and
+# flagged progressive, or melt itself would deinterlace it first
+_DEINTERLACERS = re.compile(r"yadif|bwdif|w3fdif|estdif|kerndeint|mcdeint|nnedi|deinterlace|telecide|fieldorder|fieldmatch|phase|pullup|detelecine|dejudder|separatefields|weave")
+_BASELINES = {source: _clip(f"unfiltered {source}", "", source=source) for source in ("video", "interlaced")}
 _SOUND_BASELINE = _audio("original", "")  # the sample sound as it is - shown, to compare with
 _SAME_DB = 40.0  # frames this close (PSNR) look the same
 
@@ -340,7 +348,7 @@ def _sounds_the_same(a: Path, b: Path) -> bool:
     return diff < 0.01 * level
 
 
-def _unchanged(entry: Entry, out: Path, baseline: Path, sound_baseline: Path) -> bool:
+def _unchanged(entry: Entry, out: Path, baselines: dict[str, Path], sound_baseline: Path) -> bool:
     """Whether `entry`, at its defaults, changes nothing: a filter's frame
     like the unfiltered one (its sound like the sample's, for an audio
     one), a transition's middle like its start or end."""
@@ -349,7 +357,7 @@ def _unchanged(entry: Entry, out: Path, baseline: Path, sound_baseline: Path) ->
     if entry.section == "melt_transitions":
         middle = 2.2  # (_scene: 4.4 s, the clips overlapping around it)
         return _frames_psnr(out, middle, out, 0.4) > _SAME_DB or _frames_psnr(out, middle, out, 4.2) > _SAME_DB
-    return _frames_psnr(out, 1.5, baseline, 1.5) > _SAME_DB
+    return _frames_psnr(out, 1.5, baselines[entry.source], 1.5) > _SAME_DB
 
 
 def _tweaks(entry: Entry, tries: int = 3) -> list[dict]:
@@ -392,7 +400,10 @@ def _with_values(entry: Entry, values: dict) -> Entry:
         snippet = f"transition: melt/{entry.name}\ntransition_properties: {flow}"
     else:
         keys = f"melt: [{json.dumps({entry.name: values})}]"
-        project = (_audio if entry.section == "melt_audio" else _clip)(entry.name, keys).project
+        if entry.section == "melt_audio":
+            project = _audio(entry.name, keys).project
+        else:
+            project = _clip(entry.name, keys, source=entry.source).project
         snippet = f"melt:\n  - {entry.name}: {flow}"
     shown = ", ".join(f"{k}: {json.dumps(v)}" for k, v in values.items())
     return replace(entry, project=project, snippet=snippet, tweaked=shown)
@@ -466,6 +477,11 @@ def _recipes() -> dict[str, list[str]]:
             ],
             "green.mp4": green,
             "sound.m4a": sound,
+            "interlaced.mp4": [
+                "-f", "lavfi", "-i", "testsrc2=s=1600x540:rate=50", "-t", "4",
+                "-vf", f"crop={w}:{h}:x='(iw-ow)*t/4':y=0,tinterlace=mode=interleave_top,setfield=prog",
+                "-r", "25", "-pix_fmt", "yuv420p",
+            ],
         }
     return {
         "a.png": ["-i", str(photos["a"]), "-frames:v", "1", "-vf", fill],
@@ -485,6 +501,12 @@ def _recipes() -> dict[str, list[str]]:
         ],
         "green.mp4": green,
         "sound.m4a": sound,
+        "interlaced.mp4": [  # a fast pan across the aurora, its fields woven: combed
+            "-loop", "1", "-framerate", "50", "-i", str(photos["video"]), "-t", "4",
+            "-vf", f"scale={w * 2}:{h * 5 // 3}:force_original_aspect_ratio=increase,crop={w * 2}:{h * 5 // 3},"
+                   f"crop={w}:{h}:x='(iw-ow)*t/4':y='(ih-oh)/2',tinterlace=mode=interleave_top,setfield=prog",
+            "-r", "25", "-pix_fmt", "yuv420p",
+        ],
     }
 
 
@@ -642,11 +664,11 @@ def build(
     if melt_catalog:  # the references "no change" is told against
         melt_catalog = (replace(_SOUND_BASELINE, melt_catalog=True), *melt_catalog)
     catalog = (*CATALOG, *gl_entries(), *melt_catalog)
-    baseline = replace(_BASELINE, melt_catalog=True)
+    baselines = {source: replace(e, melt_catalog=True) for source, e in _BASELINES.items()}
     previews = [(e, output(e)) for e in catalog if e.render]
     if melt_catalog:
-        previews.append((baseline, output(baseline)))
-    baseline_out = output(baseline)
+        previews += [(e, output(e)) for e in baselines.values()]
+    baseline_outs = {source: output(e) for source, e in baselines.items()}
     sound_baseline_out = output(replace(_SOUND_BASELINE, melt_catalog=True))
     errors_file = root / "errors.json"
     try:
@@ -677,13 +699,13 @@ def build(
         unchanged = {}
     to_check = [
         (e, out) for e, out in previews
-        if e.melt_catalog and e is not baseline and e.name != _SOUND_BASELINE.name
+        if e.melt_catalog and e not in baselines.values() and e.name != _SOUND_BASELINE.name
         and out.exists() and out.name not in unchanged
     ]
     if to_check:
         on_progress(msg("gallery.progress_unchanged", n=len(to_check)))
         with ThreadPoolExecutor(max_workers=8) as pool:
-            for (e, out), same in zip(to_check, pool.map(lambda item: _unchanged(*item, baseline_out, sound_baseline_out), to_check)):
+            for (e, out), same in zip(to_check, pool.map(lambda item: _unchanged(*item, baseline_outs, sound_baseline_out), to_check)):
                 unchanged[out.name] = same
 
     # those that change nothing at their defaults: shown with other values,
@@ -707,7 +729,7 @@ def build(
                 v_out = output(variant)
                 if not v_out.exists() and _render(variant, samples, work, v_out):
                     continue
-                if not _unchanged(variant, v_out, baseline_out, sound_baseline_out):
+                if not _unchanged(variant, v_out, baseline_outs, sound_baseline_out):
                     return out.name, {"values": values, "file": v_out.name}
                 v_out.unlink(missing_ok=True)
             return out.name, None
@@ -762,7 +784,7 @@ def build(
     shutil.rmtree(work, ignore_errors=True)
 
     page = root / "index.html"
-    shown = [(e, out) for e, out in previews if e is not baseline]
+    shown = [(e, out) for e, out in previews if e not in baselines.values()]
     shown += [(e, None) for e in catalog if not e.render]
     page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged), encoding="utf-8")
     return page
