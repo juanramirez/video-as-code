@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from . import autoprune, fetch, fetch_resolve, i18n, lumas, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import autoprune, fetch, fetch_resolve, gallery, i18n, lumas, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -356,6 +356,26 @@ def cmd_transitions(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gallery(args: argparse.Namespace) -> int:
+    """A page with every transition and effect, opened in the browser
+    (gallery.py)."""
+    own = Path(args.with_file) if args.with_file else None
+    if own is not None and not own.is_file():
+        print(msg("cli.gallery_with_missing", path=own), file=sys.stderr)
+        return 1
+    try:
+        page = gallery.build(own=own.resolve() if own else None, on_progress=lambda text: print(text, file=sys.stderr))
+    except (KdenliveAsCodeError, OSError) as exc:
+        print(msg("cli.gallery_failed", exc=exc), file=sys.stderr)
+        return 1
+    print(msg("cli.gallery_done", path=page))
+    if not args.no_open:
+        import webbrowser
+
+        webbrowser.open(page.as_uri())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="video-as-code", description=msg("cli.help.description"))
     parser.add_argument(
@@ -404,6 +424,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_transitions = sub.add_parser("transitions", help=msg("cli.help.transitions"))
     p_transitions.set_defaults(func=cmd_transitions)
+
+    p_gallery = sub.add_parser("gallery", help=msg("cli.help.gallery"))
+    p_gallery.add_argument("--with", dest="with_file", metavar="FILE", help=msg("cli.help.gallery_with"))
+    p_gallery.add_argument("--no-open", action="store_true", help=msg("cli.help.gallery_no_open"))
+    p_gallery.set_defaults(func=cmd_gallery)
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
     p_reconstruct.add_argument("video", help=msg("cli.help.reconstruct_video"))

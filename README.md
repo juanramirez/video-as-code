@@ -32,6 +32,7 @@ video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> 
 video-as-code render project.yaml [-o output.mp4] [--split]  # build + render straight to video via melt
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
+video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
 ```
 
 `build` and `render` also take `--fetch`, to run `fetch` first, and
@@ -366,7 +367,8 @@ They're not bundled (they're GPL-3.0+): they're read from openshot-qt
 (`sudo apt install openshot-qt`), or from the folder
 `VIDEO_AS_CODE_OPENSHOT_TRANSITIONS` points at, and each one used is
 converted to PGM once, under `~/.cache/video-as-code/lumas-openshot/`.
-`video-as-code transitions` lists every name. Like OpenShot, MLT
+`video-as-code transitions` lists every name, and `video-as-code
+gallery` shows each one playing (see below). Like OpenShot, MLT
 stretches each map to the frame - about half of them are 4:3.
 
 What they add, by family (`<family>_<n>`, how many):
@@ -391,6 +393,24 @@ OpenShot's `common/` (`fade`, `circle_in_to_out`/`circle_out_to_in`,
 `wipe_left_to_right` and the other three wipes) are what `dissolve`,
 `radial`, `linear_x` and `linear_y` already do; `openshot/fade` is all
 one shade, which MLT plays as a cut - use `transition: dissolve`.
+
+### `video-as-code gallery`: every transition and effect, in the browser
+
+Opens a page with everything a project YAML can ask for - the
+transitions between clips, the wipe shapes, the clip effects, the
+`derive:` operations and titles - each with the YAML that asks for it
+(click to copy) and a preview of what it does. The previews are real
+renders: each is a tiny project rendered by `video-as-code render`
+itself, with the same `melt`, so what the page shows is what a render
+gives, and one that no longer renders shows its error instead. They
+play over generated sample pictures; `--with photo.jpg` (or a video)
+puts your own under them.
+
+The first run renders ~40 previews and makes the wipe shapes'
+thumbnails (a minute or two); everything is cached in
+`~/.cache/video-as-code/gallery/`, so it then opens at once, and after
+an update of the tool or of `melt` only what changed is rendered
+again. `--no-open` only writes the page and prints where it is.
 
 ### `video-as-code reconstruct`: recovering a YAML from a rendered video
 
@@ -469,7 +489,7 @@ Verified by the test suite (`pytest`):
   rendered video + assets folder -> YAML, by content-based matching
   instead of XML parsing. See the *Usage* section above and `ROADMAP.md`
   for how it works and its known limitations.
-- **CLI** (`cli.py`): `build` / `validate` / `import` / `render` / `reconstruct` / `transitions`.
+- **CLI** (`cli.py`): `build` / `validate` / `import` / `render` / `reconstruct` / `transitions` / `gallery`.
 - **Seconds<->frames conversion** (`timecode.py`): common NTSC framerates
   (23.976, 29.97...) as an exact fraction; deterministic round-half-up on
   exact ties (see note below).

@@ -1264,3 +1264,10 @@ whole video can be built from a fresh checkout anywhere.
   `reverse` property, found by rendering, changes nothing. `video-as-code
   transitions` lists them (`tests/test_lumas.py`,
   `tests/test_melt_validation.py::test_openshot_luma_wipes_the_whole_frame`).
+- **`video-as-code gallery`** — **implemented** (2026-10-22): a page,
+  opened in the browser, with every transition and effect the YAML
+  exposes, each with its snippet and a preview rendered by `render`
+  itself from a tiny project (`gallery.py`'s catalog), cached in the
+  user cache folder by project, samples, the package's code and melt;
+  the wipe shapes are played by the page itself from their maps. The
+  catalog is also checked to stay valid (`tests/test_gallery.py`).
