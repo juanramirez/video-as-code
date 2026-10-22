@@ -442,7 +442,8 @@ gives, and one that no longer renders shows its error instead. They
 play over photos of Ubuntu's own wallpapers when they're installed
 (`/usr/share/backgrounds`, read there, not bundled), else over generated
 pictures; `--with photo.jpg` (or a video) puts your own under them.
-Links at the top jump to each section.
+Sections start folded; the links at the top open and jump to each one,
+and a search opens those it finds something in.
 
 Besides this project's own keys, the page has every filter and
 transition the installed `melt` has (`melt:` and `melt/<service>`), at

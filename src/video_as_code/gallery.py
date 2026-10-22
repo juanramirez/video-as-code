@@ -723,8 +723,10 @@ def _page(
             if section == "gl" and not items:
                 hint = msg("gallery.hint_gl_not_installed")
         sections.append(
-            f'<section id="{section}" data-section="{section}"{extra}><h2>{html.escape(msg(f"gallery.section_{section}"))}</h2>'
-            f'<p>{html.escape(hint)}</p><div class="grid">{cards}</div></section>'
+            f'<section id="{section}" data-section="{section}"{extra}><details>'
+            f'<summary><h2>{html.escape(msg(f"gallery.section_{section}"))}</h2>'
+            f'<span class="count">{cards.count("<figure")}</span></summary>'
+            f'<p>{html.escape(hint)}</p><div class="grid">{cards}</div></details></section>'
         )
     nav = "".join(f'<a href="#{section}">{html.escape(msg(f"gallery.section_{section}"))}</a>' for section in SECTIONS)
     return (
@@ -762,6 +764,12 @@ nav a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; 
         color: var(--fg); text-decoration: none; font-size: 13px; }
 nav a:hover { border-color: var(--muted); }
 section { scroll-margin-top: 170px; }
+summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; margin: 24px 0 8px; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+details[open] > summary::before { transform: rotate(90deg); }
+summary h2 { margin: 0; }
+.count { color: var(--muted); font-size: 13px; }
 h2 { font-size: 16px; margin: 32px 0 4px; }
 p { margin: 0 0 12px; color: var(--muted); }
 input[type="search"] { width: 100%; max-width: 320px; padding: 6px 10px; font: inherit; border: 1px solid var(--line);
@@ -881,14 +889,24 @@ for (const pre of document.querySelectorAll("figure > pre")) {
     }).catch(() => {});
   });
 }
+// a link to a section opens it
+for (const a of document.querySelectorAll('nav a')) {
+  a.addEventListener("click", () => {
+    const details = document.querySelector(a.getAttribute("href") + " > details");
+    if (details) details.open = true;
+  });
+}
 document.querySelector("label.hide input").addEventListener("change", (e) => {
   document.body.classList.toggle("hide-unchanged", e.target.checked);
 });
 document.querySelector('input[type="search"]').addEventListener("input", (e) => {
   const q = e.target.value.toLowerCase();
   for (const fig of document.querySelectorAll("figure")) fig.hidden = !fig.textContent.toLowerCase().includes(q);
-  for (const sec of document.querySelectorAll("section"))
-    sec.hidden = ![...sec.querySelectorAll("figure")].some((f) => !f.hidden);
+  for (const sec of document.querySelectorAll("section")) {
+    const any = [...sec.querySelectorAll("figure")].some((f) => !f.hidden);
+    sec.hidden = !any;
+    if (q && any) sec.querySelector("details").open = true;  // what a search finds, shown
+  }
 });
 </script>
 </body>
