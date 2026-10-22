@@ -36,7 +36,7 @@ video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # build 
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
-video-as-code docs [--with photo.jpg]                   # this documentation as a local web, the gallery in it
+video-as-code docs [--with photo.jpg] [--public DIR]    # this documentation as a local web, the gallery in it
 video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
 ```
 
@@ -568,6 +568,38 @@ the source has no docs to build). Pages go to
 `video-as-code gallery` does. `--with` and `--no-open` as there. Needs
 the `docs` extra (see *Install*). This README stays as it is - the
 project's front page on GitHub - and is the docs' first page.
+
+#### Publishing them: `--public` and GitHub Pages
+
+```bash
+video-as-code docs --public site/
+```
+
+writes, instead, a copy to publish in `site/`: the pages, the gallery
+and only the previews it shows, an `index.html` that goes to the docs
+and a `.nojekyll` (for Pages to serve the files as they are). It's
+built apart, in `~/.cache/video-as-code/public/` - its first run renders
+the whole gallery again - and made to be shared: the previews play over
+generated pictures, not the wallpapers' photos (each under its own
+licence); OpenShot's 412 wipe shapes (GPL-3.0) and your own LUTs are
+left out; `--with` isn't allowed. Each page says when and with which
+melt it was built. The folder must be new, empty (but for a `.git`) or one `--public`
+wrote before (its contents are then replaced).
+
+To serve it with GitHub Pages from a `gh-pages` branch (~55 MB of
+previews: kept off `master`, whose history doesn't grow with them),
+write it straight into a worktree of that branch - `--public` leaves
+its `.git` alone:
+
+```bash
+git worktree add --orphan -b gh-pages ../video-as-code-pages   # once; later: git worktree add ../video-as-code-pages gh-pages
+video-as-code docs --public ../video-as-code-pages --no-open
+cd ../video-as-code-pages && git add -A && git commit -m "docs: rebuilt" && git push origin gh-pages
+```
+
+and once, in the repository's *Settings → Pages*: deploy from the
+`gh-pages` branch, its root. The docs are then at
+`https://<user>.github.io/video-as-code/`.
 
 ### `video-as-code reconstruct`: recovering a YAML from a rendered video
 

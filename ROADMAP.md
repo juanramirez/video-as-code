@@ -1377,3 +1377,11 @@ whole video can be built from a fresh checkout anywhere.
   shows it even when the "hide" box would hide it. Built on the user's
   machine, not published (their melt, their wallpapers, OpenShot's
   GPL maps). `docs.py`, `tests/test_docs.py`.
+- **`video-as-code docs --public <folder>`** — **implemented**
+  (2026-10-22): a copy of the docs to publish (GitHub Pages from a
+  `gh-pages` worktree; its `.git` left alone), built apart in the cache
+  (`public/`): the gallery over generated pictures, without OpenShot's
+  GPL wipe shapes or the user's own LUTs, `--with` refused; only the
+  pages and the previews shown copied, with an `index.html` to the docs,
+  a `.nojekyll`, and on each page when and with which melt it was built.
+  Replaces only a folder it wrote itself.

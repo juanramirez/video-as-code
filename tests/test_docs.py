@@ -33,8 +33,8 @@ def test_pages_and_gallery_linked_both_ways(tmp_path: Path, monkeypatch):
         "# Project YAML reference\n\n| Key | Meaning |\n|---|---|\n| `luma` | A shape. |\n| `notes` | Text. |\n", encoding="utf-8")
     seen = {}
 
-    def fake_gallery(own, cache_root, on_progress, doc_links, docs_home):
-        seen.update(doc_links=doc_links, docs_home=docs_home)
+    def fake_gallery(own, cache_root, on_progress, doc_links, docs_home, public):
+        seen.update(doc_links=doc_links, docs_home=docs_home, public=public)
         root = cache_root / gallery.GALLERY_DIR
         root.mkdir(parents=True)
         (root / gallery.DOC_CARDS).write_text(json.dumps({"luma": "card-lumas-heart"}), encoding="utf-8")
@@ -56,3 +56,53 @@ def test_pages_and_gallery_linked_both_ways(tmp_path: Path, monkeypatch):
 def test_without_a_checkout(tmp_path: Path):
     with pytest.raises(docs.KdenliveAsCodeError, match="README.md"):
         docs.build(cache_root=tmp_path, source=tmp_path / "nowhere")
+
+
+def _fake_gallery(monkeypatch, seen: dict):
+    def build(own, cache_root, on_progress, doc_links, docs_home, public):
+        seen.update(public=public, cache_root=cache_root)
+        root = cache_root / gallery.GALLERY_DIR
+        (root / "files").mkdir(parents=True, exist_ok=True)
+        (root / "files" / "a.mp4").write_bytes(b"mp4")
+        (root / "work").mkdir(exist_ok=True)  # (not published)
+        (root / gallery.DOC_CARDS).write_text("{}", encoding="utf-8")
+        (root / "index.html").write_text("gallery", encoding="utf-8")
+        return root / "index.html"
+
+    monkeypatch.setattr(gallery, "build", build)
+    monkeypatch.setattr(gallery, "_melt_version", lambda: "melt 7.36.1")
+
+
+def test_public_a_folder_to_publish(tmp_path: Path, monkeypatch):
+    """Built apart, over generated pictures (public=True), and only the
+    pages and the previews copied, with an index and a .nojekyll."""
+    seen: dict = {}
+    _fake_gallery(monkeypatch, seen)
+    out = tmp_path / "site"
+    page = docs.publish(out, cache_root=tmp_path / "cache")
+    assert seen == {"public": True, "cache_root": tmp_path / "cache" / "public"}
+    assert page == out / "index.html" and 'url=docs/index.html' in page.read_text(encoding="utf-8")
+    assert (out / ".nojekyll").exists() and (out / "gallery" / "files" / "a.mp4").exists()
+    assert not (out / "gallery" / "work").exists() and not (out / "gallery" / gallery.DOC_CARDS).exists()
+    readme = (out / "docs" / "index.html").read_text(encoding="utf-8")
+    assert "<footer>" in readme and "melt 7.36.1" in readme
+    (out / ".git").write_text("gitdir: elsewhere", encoding="utf-8")  # (a worktree of gh-pages)
+    (out / "docs" / "old.html").write_text("", encoding="utf-8")
+    docs.publish(out, cache_root=tmp_path / "cache")  # (again: its own folder, replaced)
+    assert (out / ".git").exists() and not (out / "docs" / "old.html").exists()
+
+
+def test_public_into_a_new_worktree(tmp_path: Path, monkeypatch):
+    _fake_gallery(monkeypatch, {})
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "pages" / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+    docs.publish(tmp_path / "pages", cache_root=tmp_path / "cache")
+    assert (tmp_path / "pages" / "docs" / "index.html").exists()
+
+
+def test_public_wont_write_over_another_folder(tmp_path: Path, monkeypatch):
+    _fake_gallery(monkeypatch, {})
+    (tmp_path / "mine.txt").write_text("x", encoding="utf-8")
+    with pytest.raises(docs.KdenliveAsCodeError, match="isn't empty"):
+        docs.publish(tmp_path, cache_root=tmp_path / "cache")
+    assert (tmp_path / "mine.txt").exists()

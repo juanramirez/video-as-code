@@ -442,8 +442,15 @@ def cmd_docs(args: argparse.Namespace) -> int:
     if own is not None and not own.is_file():
         print(msg("cli.gallery_with_missing", path=own), file=sys.stderr)
         return 1
+    if own is not None and args.public:
+        print(msg("cli.docs_public_with"), file=sys.stderr)
+        return 1
+    progress = lambda text: print(text, file=sys.stderr)  # noqa: E731
     try:
-        page = docs.build(own=own.resolve() if own else None, on_progress=lambda text: print(text, file=sys.stderr))
+        if args.public:
+            page = docs.publish(Path(args.public).resolve(), on_progress=progress)
+        else:
+            page = docs.build(own=own.resolve() if own else None, on_progress=progress)
     except (KdenliveAsCodeError, OSError) as exc:
         print(msg("cli.docs_failed", exc=exc), file=sys.stderr)
         return 1
@@ -518,6 +525,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_docs = sub.add_parser("docs", help=msg("cli.help.docs"))
     p_docs.add_argument("--with", dest="with_file", metavar="FILE", help=msg("cli.help.docs_with"))
     p_docs.add_argument("--no-open", action="store_true", help=msg("cli.help.docs_no_open"))
+    p_docs.add_argument("--public", metavar="FOLDER", help=msg("cli.help.docs_public"))
     p_docs.set_defaults(func=cmd_docs)
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
