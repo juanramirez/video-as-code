@@ -1169,19 +1169,22 @@ _PAGE = """<!doctype html>
   :root { --bg: #181816; --fg: #ecebe7; --muted: #9c9890; --card: #23221f; --line: #34332f; --code: #1c1b19; --bad: #f2b8b5; }
 }
 body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, sans-serif; }
-header, section { max-width: 1200px; margin: 0 auto; }
-header { position: sticky; top: 0; z-index: 1; background: var(--bg); padding-bottom: 12px; }
+header, .bar, nav, section { max-width: 1200px; margin: 0 auto; }
+/* only a thin bar stays on top while scrolling: the tabs, the filter, the box */
+.bar { position: sticky; top: 0; z-index: 1; background: var(--bg); display: flex; flex-wrap: wrap; align-items: center;
+       gap: 6px 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.bar .tabs { margin: 0; border-bottom: none; }
 h1 { font-size: 20px; margin: 0 0 6px; }
 .tabs { display: flex; gap: 4px; margin: 4px 0 12px; border-bottom: 1px solid var(--line); }
 .tabs button { font: inherit; font-weight: 600; padding: 8px 16px; border: 1px solid transparent; border-bottom: none;
                border-radius: 8px 8px 0 0; background: none; color: var(--muted); cursor: pointer; margin-bottom: -1px; }
 .tabs button[aria-selected="true"] { color: var(--fg); background: var(--bg); border-color: var(--line); }
 [data-tab].off { display: none !important; }
-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px auto; }
 nav a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card);
         color: var(--fg); text-decoration: none; font-size: 13px; }
 nav a:hover { border-color: var(--muted); }
-section { scroll-margin-top: 170px; }
+section, figure { scroll-margin-top: 64px; }
 section > details > summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; margin: 24px 0 8px; list-style: none; }
 section > details > summary::-webkit-details-marker { display: none; }
 /* a triangle drawn, not a character: the same in every font */
@@ -1205,7 +1208,7 @@ figcaption { font-weight: 600; overflow-wrap: anywhere; }
          font-size: 11px; color: var(--muted); border: 1px solid var(--line); }
 .about { margin: 0; font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3;
          -webkit-box-orient: vertical; overflow: hidden; }
-label.hide { display: inline-flex; gap: 6px; align-items: center; margin-left: 12px; color: var(--muted); }
+label.hide { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
 body.hide-unchanged figure.unchanged, body.hide-unchanged figure.unavailable { display: none; }
 figure.unavailable { opacity: .5; filter: grayscale(1); }
 audio { width: 100%; }
@@ -1229,11 +1232,13 @@ figure:target { outline: 3px solid var(--accent, #2a6fdb); }
 {docs}
 <h1>{title}</h1>
 <p>{intro}</p>
+</header>
+<div class="bar">
 <div class="tabs" role="tablist">{tabs}</div>
-<nav>{nav}</nav>
 <input type="search" placeholder="{filter}" aria-label="{filter}">
 <label class="hide"><input type="checkbox" checked> {hide_unchanged}</label>
-</header>
+</div>
+<nav>{nav}</nav>
 {sections}
 <div class="toast" role="status"></div>
 <script>
