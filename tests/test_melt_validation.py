@@ -3098,3 +3098,34 @@ scenes:
     assert 60 < g < 200 and b > 200, f"expected a mix of cyan and blue, got {(r, g, b)}"
     r, g, b = _mean_rgb_at_x(rendered, timestamp=2.8, frac_x=0.5)
     assert g < 40 and b > 200, f"expected blue after it, got {(r, g, b)}"
+
+
+def test_lut_applies_the_lut(tmp_path: Path, assets_dir: Path, melt):
+    """`lut:` really grades the picture: an inverting LUT turns the red
+    still cyan. (avfilter.lut3d once did nothing on a from-source melt -
+    see ROADMAP.md's v0.9 - which is what this guards.)"""
+    from test_lut import write_cube
+
+    write_cube(tmp_path / "invert.cube", invert=True)
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: red
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: red, start: 0, duration: 1, lut: invert.cube}}
+""",
+        encoding="utf-8",
+    )
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive_path)
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+    r, g, b = _mean_rgb_at_x(rendered, timestamp=0.5, frac_x=0.5)
+    assert r < 40 and g > 200 and b > 200, f"expected red inverted to cyan, got {(r, g, b)}"

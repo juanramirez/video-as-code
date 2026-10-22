@@ -27,6 +27,8 @@ from .i18n import msg
 from . import gltransitions, lumas, meltpass
 from .models import (
     AFFINE_STYLES,
+    LUT_INTERPS,
+    LUT_SUFFIXES,
     AffineTransitionSpec,
     MeltTransitionSpec,
     BinClipSpec,
@@ -162,6 +164,33 @@ def _dust_pictures(pictures: tuple[str, ...] | None, base: Path, ctx: str, error
             errors.append(msg("validation.film_dust_picture_missing", ctx=ctx, picture=p))
         out.append(str(path.resolve()))
     return tuple(out)
+
+
+def _parse_lut(raw: Any, ctx: str, errors: list[str]) -> Optional[str]:
+    """`lut:` as written: a file name (resolved by _lut_file)."""
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or Path(raw).suffix.lower() not in LUT_SUFFIXES:
+        errors.append(msg("validation.lut_invalid", ctx=ctx, value=raw, suffixes=", ".join(LUT_SUFFIXES)))
+        return None
+    return raw
+
+
+def _parse_lut_interp(raw: Any, ctx: str, errors: list[str]) -> str:
+    if raw not in LUT_INTERPS:
+        errors.append(msg("validation.lut_interp_invalid", ctx=ctx, value=raw, valid=", ".join(LUT_INTERPS)))
+        return "tetrahedral"
+    return raw
+
+
+def _lut_file(lut: str | None, base: Path, ctx: str, errors: list[str]) -> str | None:
+    """`lut:` as an absolute path (relative to the project file) - an existing file."""
+    if lut is None:
+        return None
+    path = Path(lut) if Path(lut).is_absolute() else base / lut
+    if not path.is_file():
+        errors.append(msg("validation.lut_missing", ctx=ctx, path=path))
+    return str(path.resolve())
 
 
 def load_and_resolve(path: str | Path) -> ResolvedProject:
@@ -1212,6 +1241,8 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         color_grade=color_grade,
         color_grade_keyframes=color_grade_keyframes,
         stabilize=stabilize,
+        lut=_parse_lut(item.get("lut"), ctx, errors),
+        lut_interp=_parse_lut_interp(item.get("lut_interp", "tetrahedral"), ctx, errors),
         melt_filters=meltpass.parse_filters(item.get("melt"), ctx, errors),
     )
 
@@ -1701,6 +1732,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     film_grain_brightness=placement.film_grain_brightness,
                     film_grain=placement.film_grain,
                     stabilize=placement.stabilize,
+                    lut=_lut_file(placement.lut, doc.source_path.parent, ctx, errors),
+                    lut_interp=placement.lut_interp,
                     melt_filters=placement.melt_filters,
                 )
             )

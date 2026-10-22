@@ -490,6 +490,12 @@ class Importer:
             return {"fade_out": round(length_s, 3)}
         if service == "volume" and kid == "mute":
             return {"mute": True}
+        if service == "avfilter.lut3d" and props.get("av.file") and (f_in, f_out) == (entry_in, entry_out):
+            lut = {"lut": props["av.file"]}
+            interp = props.get("av.interp", "tetrahedral")
+            if interp != "tetrahedral":
+                lut["lut_interp"] = interp
+            return lut
         if service == "frei0r.bluescreen0r":
             # Unlike iris/flip/glitch (which encode a keyframed animation
             # this generator itself constructs, so only exact matches are

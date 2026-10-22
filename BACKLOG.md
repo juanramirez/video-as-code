@@ -160,7 +160,8 @@ melt 7.32.0, not assumed.
   own lead developer (`jb@kdenlive.org`) — this *is* kdenlive's tracker
   effect. Also two-pass (analysis + apply, same shape as `vidstab`).
   Absent from this project.
-- **LUT-based color grading — investigated and dropped (v0.9)**:
+- **LUT-based color grading — investigated and dropped (v0.9); shipped
+  since as `lut:` (v0.11), once both melts (7.36, 7.41) applied it**:
   `avfilter.lut3d` hits the same "Cannot set src colorspace" bug
   `avfilter.chromakey`/`avfilter.rgbashift` did (see ROADMAP.md's v0.5
   and v0.9 entries) on this project's preferred from-source dev melt

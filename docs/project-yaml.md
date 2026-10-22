@@ -185,6 +185,8 @@ required.
 | `film_grain` as a map | `{noise: 12}` | Instead of `true`: grain that changes every frame, `noise` its strength (default `40`), with `contrast` and `brightness` in percent, `100` (the default) meaning unchanged. `true` keeps kdenlive's own settings (`40`/`160`/`70`), which also harden and darken the whole picture. |
 | `film_dust` as a map | `{style: dots, size: 4, count: 10}` | Instead of `true`: `style: svg` (the default) draws MLT's dust pictures, `size` percent of the clip's width across (default `2`); `dots` draws small round specks, darker and lighter, at most `size` pixels in radius (default `4`), like the dust on an old print. `count`: at most that many per frame (default `10`). One style per project: `dots` makes `render` run melt on a copy of its data folder without the dust pictures (opened in kdenlive, the project shows them). `pictures` (with `svg`): the pictures to pick from instead of MLT's five - theirs by name (`dust1`, `dust2` blots, the latter drawn white; `dust3`-`dust5` hairs) or `.svg` files of the project, a repeated one coming up more often; e.g. `[dust3, dust4, dust5, assets/speck.svg]`, the speck drawn small inside a larger transparent picture. One set per project, also by swapping the data folder. `hold`: the same specks for that many frames running (default `1`, new ones every frame). |
 | `stabilize` | - | `true` smooths out camera shake (single pass). |
+| `lut` | - | A 3D LUT file applied to the picture, after `color_grade` - `.cube`, `.3dl`, `.dat` or `.m3d`, relative to the project file: a look, or a camera's log-to-Rec.709 conversion. |
+| `lut_interp` | `tetrahedral` | How the LUT is interpolated between its points: `nearest`, `trilinear` or `tetrahedral`. |
 | `focus_rect` | - | `[x%, y%, w%, h%]` kept sharp while the rest is blurred. |
 | `focus_blur` | `4.0` | Blur radius for `focus_rect`, percent of the width (`0`-`50`). |
 | `chroma_key` | - | Colour to make transparent (`"#00ff00"`). |
@@ -222,7 +224,8 @@ at second 0.
 A scene's clip is a file path (`photos/beach.jpg`, added to the bin by
 itself), `{path: ...}`, or `{clip: <bin id>}`; the two map forms may also
 carry `mute`, `speed` (with `preserve_pitch`), `position`, `size`,
-`chroma_key`, `chroma_key_distance` and `melt`, as on a timeline clip.
+`chroma_key`, `chroma_key_distance`, `lut` (with `lut_interp`) and `melt`,
+as on a timeline clip.
 
 ## `guides:`
 

@@ -386,15 +386,7 @@ class ClipPlacementSpec:
     # the first at 0; every keyframe with the same groups), held after the
     # last. E.g. a brightness swell that rises and falls over several clips.
     color_grade_keyframes: Optional[list[tuple[float, dict[str, tuple[float, float, float]]]]] = None
-    # LUT-based grading (`avfilter.lut3d`) was investigated and dropped -
-    # see ROADMAP.md: on this project's own preferred from-source melt
-    # build it hits the exact same "Cannot set src colorspace" bug
-    # `avfilter.chromakey`/`avfilter.rgbashift` already ran into (real
-    # render proved zero visible effect - an identity and an inverting
-    # `.cube` LUT produced pixel-identical output), even though it
-    # works correctly on the system's stable melt. No native MLT
-    # equivalent exists (`rgblut` is a per-channel 1D lookup table, not
-    # a real 3D cube LUT, so it can't stand in for it).
+    # (LUT-based grading: `lut:`, below.)
     # Video stabilization (mlt_service "deshake", Vid.Stab/GPLv2) - a
     # plain on/off toggle at MLT's own defaults for all eleven
     # parameters, no per-parameter overrides in this first cut (same
@@ -407,6 +399,13 @@ class ClipPlacementSpec:
     # project's preferred from-source dev melt build and the system's
     # stable one - no `crop`/`lut3d`-style build-specific issue.
     stabilize: Optional[bool] = None
+    # `lut:` - a 3D LUT file (.cube/.3dl/.dat/.m3d) applied to the
+    # picture, after color_grade: `avfilter.lut3d`, kdenlive's own "Apply
+    # LUT". Dropped once (v0.9: a from-source melt's avfilter bridge left
+    # it doing nothing), it works on both melts since (7.36 and 7.41,
+    # checked by an inverting LUT). Relative to the project file.
+    lut: Optional[str] = None
+    lut_interp: str = "tetrahedral"  # one of LUT_INTERPS
     # `melt:` - any MLT filter by service name, after the clip's own
     # (see meltpass.py)
     melt_filters: tuple["MeltService", ...] = ()
@@ -453,7 +452,9 @@ class MeltTransitionSpec:
     melt: MeltService
 
 
-AFFINE_STYLES = ("zoom", "slide")  # shared with scenes.py and schema.py's `transitions:` parsing
+AFFINE_STYLES = ("zoom", "slide")
+LUT_INTERPS = ("nearest", "trilinear", "tetrahedral")  # avfilter.lut3d's
+LUT_SUFFIXES = (".cube", ".3dl", ".dat", ".m3d")  # shared with scenes.py and schema.py's `transitions:` parsing
 
 
 @dataclass
@@ -600,6 +601,8 @@ class ResolvedPlacement:
     color_grade_keyframes: Optional[list[tuple[int, dict[str, tuple[float, float, float]]]]] = None
     # Video stabilization - see ClipPlacementSpec.
     stabilize: Optional[bool] = None
+    lut: Optional[str] = None  # absolute - see ClipPlacementSpec
+    lut_interp: str = "tetrahedral"
     melt_filters: tuple["MeltService", ...] = ()  # see ClipPlacementSpec
 
     @property

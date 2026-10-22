@@ -1300,3 +1300,12 @@ whole video can be built from a fresh checkout anywhere.
   arrived (`tests/test_gltransitions.py` renders a vec3 one); and a
   render with 4 threads (`real_time=-4`) came out identical to one
   with 1.
+- **`lut:`** — **implemented** (2026-10-22): a 3D LUT file (`.cube`,
+  `.3dl`, `.dat`, `.m3d`) on a clip, relative to the project file, with
+  `lut_interp`; emitted as kdenlive's own "Apply LUT" (`avfilter.lut3d`,
+  `av.file`/`av.interp`) and recognized by import. Dropped in v0.9 (it
+  did nothing on the from-source melt); checked again by real render
+  with an inverting LUT, it now works on both the system's melt (7.36)
+  and the from-source one (7.41), and an identity LUT leaves the
+  picture as it was (`tests/test_lut.py`,
+  `tests/test_melt_validation.py::test_lut_applies_the_lut`).

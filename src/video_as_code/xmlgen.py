@@ -553,6 +553,16 @@ def _add_audio_fade_filters(ids: _IdCounters, entry: ET.Element, placement: Reso
         _prop(f, "kdenlive:collapsed", 0)
 
 
+def _add_lut_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedPlacement) -> None:
+    """`lut:` - kdenlive's own "Apply LUT" (data/effects/avfilter/
+    avfilter_lut3d.xml): ffmpeg's lut3d, whole clip."""
+    f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
+    _prop(f, "mlt_service", "avfilter.lut3d")
+    _prop(f, "kdenlive_id", "avfilter.lut3d")
+    _prop(f, "av.file", placement.lut)
+    _prop(f, "av.interp", placement.lut_interp)
+
+
 def _add_melt_service(el: ET.Element, service: MeltService) -> None:
     """A `melt:` filter or `melt/<service>` transition (meltpass.py): its
     service and properties as given - and kdenlive_id, which kdenlive
@@ -973,6 +983,8 @@ def _build_track(
                 _add_color_grade_filter(ids, entry, placement)
             if placement.color_grade_keyframes is not None:
                 _add_color_grade_keyframes_filter(ids, entry, placement)
+            if placement.lut is not None:
+                _add_lut_filter(ids, entry, placement)
             if placement.stabilize:
                 _add_deshake_filter(ids, entry)
         if placement.mute:
