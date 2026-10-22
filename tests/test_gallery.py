@@ -110,7 +110,9 @@ def test_melt_entries_by_kind(monkeypatch):
 
 def test_melt_section_tells_what_changes_nothing(tmp_path: Path, melt, monkeypatch):
     """At their defaults, brightness and avfilter.hue change nothing,
-    avfilter.negate and avfilter.aecho do: rendered, and told apart."""
+    avfilter.negate and avfilter.aecho do: rendered and told apart; then
+    brightness is shown with another level (melt gives its range), and
+    hue, whose properties have none, is marked for setting them."""
     monkeypatch.setattr(gallery, "CATALOG", ())
     monkeypatch.setattr(gallery, "gl_entries", lambda: ())
     real = {name: (kind, gallery._describe_service(kind, name)) for kind, name in (
@@ -125,7 +127,19 @@ def test_melt_section_tells_what_changes_nothing(tmp_path: Path, melt, monkeypat
         if f"<figcaption>{name}<" in card
     }
     assert set(cards) == {*real, "original"}
-    assert "unchanged" in cards["avfilter.hue"] and "unchanged" in cards["brightness"]
-    assert "unchanged" not in cards["avfilter.negate"]
+    assert "unchanged" in cards["avfilter.hue"] and "need setting" in cards["avfilter.hue"]
+    assert "unchanged" not in cards["brightness"] and "shown with" in cards["brightness"]
+    assert "brightness: {" in cards["brightness"]  # (its snippet, with the value)
+    assert "unchanged" not in cards["avfilter.negate"] and "shown with" not in cards["avfilter.negate"]
     assert "<audio" in cards["avfilter.aecho"] and "unchanged" not in cards["avfilter.aecho"]
 
+
+def test_tweaks_from_ranges():
+    entry = gallery.Entry("melt_filters", "x", "", "", params=(
+        (("default", 1.0), ("maximum", 15.0), ("minimum", 0.0), ("name", "level"), ("type", "float")),
+        (("default", 200), ("maximum", 255), ("minimum", 0), ("name", "u"), ("type", "integer")),
+        (("default", 0), ("name", "flag"), ("type", "boolean")),
+        (("default", "'1'"), ("name", "av.s"), ("type", "string")),
+        (("default", 1.0), ("maximum", 15.0), ("minimum", 0.0), ("name", "end (*DEPRECATED*)"), ("type", "float")),
+    ))
+    assert gallery._tweaks(entry) == [{"level": 11.25}, {"u": 64}, {"flag": True}]

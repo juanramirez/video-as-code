@@ -56,6 +56,8 @@ class Entry:
     project: str  # the whole project rendered for the preview, with {a} {b} {video} ... placeholders
     title: str = ""  # melt's own title and description, for its catalog's entries
     description: str = ""
+    params: tuple = ()  # melt's description of its parameters (see _tweaks)
+    tweaked: Optional[str] = None  # with which values its preview is, when not its defaults
     melt_catalog: bool = False  # one of melt's services as they come (see melt_entries)
     render: bool = True  # (an audio filter has nothing to show)
 
@@ -222,13 +224,21 @@ timeline:
 
 
 def _describe_service(kind: str, service: str) -> dict:
-    """melt's title, description and tags of one service."""
+    """melt's title, description, tags and parameters of one service."""
     meta = meltpass._query(f"{kind}={service}")
     meta = meta if isinstance(meta, dict) else {}
+    params = []
+    for param in meta.get("parameters") or []:
+        if not isinstance(param, dict) or param.get("identifier") is None:
+            continue
+        # frei0r's are numbered; MLT takes each by its name too (meltpass.py)
+        name = param.get("title") if service.startswith("frei0r.") and param.get("title") else param["identifier"]
+        params.append({k: param.get(k) for k in ("type", "default", "minimum", "maximum")} | {"name": str(name)})
     return {
         "title": str(meta.get("title") or ""),
         "description": " ".join(str(meta.get("description") or "").split()),
         "tags": [str(t) for t in meta.get("tags") or []],
+        "params": params,
     }
 
 
@@ -236,7 +246,7 @@ def _melt_catalog(cache: Optional[Path] = None) -> dict[str, dict[str, dict]]:
     """{"filter"|"transition": {service: {title, description, tags}}} of
     the installed melt - asked once per melt (675 `melt -query` take
     minutes), kept in `cache`."""
-    key = f"{probe.find_melt()}\n{_melt_version()}"
+    key = f"catalog 2\n{probe.find_melt()}\n{_melt_version()}"
     if cache is not None:
         try:
             stored = json.loads(cache.read_text(encoding="utf-8"))
@@ -267,7 +277,10 @@ def melt_entries(cache: Optional[Path] = None) -> tuple[Entry, ...]:
         for service, meta in services.items():
             if service == gltransitions.SERVICE:  # (it needs a shader: its own section)
                 continue
-            info = {"title": meta["title"], "description": meta["description"], "melt_catalog": True}
+            info = {
+                "title": meta["title"], "description": meta["description"], "melt_catalog": True,
+                "params": tuple(tuple(sorted(p.items(), key=lambda kv: kv[0])) for p in meta.get("params", ())),
+            }
             if kind == "transition":
                 snippet = f"transition: melt/{service}"
                 if meta["tags"] == ["Audio"]:  # (a sound transition: mix - listed)
@@ -335,6 +348,52 @@ def _unchanged(entry: Entry, out: Path, baseline: Path, sound_baseline: Path) ->
         middle = 2.2  # (_scene: 4.4 s, the clips overlapping around it)
         return _frames_psnr(out, middle, out, 0.4) > _SAME_DB or _frames_psnr(out, middle, out, 4.2) > _SAME_DB
     return _frames_psnr(out, 1.5, baseline, 1.5) > _SAME_DB
+
+
+def _tweaks(entry: Entry, tries: int = 3) -> list[dict]:
+    """Other values to show `entry` with, when at its defaults it changes
+    nothing: one parameter at a time, a number toward the far end of its
+    range from its default (3/4 of the way up from a low one, 1/4 from a
+    high one), a true/false the other way - those melt gives a range or a
+    type for; at most `tries`."""
+    out = []
+    for param in (dict(p) for p in entry.params):
+        if "DEPRECATED" in param["name"]:
+            continue
+        kind, default = param.get("type"), param.get("default")
+        low, high = param.get("minimum"), param.get("maximum")
+        if kind == "boolean":
+            value = not bool(default not in (None, 0, "0", False))
+        elif kind in ("float", "integer", "double") and isinstance(low, (int, float)) and isinstance(high, (int, float)) and high > low:
+            try:
+                start = float(default) if default is not None else float(low)
+            except (TypeError, ValueError):
+                start = float(low)
+            value = low + (high - low) * (0.75 if start - low <= (high - low) / 2 else 0.25)
+            value = round(value) if kind == "integer" else round(value, 3)
+            if value == start:
+                continue
+        else:
+            continue
+        out.append({param["name"]: value})
+        if len(out) == tries:
+            break
+    return out
+
+
+def _with_values(entry: Entry, values: dict) -> Entry:
+    """`entry` with these property values - its project and its snippet."""
+    flow = json.dumps(values)
+    if entry.section == "melt_transitions":
+        keys = f'transition: "melt/{entry.name}"\ntransition_properties: {flow}'
+        project = _scene(entry.name, keys, section=entry.section).project
+        snippet = f"transition: melt/{entry.name}\ntransition_properties: {flow}"
+    else:
+        keys = f"melt: [{json.dumps({entry.name: values})}]"
+        project = (_audio if entry.section == "melt_audio" else _clip)(entry.name, keys).project
+        snippet = f"melt:\n  - {entry.name}: {flow}"
+    shown = ", ".join(f"{k}: {json.dumps(v)}" for k, v in values.items())
+    return replace(entry, project=project, snippet=snippet, tweaked=shown)
 
 
 @functools.lru_cache(maxsize=None)
@@ -625,6 +684,44 @@ def build(
             for (e, out), same in zip(to_check, pool.map(lambda item: _unchanged(*item, baseline_out, sound_baseline_out), to_check)):
                 unchanged[out.name] = same
 
+    # those that change nothing at their defaults: shown with other values,
+    # the first that does change something (_tweaks) - or, if none, marked
+    tweaks_file = root / "tweaks.json"
+    try:
+        tweaks: dict[str, Optional[dict]] = json.loads(tweaks_file.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        tweaks = {}
+    pending = [
+        (e, out) for e, out in previews
+        if e.melt_catalog and unchanged.get(out.name) and out.name not in tweaks
+    ]
+    if pending:
+        on_progress(msg("gallery.progress_tweaks", n=len(pending)))
+
+        def tweak(item: tuple[Entry, Path]) -> tuple[str, Optional[dict]]:
+            entry, out = item
+            for values in _tweaks(entry):
+                variant = _with_values(entry, values)
+                v_out = output(variant)
+                if not v_out.exists() and _render(variant, samples, work, v_out):
+                    continue
+                if not _unchanged(variant, v_out, baseline_out, sound_baseline_out):
+                    return out.name, {"values": values, "file": v_out.name}
+                v_out.unlink(missing_ok=True)
+            return out.name, None
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for n, (name, found) in enumerate(pool.map(tweak, pending), start=1):
+                tweaks[name] = found
+                on_progress(msg("gallery.progress_tweak", n=n, total=len(pending), found=msg("gallery.tweak_found" if found else "gallery.tweak_none")))
+    tweaked_files = set()
+    for i, (e, out) in enumerate(previews):
+        found = tweaks.get(out.name)
+        if found:
+            previews[i] = (_with_values(e, found["values"]), files / found["file"])
+            tweaked_files.add(found["file"])
+            unchanged[found["file"]] = False
+
     # the wipe shapes play from one sample picture to the other
     pictures = []
     for key in ("a", "b"):
@@ -647,9 +744,14 @@ def build(
             list(pool.map(lambda st: _thumbnail(*st), to_thumb))
 
     # only what this page uses stays (older generations, a removed entry)
-    wanted = {out.name for _, out in previews} | {thumb.name for _, thumb in luma_cards} | {p.name for p in pictures}
+    wanted = (
+        {out.name for _, out in previews} | {thumb.name for _, thumb in luma_cards} | {p.name for p in pictures}
+        | {output(e).name for e in catalog if e.render}  # (the default renders behind a tweaked one)
+    )
     unchanged = {k: v for k, v in unchanged.items() if k in wanted}
     notes_file.write_text(json.dumps(unchanged, indent=1), encoding="utf-8")
+    tweaks = {k: v for k, v in tweaks.items() if k in wanted}
+    tweaks_file.write_text(json.dumps(tweaks, indent=1), encoding="utf-8")
     for path in files.iterdir():
         if path.name not in wanted:
             path.unlink()
@@ -712,14 +814,21 @@ def _page(
                     if (unchanged or {}).get(out.name):
                         classes.append("unchanged")
                         badge = f'<span class="badge">{html.escape(msg("gallery.unchanged"))}</span>'
+                    elif entry.tweaked:
+                        badge = f'<span class="badge">{html.escape(msg("gallery.tweaked_badge"))}</span>'
                 about = ""
                 if not entry.melt_catalog and not entry.description:
                     key = f"gallery.about.{_slug(entry.name)}"
                     if key in i18n.CATALOGS["en"]:
                         entry = replace(entry, description=msg(key))
-                if entry.title or entry.description:
+                if entry.title or entry.description or entry.tweaked or "unchanged" in classes:
                     title = entry.title if entry.title and entry.title.lower() != entry.name.lower() else ""
-                    text = " - ".join(t for t in (title, entry.description) if t)
+                    note = ""
+                    if entry.tweaked:
+                        note = msg("gallery.tweaked", values=entry.tweaked)
+                    elif "unchanged" in classes:
+                        note = msg("gallery.needs_values")
+                    text = " - ".join(t for t in (note, title, entry.description) if t)
                     about = f'<p class="about" title="{html.escape(text)}">{html.escape(text)}</p>'
                 attrs = f' class="{" ".join(classes)}"' if classes else ""
                 items.append(
