@@ -42,6 +42,10 @@ PYTHON_ENV = "VIDEO_AS_CODE_OPENSHOT_PYTHON"
 _SCRIPT = Path(__file__).parent / "openshot_render.py"
 
 
+# effects that can't work in a render of ours: the message saying why
+UNSUPPORTED = {"Caption": "validation.openshot_caption", "Mask": "validation.openshot_mask"}
+
+
 class OpenShotError(KdenliveAsCodeError):
     pass
 
@@ -109,6 +113,9 @@ def parse(raw: Any, ctx: str, errors: list[str]) -> tuple[str, ...]:
         if name not in effects:
             close = difflib.get_close_matches(str(name), effects, n=3)
             errors.append(msg("validation.openshot_effect_unknown", ctx=where, name=name, close=", ".join(close) or "-"))
+            continue
+        if name in UNSUPPORTED:
+            errors.append(msg(UNSUPPORTED[name], ctx=where))
             continue
         props = effects[name]["props"]
         for key, value in item.items():

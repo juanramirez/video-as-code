@@ -30,6 +30,7 @@ def test_checked_against_libopenshots_catalog():
         ([{"effect": "Wave", "amplitude": "big"}], "number"),
         ([{"effect": "LensFlare", "color": [300, 0, 0]}], "color"),
         ("Wave", "list of effects"),
+        ([{"effect": "Caption"}], "type: title"),
     ]:
         _, errors = _parse(raw)
         assert errors and expected in errors[0], (raw, errors)

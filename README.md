@@ -498,7 +498,11 @@ clip when it's generated, by libopenshot itself:
 ```
 
 It needs `python3-openshot` (which `openshot-qt` brings); it runs in a
-process of its own, with the system's Python. See `docs/project-yaml.md`.
+process of its own, with the system's Python. Two of its effects are
+refused, saying why: `Caption` draws nothing outside OpenShot's own
+editor (a title clip does that), and `Mask` needs a mask picture it
+can't be given here. See `docs/project-yaml.md`; `video-as-code gallery`
+shows each one, over the sample video or sound.
 
 ### `video-as-code gallery`: every transition and effect, in the browser
 
