@@ -31,7 +31,7 @@ import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -173,6 +173,8 @@ CATALOG: tuple[Entry, ...] = (
     _clip("focus_rect", "focus_rect: [30, 20, 40, 60]\nfocus_blur: 6"),
     _clip("chroma_key", 'chroma_key: "#00ff00"', source="green", background=True),
     _clip("overlay_text", 'overlay_text: "#timecode#"\noverlay_font_size: 24'),
+    # (the sample LUT is made with the samples: see _teal_orange)
+    replace(_clip("lut", "lut: {lut}"), snippet="lut: looks/teal-orange.cube"),
     _clip("melt", "melt:\n  - frei0r.cartoon: {diffspace: 0.4}\n  - avfilter.hue: {av.h: \"0=0;74=180\"}"),
     _derive("fit, blur", "fit: {size: [320, 180], background: blur}"),
     _derive("fit, black", "fit: {size: [320, 180], background: black}"),
@@ -262,6 +264,23 @@ def _recipes() -> dict[str, list[str]]:
     }
 
 
+def _teal_orange(path: Path, size: int = 17) -> None:
+    """A "teal and orange" look as a .cube LUT, for `lut:`'s preview:
+    shadows toward teal, highlights toward orange, a little more colour."""
+    lines = ["TITLE \"teal-orange\"", f"LUT_3D_SIZE {size}"]
+    teal, orange = (0.0, 0.5, 0.55), (1.0, 0.62, 0.3)
+    for b in range(size):
+        for g in range(size):
+            for r in range(size):
+                rgb = [c / (size - 1) for c in (r, g, b)]
+                luma = 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+                tint = [t + (o - t) * luma for t, o in zip(teal, orange)]
+                out = [luma + (c - luma) * 1.15 for c in rgb]  # saturation
+                out = [c * 0.8 + t * 0.2 for c, t in zip(out, tint)]
+                lines.append(" ".join(f"{min(1.0, max(0.0, c)):.6f}" for c in out))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
 def _make_samples(folder: Path) -> dict[str, Path]:
     """The pictures and videos the previews play over, made once: each
     named by its recipe, so a different one (the photos installed or
@@ -276,6 +295,10 @@ def _make_samples(folder: Path) -> dict[str, Path]:
             _ffmpeg([*args, str(partial)])
             partial.replace(path)
         paths[stem] = path
+    lut = folder / f"teal-orange-{hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:10]}.cube"
+    if not lut.exists():
+        _teal_orange(lut)
+    paths["lut"] = lut
     for path in folder.iterdir():  # samples of older recipes
         if path not in paths.values():
             path.unlink()
