@@ -430,6 +430,24 @@ The shaders are bundled (MIT, two BSD; see
 `src/video_as_code/gltransitions_data/LICENSE`). See
 `docs/project-yaml.md`.
 
+### Presets: `presets:`, `use:` and `presets_file:`
+
+A set of keys used again and again - a transition with its duration, a
+look - can be named once and used by name, anywhere the file has a map:
+
+```yaml
+presets:
+  page: {transition: gl, gl: BookFlip, transition_duration: 0.8}
+scenes:
+  - use: page
+    clips: [a.jpg, b.jpg]
+```
+
+`use:` takes a list too; keys written next to it win over the preset's;
+a preset may use others. `presets_file: presets.yaml` brings in another
+file's `presets:`, to share them between projects. See
+`docs/project-yaml.md`.
+
 ### `video-as-code gallery`: every transition and effect, in the browser
 
 Opens a page with everything a project YAML can ask for - the

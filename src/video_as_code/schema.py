@@ -25,6 +25,7 @@ from . import upscale as upscale_mod
 from .errors import ValidationErrors
 from .i18n import msg
 from . import gltransitions, lumas, meltpass
+from . import presets as presets_mod
 from .models import (
     AFFINE_STYLES,
     LUT_INTERPS,
@@ -71,6 +72,12 @@ def load_yaml(path: str | Path) -> ProjectDoc:
 
     errors: list[str] = []
     source_dir = path.parent
+
+    # `use:` -> its presets' keys, before anything reads them (presets.py)
+    if isinstance(data, dict):
+        data = presets_mod.expand(data, path, errors)
+        if errors:
+            raise ValidationErrors(errors)
 
     project_data = data.get("project")
     if not isinstance(project_data, dict):

@@ -17,6 +17,8 @@ timeline:
 scenes: [...]        # high level: lists of clips with timing worked out
 guides: [...]        # timeline markers
 transitions: [...]   # wipe/affine transitions between two tracks
+presets: {...}       # named sets of keys, used with use: (below)
+presets_file: ...    # a file of presets shared by several projects
 ```
 
 `timeline:` and `scenes:` can be mixed: scenes compile into extra tracks
@@ -331,3 +333,51 @@ They need a small plugin built once: `video-as-code install-gl-transitions`
 they're a `frei0r.gltransition` transition, which kdenlive renders as
 long as its melt finds the plugin (`FREI0R_PATH`). A machine with no GPU
 renders them on the CPU (Mesa's llvmpipe), more slowly.
+
+## `presets:`, `presets_file:` and `use:`
+
+Named sets of keys, written once and used wherever a project file has a
+map - a scene, a clip (on a track or in a scene), a bin entry, a
+`transitions:` entry:
+
+```yaml
+presets:
+  page: {transition: gl, gl: BookFlip, transition_duration: 0.8}
+  warm: {lut: looks/warm.cube, film_grain: {noise: 12}}
+  warm-page: {use: [page, warm]}          # a preset may use others
+
+scenes:
+  - use: page
+    clips: [a.jpg, {path: b.jpg, use: warm}]
+  - use: page
+    transition_duration: 1.5               # written here: wins over the preset's
+    clips: [c.jpg, d.jpg]
+```
+
+| Key | Where | Meaning |
+|---|---|---|
+| `presets` | top level | A map of names to maps of keys. |
+| `use` | any map | A preset's name, or a list of them: their keys go in first, in that order, and the keys written next to `use:` last, so those win. A value replaces the preset's whole (a map isn't merged into the preset's map). |
+| `presets_file` | top level | A YAML file, relative to the project file, with one key, `presets:`; its presets come first, and the project's own `presets:` of the same name replace them - for presets shared by several projects. |
+
+`use:` is expanded before anything else reads the file, so it works
+with every key. A name that isn't a preset, or presets that use each
+other in a circle, is an error that says where. Relative paths inside a
+preset (a `lut:`, a `path:`) are relative to the project file that uses
+it, like the rest of that file's: a presets file shared by projects in
+other folders takes absolute paths.
+
+```yaml
+# presets.yaml, next to several projects' files
+presets:
+  page: {transition: gl, gl: BookFlip}
+  title-style: {font: "DejaVu Serif", font_weight: bold, shadow: true}
+```
+
+```yaml
+# a project
+project: {...}
+presets_file: presets.yaml
+bin:
+  - {id: card, type: title, text: "Day one", use: title-style}
+```

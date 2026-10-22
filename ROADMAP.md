@@ -1309,3 +1309,11 @@ whole video can be built from a fresh checkout anywhere.
   and the from-source one (7.41), and an identity LUT leaves the
   picture as it was (`tests/test_lut.py`,
   `tests/test_melt_validation.py::test_lut_applies_the_lut`).
+- **Presets: `presets:`, `use:`, `presets_file:`** — **implemented**
+  (2026-10-22): named sets of keys, used by name anywhere a project file
+  has a map (`presets.py`). Expanded right after the file is read, so
+  they work with every key; keys written next to `use:` win, a value
+  replacing the preset's whole; presets may use others (a circle is an
+  error); a shared file's presets come first, the project's own replace
+  them. Relative paths in a preset are the using file's
+  (`tests/test_presets.py`).
