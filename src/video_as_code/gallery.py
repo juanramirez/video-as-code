@@ -41,7 +41,7 @@ from .i18n import msg
 from .mltdata import default_cache_root
 
 WIDTH, HEIGHT = 320, 180
-THUMB_SIZE = (192, 108)
+THUMB_SIZE = (WIDTH, HEIGHT)  # the wipe shapes play as big as the videos
 GALLERY_DIR = "gallery"
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
 
@@ -237,11 +237,14 @@ def _with_own(samples: dict[str, Path], own: Optional[Path]) -> dict[str, Path]:
 # --- previews ----------------------------------------------------------------
 
 def _code_key() -> str:
-    """This package's own code: a change to how anything is built
-    renders every preview again."""
+    """This package's own code and data: a change to how anything is
+    built renders every preview again. Not the messages or this page's own code, which
+    don't change a render (an entry's project is in its own key)."""
     h = hashlib.sha256()
-    for path in sorted(Path(__file__).parent.glob("*.py")):
-        h.update(path.read_bytes())
+    package = Path(__file__).parent
+    for path in sorted([*package.glob("*.py"), *package.glob("*_data/**/*")]):
+        if path.is_file() and path.name not in ("i18n.py", "gallery.py"):
+            h.update(path.name.encode() + path.read_bytes())
     return h.hexdigest()
 
 
@@ -340,7 +343,7 @@ def build(
     # the wipe shapes play from one sample picture to the other
     pictures = []
     for key in ("a", "b"):
-        thumb = files / f"sample-{key}-{hashlib.sha256(_file_key(samples[key]).encode()).hexdigest()[:16]}.jpg"
+        thumb = files / f"sample-{key}-{hashlib.sha256(f'{_file_key(samples[key])}:{THUMB_SIZE}'.encode()).hexdigest()[:16]}.jpg"
         if not thumb.exists():
             _picture_thumbnail(samples[key], thumb)
         pictures.append(thumb)
@@ -348,7 +351,7 @@ def build(
     luma_cards = []
     to_thumb = []
     for name, source in lumas.all_lumas():
-        key = hashlib.sha256(_file_key(source).encode()).hexdigest()[:16]
+        key = hashlib.sha256(f"{_file_key(source)}:{THUMB_SIZE}".encode()).hexdigest()[:16]
         thumb = files / f"luma-{_slug(name)}-{key}.jpg"
         if not thumb.exists():
             to_thumb.append((source, thumb))
@@ -453,7 +456,6 @@ p { margin: 0 0 12px; color: var(--muted); }
 input { width: 100%; max-width: 320px; padding: 6px 10px; font: inherit; border: 1px solid var(--line);
         border-radius: 6px; background: var(--card); color: var(--fg); }
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
-section[data-section="lumas"] .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px;
          display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 video, canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 4px; background: #000; }
