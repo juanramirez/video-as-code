@@ -193,7 +193,8 @@ CATALOG: tuple[Entry, ...] = (
     _derive("feather", "scale: [320, 180]\nfeather: 24", source="a"),
     _derive("vignette", "vignette: 0.5", source="a"),
     _derive("rotate", "rotate: 90", source="a"),
-    _title("title card", 'text: "Hello"\nfont_size: 40\nbackground: [0, 0, 0, 120]'),
+    _title("title card", 'text: "Hello"\nfont: "DejaVu Serif"\nfont_size: 44\nfont_weight: bold\nshadow: true'),
+    _title("title card, outline", 'text: "Hello"\nfont: "Noto Serif"\nfont_size: 44\nitalic: true\noutline: 2\noutline_color: [180, 30, 30, 255]'),
 )
 
 SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")
