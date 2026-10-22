@@ -603,8 +603,9 @@ def _photos() -> Optional[dict[str, Path]]:
     return found if all(path.is_file() for path in found.values()) else None
 
 
-def _recipes() -> dict[str, list[str]]:
-    """file name -> ffmpeg arguments that make it."""
+def _recipes(photos: bool = True) -> dict[str, list[str]]:
+    """file name -> ffmpeg arguments that make it - over the photos, if
+    there and `photos`, else generated pictures."""
     w, h = _SAMPLE_SIZE
     s = f"{w}x{h}"
     fill = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
@@ -623,7 +624,7 @@ def _recipes() -> dict[str, list[str]]:
         "-f", "lavfi", "-i", f"aevalsrc=exprs='{pluck}+{hit}|{pluck}+{hit}':s=44100:d=4",
         "-c:a", "aac", "-b:a", "128k",
     ]
-    photos = _photos()
+    photos = _photos() if photos else None
     if photos is None:
         return {
             "a.png": ["-f", "lavfi", "-i", f"mandelbrot=s={s}:start_scale=1.2", "-frames:v", "1"],
@@ -711,13 +712,13 @@ def _teal_orange(path: Path, size: int = 17) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def _make_samples(folder: Path) -> dict[str, Path]:
+def _make_samples(folder: Path, photos: bool = True) -> dict[str, Path]:
     """The pictures and videos the previews play over, made once: each
     named by its recipe, so a different one (the photos installed or
     removed, a new recipe) makes it again."""
     folder.mkdir(parents=True, exist_ok=True)
     paths = {}
-    for name, args in _recipes().items():
+    for name, args in _recipes(photos).items():
         stem, ext = name.rsplit(".", 1)
         path = folder / f"{stem}-{hashlib.sha256(repr(args).encode()).hexdigest()[:10]}.{ext}"
         if not path.exists():
@@ -856,12 +857,16 @@ def build(
     on_progress: Callable[[str], None] = lambda text: None,
     doc_links: Optional[dict[str, str]] = None,
     docs_home: Optional[str] = None,
+    public: bool = False,
 ) -> Path:
     """Writes the page (rendering what isn't cached yet); returns its path.
     Part of the docs (docs.py): `doc_links` maps the reference's keys to
     their URLs, each card linking to its key's; `docs_home`, the docs'
     first page, linked at the top - and which card each key's link goes
-    to is written to DOC_CARDS next to the page."""
+    to is written to DOC_CARDS next to the page. `public`: a page to
+    publish (docs.py --public) - over generated pictures, not the
+    wallpapers' photos; without OpenShot's wipe shapes (GPL) nor the
+    user's own LUTs."""
     if probe.find_melt() is None:
         raise KdenliveAsCodeError(msg("cli.render_missing_melt"))
     root = (cache_root or default_cache_root()) / GALLERY_DIR
@@ -869,7 +874,7 @@ def build(
     work = root / "work"
     files.mkdir(parents=True, exist_ok=True)
     work.mkdir(parents=True, exist_ok=True)
-    samples = _with_own(_make_samples(root / "samples"), own)
+    samples = _with_own(_make_samples(root / "samples", photos=not public), own)
     base = _code_key() + "\n" + str(probe.find_melt())
     melt_base = f"melt catalog 1\n{probe.find_melt()}\n{_melt_version()}"
 
@@ -880,7 +885,9 @@ def build(
     melt_catalog = melt_entries(root / "melt-catalog.json")
     if melt_catalog:  # the references "no change" is told against
         melt_catalog = (replace(_SOUND_BASELINE, melt_catalog=True), *melt_catalog)
-    catalog = (*CATALOG, *lut_entries(), *glsl_entries(), *openshot_entries(), *gl_entries(), *melt_catalog)
+    catalog = (*CATALOG, *(() if public else lut_entries()), *glsl_entries(), *openshot_entries(), *gl_entries(), *melt_catalog)
+    if public:
+        catalog = tuple(e for e in catalog if lumas.OPENSHOT_PREFIX not in e.project)
     baselines = {source: replace(e, melt_catalog=True) for source, e in _BASELINES.items()}
     previews = [(e, output(e)) for e in catalog if e.render]
     if melt_catalog:
@@ -977,6 +984,8 @@ def build(
     luma_cards = []
     to_thumb = []
     for name, source in lumas.all_lumas():
+        if public and name.startswith(lumas.OPENSHOT_PREFIX):
+            continue
         key = hashlib.sha256(f"{_file_key(source)}:{THUMB_SIZE}".encode()).hexdigest()[:16]
         thumb = files / f"luma-{_slug(name)}-{key}.jpg"
         if not thumb.exists():

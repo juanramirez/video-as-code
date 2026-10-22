@@ -215,6 +215,11 @@ def test_openshot_effects_a_card_each(monkeypatch):
     assert "libopenshot: 9.9" in cards["Wave"].project and cards["Wave"].description == "Waves."
 
 
+def test_public_samples_without_the_photos():
+    recipes = " ".join(" ".join(args) for args in gallery._recipes(photos=False).values())
+    assert "/usr/share/backgrounds" not in recipes and "mandelbrot" in recipes
+
+
 # --- part of the docs (docs.py): each card linked to its key ------------------
 
 def test_a_card_knows_its_key():
