@@ -95,3 +95,20 @@ scenes:
     )
     placements = [p for t in load_and_resolve(path).tracks for p in t.placements]
     assert [p.lut is not None for p in placements] == [True, False]
+
+
+def test_by_name_from_the_projects_luts_then_the_users(tmp_path: Path, assets_dir: Path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    users = tmp_path / "data" / "video-as-code" / "luts"
+    users.mkdir(parents=True)
+    write_cube(users / "warm.cube")
+    write_cube(users / "cold.cube")
+    (tmp_path / "luts").mkdir()
+    write_cube(tmp_path / "luts" / "warm.cube", invert=True)  # (the project's own wins)
+    resolved = load_and_resolve(_project(tmp_path, assets_dir, "lut: warm"))
+    assert resolved.tracks[0].placements[0].lut == str((tmp_path / "luts" / "warm.cube").resolve())
+    resolved = load_and_resolve(_project(tmp_path, assets_dir, "lut: cold"))
+    assert resolved.tracks[0].placements[0].lut == str((users / "cold.cube").resolve())
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_project(tmp_path, assets_dir, "lut: hot"))
+    assert "there are: cold, warm" in str(exc.value)

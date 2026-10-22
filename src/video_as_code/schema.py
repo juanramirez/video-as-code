@@ -11,6 +11,8 @@ Philosophy: accumulate every error found and report them all at once
 """
 from __future__ import annotations
 
+import os
+
 import math
 from dataclasses import replace
 from pathlib import Path
@@ -236,11 +238,30 @@ def _title_style(item: dict, errors: list[str]) -> Optional[dict]:
     return {"font_weight": weight, "italic": italic, "outline": float(outline), "outline_color": outline_color, "shadow": shadow}
 
 
+def lut_dirs(project_dir: Path) -> list[Path]:
+    """Where `lut:` looks a LUT up by name: `luts/` next to the project
+    file, then the user's own (<XDG data dir>/video-as-code/luts)."""
+    data = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
+    return [project_dir / "luts", Path(data) / "video-as-code" / "luts"]
+
+
+def luts_by_name(project_dir: Path) -> dict[str, Path]:
+    """name -> file, of the LUTs `lut:` finds by name (the first folder's win)."""
+    found: dict[str, Path] = {}
+    for folder in reversed(lut_dirs(project_dir)):
+        if folder.is_dir():
+            for path in sorted(folder.iterdir()):
+                if path.suffix.lower() in LUT_SUFFIXES:
+                    found[path.stem] = path
+    return found
+
+
 def _parse_lut(raw: Any, ctx: str, errors: list[str]) -> Optional[str]:
-    """`lut:` as written: a file name (resolved by _lut_file)."""
+    """`lut:` as written: a file name, or a LUT's name (resolved by _lut_file)."""
     if raw is None:
         return None
-    if not isinstance(raw, str) or Path(raw).suffix.lower() not in LUT_SUFFIXES:
+    named = isinstance(raw, str) and raw and not Path(raw).suffix and "/" not in raw
+    if not named and (not isinstance(raw, str) or Path(raw).suffix.lower() not in LUT_SUFFIXES):
         errors.append(msg("validation.lut_invalid", ctx=ctx, value=raw, suffixes=", ".join(LUT_SUFFIXES)))
         return None
     return raw
@@ -257,6 +278,13 @@ def _lut_file(lut: str | None, base: Path, ctx: str, errors: list[str]) -> str |
     """`lut:` as an absolute path (relative to the project file) - an existing file."""
     if lut is None:
         return None
+    if not Path(lut).suffix and "/" not in lut:  # a name: in lut_dirs
+        known = luts_by_name(base)
+        if lut not in known:
+            errors.append(msg("validation.lut_unknown", ctx=ctx, name=lut, known=", ".join(sorted(known)) or "-",
+                              dirs=", ".join(str(d) for d in lut_dirs(base))))
+            return None
+        return str(known[lut].resolve())
     path = Path(lut) if Path(lut).is_absolute() else base / lut
     if not path.is_file():
         errors.append(msg("validation.lut_missing", ctx=ctx, path=path))
