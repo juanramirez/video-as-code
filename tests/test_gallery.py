@@ -71,9 +71,9 @@ def test_cli_gallery_with_a_missing_file(tmp_path: Path, capsys):
 def test_links_to_every_section_folded():
     page = gallery._page([], {}, [], [Path(__file__), Path(__file__)], Path(__file__).parent)
     for section in gallery.SECTIONS:
-        assert f'<a href="#{section}">' in page and f'<section id="{section}" data-section="{section}"><details>' in page \
-            or f'<section id="{section}" data-section="{section}" data-from=' in page
+        assert f'<a href="#{section}" data-tab=' in page and f'<section id="{section}" data-section="{section}" data-tab=' in page
     assert "<details open" not in page
+    assert set(gallery.SECTIONS) == {s for sections in gallery.TABS.values() for s in sections}  # each in a tab
 
 
 def test_own_entries_described():

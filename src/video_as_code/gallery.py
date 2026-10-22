@@ -194,6 +194,8 @@ CATALOG: tuple[Entry, ...] = (
 )
 
 SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "derive", "title", "melt_filters", "melt_audio")
+# the page's two tabs: what goes between clips, and what goes on one
+TABS = {"transitions": ("transitions", "lumas", "gl", "melt_transitions"), "effects": ("clip", "derive", "title", "melt_filters", "melt_audio")}
 
 
 def gl_entries() -> tuple[Entry, ...]:
@@ -785,6 +787,7 @@ def _page(
         # (the canvas is "tainted"): so they go in the page itself
         return "data:image/jpeg;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
 
+    tab_of = {section: tab for tab, sections_ in TABS.items() for section in sections_}
     sections = []
     for section in SECTIONS:
         if section == "lumas":
@@ -840,15 +843,22 @@ def _page(
             if section == "gl" and not items:
                 hint = msg("gallery.hint_gl_not_installed")
         sections.append(
-            f'<section id="{section}" data-section="{section}"{extra}><details>'
+            f'<section id="{section}" data-section="{section}" data-tab="{tab_of[section]}"{extra}><details>'
             f'<summary><h2>{html.escape(msg(f"gallery.section_{section}"))}</h2>'
             f'<span class="count">{cards.count("<figure")}</span></summary>'
             f'<p>{html.escape(hint)}</p><div class="grid">{cards}</div></details></section>'
         )
-    nav = "".join(f'<a href="#{section}">{html.escape(msg(f"gallery.section_{section}"))}</a>' for section in SECTIONS)
+    nav = "".join(
+        f'<a href="#{section}" data-tab="{tab_of[section]}">{html.escape(msg(f"gallery.section_{section}"))}</a>'
+        for section in SECTIONS
+    )
+    tabs = "".join(
+        f'<button type="button" role="tab" data-tab="{tab}">{html.escape(msg(f"gallery.tab_{tab}"))}</button>' for tab in TABS
+    )
     return (
         _PAGE.replace("{lang}", html.escape(msg("gallery.lang")))
         .replace("{nav}", nav)
+        .replace("{tabs}", tabs)
         .replace("{title}", html.escape(msg("gallery.title")))
         .replace("{intro}", html.escape(msg("gallery.intro")))
         .replace("{filter}", html.escape(msg("gallery.filter")))
@@ -876,6 +886,11 @@ body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--f
 header, section { max-width: 1200px; margin: 0 auto; }
 header { position: sticky; top: 0; z-index: 1; background: var(--bg); padding-bottom: 12px; }
 h1 { font-size: 20px; margin: 0 0 6px; }
+.tabs { display: flex; gap: 4px; margin: 4px 0 12px; border-bottom: 1px solid var(--line); }
+.tabs button { font: inherit; font-weight: 600; padding: 8px 16px; border: 1px solid transparent; border-bottom: none;
+               border-radius: 8px 8px 0 0; background: none; color: var(--muted); cursor: pointer; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--fg); background: var(--bg); border-color: var(--line); }
+[data-tab].off { display: none !important; }
 nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
 nav a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card);
         color: var(--fg); text-decoration: none; font-size: 13px; }
@@ -917,6 +932,7 @@ figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 <header>
 <h1>{title}</h1>
 <p>{intro}</p>
+<div class="tabs" role="tablist">{tabs}</div>
 <nav>{nav}</nav>
 <input type="search" placeholder="{filter}" aria-label="{filter}">
 <label class="hide"><input type="checkbox"> {hide_unchanged}</label>
@@ -1006,6 +1022,17 @@ for (const pre of document.querySelectorAll("figure > pre")) {
     }).catch(() => {});
   });
 }
+// the two tabs; the last one shown is remembered
+function showTab(tab) {
+  for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
+  for (const el of document.querySelectorAll("nav a[data-tab], section[data-tab]")) el.classList.toggle("off", el.dataset.tab !== tab);
+  try { localStorage.setItem("gallery-tab", tab); } catch (e) {}
+}
+for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => showTab(b.dataset.tab));
+let firstTab = "transitions";
+try { firstTab = localStorage.getItem("gallery-tab") || firstTab; } catch (e) {}
+const linked = location.hash && document.querySelector(location.hash + "[data-tab]");
+showTab(linked ? linked.dataset.tab : firstTab);
 // a link to a section opens it
 for (const a of document.querySelectorAll('nav a')) {
   a.addEventListener("click", () => {
