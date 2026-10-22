@@ -479,7 +479,7 @@ def _page(
         if section == "lumas":
             cards = "\n".join(
                 f'<figure class="luma"><canvas width="{THUMB_SIZE[0]}" height="{THUMB_SIZE[1]}" data-src="{inline(thumb)}"></canvas>'
-                f"<pre><code>luma: {html.escape(name)}</code></pre></figure>"
+                f"<pre><code>transition: wipe\nluma: {html.escape(name)}</code></pre></figure>"
                 for name, thumb in luma_cards
             )
             hint = msg("gallery.lumas_hint")

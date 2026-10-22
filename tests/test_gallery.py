@@ -39,7 +39,7 @@ def test_page_from_cached_renders(tmp_path: Path, melt, openshot_transitions, mo
     text = page.read_text(encoding="utf-8")
     assert sorted(rendered) == sorted(["dissolve", "fade_in / fade_out", "broken"])
     assert text.count("<video") == 2  # the broken one shows its error instead
-    assert "speed" in text and "luma: openshot/ramp_left" in text
+    assert "speed" in text and "transition: wipe\nluma: openshot/ramp_left" in text
     assert "files/transitions-dissolve-" in text
     # what the page reads the pixels of is in it, not in files beside it
     # (a page opened from a file can't read another file's pixels)
