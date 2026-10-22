@@ -521,7 +521,12 @@ transition the installed `melt` has (`melt:` and `melt/<service>`), at
 their defaults: video ones over the pictures, audio filters over a
 sample sound (a plucked arpeggio, to listen to), each with melt's own
 description, and marked when at its defaults it changes nothing - an
-option hides those. melt is asked about its services once per version
+option hides those. One that does is shown with other values instead
+(each ranged parameter toward one end, then the other, up to five
+tries), and one that can't render here says why in a line - melt
+crashing on it, ffmpeg unable to set it up - with the whole error
+folded under it. Filters that only measure (levels, loudness,
+silences) are listed apart, without a preview. melt is asked about its services once per version
 (`melt-catalog.json` in the cache), and their previews depend on melt
 and the samples only, so a change to this project doesn't render them
 again.

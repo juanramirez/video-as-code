@@ -65,13 +65,6 @@ code itself already marks the boundary.
   for) will silently get a mixed-down-to-silence result instead - found
   the same way, via `projects/`.
 
-- **Gallery follow-ups**: audio analysis filters (astats, ebur128,
-  volumedetect...) in the analysis section rather than the audio one;
-  more than three tries for filters whose ranged parameters didn't
-  change anything (a second parameter at a time, or both ends of a
-  range); the 10 melt services that fail even at their defaults
-  (sox asserts, a few hangs) listed with why rather than as plain
-  errors.
 
 ## Capabilities not yet touched at all
 
