@@ -209,6 +209,7 @@ required.
 | `stabilize` | - | `true` smooths out camera shake (single pass). |
 | `lut` | - | A 3D LUT file applied to the picture, after `color_grade` - `.cube`, `.3dl`, `.dat` or `.m3d`, relative to the project file: a look, or a camera's log-to-Rec.709 conversion. Or a LUT's name, without extension (`lut: teal-orange`): looked up in `luts/` next to the project file, then in `~/.local/share/video-as-code/luts/` (`$XDG_DATA_HOME`) - a pack of looks shared by every project. |
 | `lut_interp` | `tetrahedral` | How the LUT is interpolated between its points: `nearest`, `trilinear` or `tetrahedral`. |
+| `glsl` | - | A GLSL effect on the picture, run on the GPU: one of this project's shaders by name (`crt`, `chromatic`, `wave`, `glitch`, `kaleidoscope`, `vhs`) or a `.glsl` file of your own, relative to the project file; `{shader: ..., params: {...}}` to set its parameters. See *`glsl:` shaders* below. |
 | `focus_rect` | - | `[x%, y%, w%, h%]` kept sharp while the rest is blurred. |
 | `focus_blur` | `4.0` | Blur radius for `focus_rect`, percent of the width (`0`-`50`). |
 | `chroma_key` | - | Colour to make transparent (`"#00ff00"`). |
@@ -451,3 +452,38 @@ scenes:
   `parts:` and a file per part, named after its sequence and next to the
   main one, its paths absolute. Nested sequences in any other shape stay
   in `x_kdenlive_raw`.
+
+## `glsl:` shaders
+
+`glsl:` on a clip runs a GLSL ES 3.00 shader over its picture on the GPU,
+through a small plugin built once with `video-as-code install-gl-transitions`
+(the one `transition: gl` uses has this sibling).
+
+| Shader | Parameters (default, range) | What it does |
+|---|---|---|
+| `crt` | `curvature` (0.15, 0-0.6), `scanlines` (0.35, 0-1), `vignette` (0.4, 0-1) | An old CRT screen: a curved picture, scanlines, darker corners. |
+| `chromatic` | `amount` (0.012, 0-0.1) | Red and blue pulled apart toward the edges. |
+| `wave` | `amplitude` (0.012, 0-0.1), `frequency` (14, 1-80), `speed` (2, 0-10) | The picture ripples, as through moving water. |
+| `glitch` | `intensity` (0.5, 0-1), `rate` (6, 0.5-30 per second) | Bands jump sideways and split their colours, now and then. |
+| `kaleidoscope` | `segments` (6, 2-24), `turn` (0.1, -2-2 turns per second) | Mirrored segments around the centre, turning. |
+| `vhs` | `strength` (0.6, 0-1) | A worn tape: colour bleeding, a rolling bright band, noise, jitter. |
+
+A shader of your own is a `.glsl` file with `vec4 effect(vec2 uv)`: it
+reads the picture with `getColor(uv)` (uv from 0 to 1, origin bottom
+left) and has `time` (seconds into the clip), `progress` (0 to 1 over
+it), `ratio` (width / height) and `resolution` (in pixels); its own
+`uniform`s get the values in `params` (numbers, `true`/`false`, lists of
+2-4 numbers for `vec2`-`vec4`) - one not given is 0.
+
+```glsl
+// warm.glsl
+uniform float amount;
+vec4 effect(vec2 uv) {
+  vec4 c = getColor(uv);
+  return vec4(c.r + amount, c.g, c.b - amount, 1.0);
+}
+```
+
+```yaml
+- {clip: beach, start: 0, duration: 4, glsl: {shader: looks/warm.glsl, params: {amount: 0.1}}}
+```

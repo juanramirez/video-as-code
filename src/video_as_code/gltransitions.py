@@ -68,45 +68,51 @@ def install_dir() -> Path:
     return Path(data) / "video-as-code" / "frei0r"
 
 
-def _source_hash() -> str:
-    return hashlib.sha256(_SOURCE.read_bytes()).hexdigest()
+# the plugins built from this package: the transition, and its
+# single-clip sibling (glfilters.py)
+PLUGINS = {PLUGIN: _SOURCE, "glfilter.so": DATA_DIR / "glfilter.c"}
+
+
+def _source_hash(source: Path = _SOURCE) -> str:
+    return hashlib.sha256(source.read_bytes()).hexdigest()
 
 
 def _stamp(plugin: Path) -> Path:
     return plugin.with_name(plugin.name + ".source-sha256")
 
 
-def installed() -> bool:
-    """Whether the plugin is built, from the current source."""
-    plugin = install_dir() / PLUGIN
+def installed(plugin_name: str = PLUGIN) -> bool:
+    """Whether a plugin is built, from its current source."""
+    plugin = install_dir() / plugin_name
     try:
-        return plugin.is_file() and _stamp(plugin).read_text().strip() == _source_hash()
+        return plugin.is_file() and _stamp(plugin).read_text().strip() == _source_hash(PLUGINS[plugin_name])
     except OSError:
         return False
 
 
 def install(report: Callable[[str], None] = lambda text: None) -> Path:
-    """Builds the plugin into install_dir(); returns its path."""
+    """Builds the plugins (PLUGINS) into install_dir(); returns the folder."""
     compiler = os.environ.get("CC") or shutil.which("cc") or shutil.which("gcc")
     if compiler is None:
         raise GlTransitionsError(msg("gltransitions.compiler_missing"))
     target_dir = install_dir()
     target_dir.mkdir(parents=True, exist_ok=True)
-    plugin = target_dir / PLUGIN
-    report(msg("gltransitions.building", path=plugin))
-    with tempfile.TemporaryDirectory(dir=target_dir) as tmp:
-        built = Path(tmp) / PLUGIN
-        result = subprocess.run(
-            [compiler, "-shared", "-fPIC", "-O2", str(_SOURCE), "-o", str(built), "-lEGL", "-lGLESv2", "-lpthread"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            raise GlTransitionsError(msg("gltransitions.build_failed", stderr=result.stderr.strip()))
-        built.replace(plugin)
-    _stamp(plugin).write_text(_source_hash() + "\n")
-    report(msg("gltransitions.installed", path=plugin))
-    return plugin
+    for name, source in PLUGINS.items():
+        plugin = target_dir / name
+        report(msg("gltransitions.building", path=plugin))
+        with tempfile.TemporaryDirectory(dir=target_dir) as tmp:
+            built = Path(tmp) / name
+            result = subprocess.run(
+                [compiler, "-shared", "-fPIC", "-O2", str(source), "-o", str(built), "-lEGL", "-lGLESv2", "-lpthread"],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                raise GlTransitionsError(msg("gltransitions.build_failed", stderr=result.stderr.strip()))
+            built.replace(plugin)
+        _stamp(plugin).write_text(_source_hash(source) + "\n")
+        report(msg("gltransitions.installed", path=plugin))
+    return target_dir
 
 
 def _format(value: Any) -> str:

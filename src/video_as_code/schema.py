@@ -26,7 +26,7 @@ from . import probe, sources_lock, titles
 from . import upscale as upscale_mod
 from .errors import ValidationErrors
 from .i18n import msg
-from . import gltransitions, lumas, meltpass
+from . import gltransitions, glfilters, lumas, meltpass
 from . import presets as presets_mod
 from .models import (
     AFFINE_STYLES,
@@ -1352,6 +1352,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         stabilize=stabilize,
         lut=_parse_lut(item.get("lut"), ctx, errors),
         lut_interp=_parse_lut_interp(item.get("lut_interp", "tetrahedral"), ctx, errors),
+        glsl=item.get("glsl"),
         melt_filters=meltpass.parse_filters(item.get("melt"), ctx, errors),
     )
 
@@ -1860,6 +1861,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     stabilize=placement.stabilize,
                     lut=_lut_file(placement.lut, doc.source_path.parent, ctx, errors),
                     lut_interp=placement.lut_interp,
+                    glsl_filter=None if placement.glsl is None else glfilters.parse(placement.glsl, ctx, doc.source_path.parent, errors),
                     melt_filters=placement.melt_filters,
                 )
             )

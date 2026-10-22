@@ -280,6 +280,8 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             else:
                 extras["chroma_key_distance"] = chroma_key_distance
 
+        if raw.get("glsl") is not None:
+            extras["glsl"] = raw.get("glsl")
         if raw.get("lut") is not None:
             from .schema import _parse_lut, _parse_lut_interp  # (schema imports this module lazily)
 
@@ -465,6 +467,7 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
                 chroma_key_distance=extras.get("chroma_key_distance", 0.35),
                 lut=extras.get("lut"),
                 lut_interp=extras.get("lut_interp", "tetrahedral"),
+                glsl=extras.get("glsl"),
                 melt_filters=extras.get("melt_filters", ()),
             )
             if transition in BURST_TRANSITIONS:

@@ -1006,6 +1006,8 @@ def _build_track(
                 _add_color_grade_keyframes_filter(ids, entry, placement)
             if placement.lut is not None:
                 _add_lut_filter(ids, entry, placement)
+            if placement.glsl_filter is not None:  # (glfilters.py)
+                _add_melt_service(ET.SubElement(entry, "filter", {"id": ids.next("filter")}), placement.glsl_filter)
             if placement.stabilize:
                 _add_deshake_filter(ids, entry)
         if placement.mute:

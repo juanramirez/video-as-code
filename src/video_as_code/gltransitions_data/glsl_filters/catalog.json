@@ -1,0 +1,20 @@
+{
+ "crt": {"description": "An old CRT screen: a curved picture, scanlines, darker corners.", "animated": false,
+  "params": {"curvature": {"type": "float", "default": 0.15, "min": 0, "max": 0.6},
+             "scanlines": {"type": "float", "default": 0.35, "min": 0, "max": 1},
+             "vignette": {"type": "float", "default": 0.4, "min": 0, "max": 1}}},
+ "chromatic": {"description": "Chromatic aberration: red and blue pulled apart toward the edges.", "animated": false,
+  "params": {"amount": {"type": "float", "default": 0.012, "min": 0, "max": 0.1}}},
+ "wave": {"description": "The picture ripples, as seen through moving water.", "animated": true,
+  "params": {"amplitude": {"type": "float", "default": 0.012, "min": 0, "max": 0.1},
+             "frequency": {"type": "float", "default": 14.0, "min": 1, "max": 80},
+             "speed": {"type": "float", "default": 2.0, "min": 0, "max": 10}}},
+ "glitch": {"description": "Bands of the picture jump sideways and split their colours, now and then.", "animated": true,
+  "params": {"intensity": {"type": "float", "default": 0.5, "min": 0, "max": 1},
+             "rate": {"type": "float", "default": 6.0, "min": 0.5, "max": 30}}},
+ "kaleidoscope": {"description": "The picture mirrored into segments around the centre, turning.", "animated": true,
+  "params": {"segments": {"type": "float", "default": 6.0, "min": 2, "max": 24},
+             "turn": {"type": "float", "default": 0.1, "min": -2, "max": 2}}},
+ "vhs": {"description": "A worn videotape: colour bleeding sideways, a rolling bright band, noise, jitter.", "animated": true,
+  "params": {"strength": {"type": "float", "default": 0.6, "min": 0, "max": 1}}}
+}

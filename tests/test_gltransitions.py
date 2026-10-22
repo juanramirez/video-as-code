@@ -188,3 +188,77 @@ def test_a_vector_parameter_arrives(plugin, tmp_path: Path, assets_dir: Path):
     out = _render(_scene_project(tmp_path, assets_dir, "    gl: fadecolor\n    gl_params: {color: [0, 1, 0]}"), tmp_path)
     r, g, b = _mean_rgb(out, 2.0, "320:240:0:0")
     assert g > 200 and r < 60 and b < 60, (r, g, b)
+
+
+# --- glsl: on a clip (glfilters.py), built with the same install ------------------
+
+from video_as_code import glfilters  # noqa: E402
+
+INVERT = "vec4 effect(vec2 uv) { vec4 c = getColor(uv); return vec4(vec3(1.0) - c.rgb, 1.0); }\n"
+
+
+def _glsl(name, base: Path, **kw):
+    errors: list[str] = []
+    return glfilters.parse(name, "c", base, errors), errors
+
+
+def test_glsl_bundled_and_own(plugin, tmp_path: Path):
+    service, errors = _glsl({"shader": "wave", "params": {"amplitude": 0.03}}, tmp_path)
+    assert errors == [] and service.service == "frei0r.glfilter"
+    props = dict(service.properties)
+    assert props["uniforms"] == "amplitude:0.03 frequency:14 speed:2" and props["shader"].endswith("wave.glsl")
+    (tmp_path / "mine.glsl").write_text(INVERT, encoding="utf-8")
+    service, errors = _glsl({"shader": "mine.glsl", "params": {"amount": 0.5}}, tmp_path)
+    assert errors == [] and dict(service.properties)["shader"] == str((tmp_path / "mine.glsl").resolve())
+
+
+@pytest.mark.parametrize("raw, expected", [
+    ("crtt", "crt"), ({"shader": "crt", "params": {"curve": 1}}, "curvature"),
+    ({"shader": "crt", "params": {"curvature": 5}}, "float 0..0.6"), ("nowhere.glsl", "nowhere.glsl"), (3, "glsl"),
+])
+def test_glsl_rejected(plugin, tmp_path: Path, raw, expected):
+    service, errors = _glsl(raw, tmp_path)
+    assert service is None and expected in " ".join(errors), errors
+
+
+def test_glsl_without_the_plugin(no_plugin, tmp_path: Path):
+    _, errors = _glsl("crt", tmp_path)
+    assert "install-gl-transitions" in errors[0]
+
+
+def _glsl_project(tmp_path: Path, assets_dir: Path, glsl: str) -> Path:
+    path = tmp_path / "project.yaml"
+    path.write_text(f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - {{id: red, path: {assets_dir / "photo.png"}}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: red, start: 0, duration: 1, glsl: {glsl}}}
+""", encoding="utf-8")
+    return path
+
+
+def test_glsl_imported_back(plugin, tmp_path: Path, assets_dir: Path):
+    out = tmp_path / "p.kdenlive"
+    xmlgen.write(load_and_resolve(_glsl_project(tmp_path, assets_dir, "{shader: crt, params: {scanlines: 0.6}}")), out)
+    clip = reverse.import_kdenlive(out).data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["glsl"] == {"shader": "crt", "params": {"scanlines": 0.6}}
+
+
+def test_glsl_own_shader_renders(plugin, tmp_path: Path, assets_dir: Path):
+    (tmp_path / "invert.glsl").write_text(INVERT, encoding="utf-8")
+    out = _render(_glsl_project(tmp_path, assets_dir, "invert.glsl"), tmp_path)
+    r, g, b = _mean_rgb(out, 0.5, "320:240:0:0")
+    assert r < 60 and g > 200 and b > 200, (r, g, b)  # red, inverted: cyan
+
+
+@pytest.mark.parametrize("name", sorted(glfilters.catalog()))
+def test_glsl_bundled_shaders_compile_and_draw(plugin, tmp_path: Path, assets_dir: Path, name: str):
+    """Each bundled shader compiles and draws something (a shader that
+    doesn't compile comes out black - see glfilter.c)."""
+    out = _render(_glsl_project(tmp_path, assets_dir, name), tmp_path)
+    r, g, b = _mean_rgb(out, 0.5, "320:240:0:0")
+    assert r + g + b > 60, (name, r, g, b)

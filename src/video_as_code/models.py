@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .timecode import FrameRate
 
@@ -413,6 +413,9 @@ class ClipPlacementSpec:
     # checked by an inverting LUT). Relative to the project file.
     lut: Optional[str] = None
     lut_interp: str = "tetrahedral"  # one of LUT_INTERPS
+    # `glsl:` - a GLSL effect on the picture (glfilters.py), as written:
+    # resolved (a .glsl file against the project's folder) by schema.py
+    glsl: Any = None
     # `melt:` - any MLT filter by service name, after the clip's own
     # (see meltpass.py)
     melt_filters: tuple["MeltService", ...] = ()
@@ -614,6 +617,7 @@ class ResolvedPlacement:
     stabilize: Optional[bool] = None
     lut: Optional[str] = None  # absolute - see ClipPlacementSpec
     lut_interp: str = "tetrahedral"
+    glsl_filter: Optional["MeltService"] = None  # see ClipPlacementSpec.glsl
     melt_filters: tuple["MeltService", ...] = ()  # see ClipPlacementSpec
 
     @property

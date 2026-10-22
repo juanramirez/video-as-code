@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Optional
 
-from . import gltransitions, lumas, meltpass, probe, titles, xmlgen
+from . import glfilters, gltransitions, lumas, meltpass, probe, titles, xmlgen
 from .i18n import msg
 from .timecode import FrameRate, resolve_fps
 
@@ -497,6 +497,10 @@ class Importer:
             return {"fade_out": round(length_s, 3)}
         if service == "volume" and kid == "mute":
             return {"mute": True}
+        if service == glfilters.SERVICE and props.get("shader") and (f_in, f_out) == (entry_in, entry_out):
+            glsl = glfilters.from_properties(props)
+            if glsl is not None:
+                return {"glsl": glsl}
         if service == "avfilter.lut3d" and props.get("av.file") and (f_in, f_out) == (entry_in, entry_out):
             lut = {"lut": props["av.file"]}
             interp = props.get("av.interp", "tetrahedral")

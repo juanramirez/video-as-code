@@ -271,9 +271,6 @@ melt 7.32.0, not assumed.
   process like Real-ESRGAN), since a frei0r/MLT bridge would mix Qt 5
   (libopenshot) and Qt 6 (MLT) in one process. Its transitions are
   covered already (`luma: openshot/<name>`).
-- **Single-clip GLSL filters**: the same kind of frei0r plugin as
-  `frei0r.gltransition`, as a filter (Shadertoy-style glitch, CRT,
-  waves...).
 - **`lut:` from a LUT pack by name**, and a gallery card per LUT found
   next to the project.
 

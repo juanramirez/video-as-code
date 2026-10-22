@@ -38,6 +38,8 @@ video_as_code = [
     "gltransitions_data/*.json",
     "gltransitions_data/LICENSE",
     "gltransitions_data/glsl3/*.glsl",
+    "gltransitions_data/glsl_filters/*.glsl",
+    "gltransitions_data/glsl_filters/*.json",
 ]
 
 [tool.pytest.ini_options]

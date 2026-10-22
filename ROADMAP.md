@@ -1343,3 +1343,11 @@ whole video can be built from a fresh checkout anywhere.
   frames. Checked by real render over a clip below; a melt without the
   module (a from-source build may lack it) is a validation error
   (`tests/test_animation.py`).
+- **`glsl:` - GLSL effects on a clip** — **implemented** (2026-10-22):
+  a frei0r filter plugin, `frei0r.glfilter` (`glfilter.c`, the
+  single-clip sibling of gltransition.c, built with it), runs a GLSL
+  ES 3.00 `vec4 effect(vec2 uv)` over a clip's picture with `time` and
+  `progress`; six shaders of our own bundled (crt, chromatic, wave,
+  glitch, kaleidoscope, vhs - each checked to compile and draw by a real
+  render) and the user's own `.glsl` files (`glfilters.py`,
+  `tests/test_gltransitions.py`).
