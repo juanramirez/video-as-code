@@ -65,6 +65,21 @@ code itself already marks the boundary.
   for) will silently get a mixed-down-to-silence result instead - found
   the same way, via `projects/`.
 
+- **`parts:` and the rest of the tool** (since 2026-10-22, ROADMAP.md):
+  `fetch`/`--fetch` (each part's `source:`/`url:` clips, its own lock),
+  `--proxy` (proxies.apply on every part's sequence), `--split` (a
+  segment cut across nested sequences), autoprune before a render of a
+  project with parts (it reads the main file only, so it skips), and
+  `import` of a `.kdenlive` with nested sequences (into parts, or at
+  least keeping them whole) - all stop with a clear "not yet" today.
+- **Gallery follow-ups**: audio analysis filters (astats, ebur128,
+  volumedetect...) in the analysis section rather than the audio one;
+  more than three tries for filters whose ranged parameters didn't
+  change anything (a second parameter at a time, or both ends of a
+  range); the 10 melt services that fail even at their defaults
+  (sox asserts, a few hangs) listed with why rather than as plain
+  errors.
+
 ## Capabilities not yet touched at all
 
 Not documented gaps — real kdenlive project capabilities this generator's
@@ -246,6 +261,30 @@ melt 7.32.0, not assumed.
   ROADMAP.md) if a future extreme-slow-motion case ever needs smoother
   interpolation than `timeremap`'s own `image_mode: nearest`/`blend`
   choice provides.
+
+## Asked for, not started (2026-10-22)
+
+- **`video-as-code docs`**: the documentation as a local web - README,
+  `docs/project-yaml.md` and the rest rendered to HTML - with the
+  gallery as part of it, each key in the reference linking to its card
+  and each card to its key; built on the user's machine (their melt,
+  their plugins: no licence trouble with OpenShot's maps or Ubuntu's
+  photos), the README staying as GitHub's front page. Its own section
+  in the README saying what it builds and where. Markdown to HTML via
+  an optional `markdown` dependency, or a small converter of our own.
+- **Effects from libopenshot** (its Wave, AnalogTape, Sphere,
+  LensFlare...): as a `derive:` operation that renders a clip through
+  libopenshot (python3-openshot, Python 3.14, run as a separate
+  process like Real-ESRGAN), since a frei0r/MLT bridge would mix Qt 5
+  (libopenshot) and Qt 6 (MLT) in one process. Its transitions are
+  covered already (`luma: openshot/<name>`).
+- **Single-clip GLSL filters**: the same kind of frei0r plugin as
+  `frei0r.gltransition`, as a filter (Shadertoy-style glitch, CRT,
+  waves...).
+- **Lottie animations**: MLT's `glaxnimate` producer plays Lottie/JSON
+  animations (LottieFiles) - animated titles, stickers, overlays.
+- **`lut:` from a LUT pack by name**, and a gallery card per LUT found
+  next to the project.
 
 ## Other rendering engines
 
