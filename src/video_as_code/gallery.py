@@ -998,14 +998,14 @@ figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .toast.on { opacity: 1; }
 </style>
 </head>
-<body>
+<body class="hide-unchanged">
 <header>
 <h1>{title}</h1>
 <p>{intro}</p>
 <div class="tabs" role="tablist">{tabs}</div>
 <nav>{nav}</nav>
 <input type="search" placeholder="{filter}" aria-label="{filter}">
-<label class="hide"><input type="checkbox"> {hide_unchanged}</label>
+<label class="hide"><input type="checkbox" checked> {hide_unchanged}</label>
 </header>
 {sections}
 <div class="toast" role="status"></div>
@@ -1110,18 +1110,31 @@ for (const a of document.querySelectorAll('nav a')) {
     if (details) details.open = true;
   });
 }
+// each section's count: the cards it shows, after the search and the "hide" box
+function shown(fig) {
+  return !fig.hidden && !(document.body.classList.contains("hide-unchanged") && fig.matches(".unchanged, .unavailable"));
+}
+function updateCounts() {
+  for (const sec of document.querySelectorAll("section")) {
+    const count = sec.querySelector(".count");
+    if (count) count.textContent = [...sec.querySelectorAll("figure")].filter(shown).length;
+  }
+}
 document.querySelector("label.hide input").addEventListener("change", (e) => {
   document.body.classList.toggle("hide-unchanged", e.target.checked);
+  updateCounts();
 });
 document.querySelector('input[type="search"]').addEventListener("input", (e) => {
   const q = e.target.value.toLowerCase();
   for (const fig of document.querySelectorAll("figure")) fig.hidden = !fig.textContent.toLowerCase().includes(q);
   for (const sec of document.querySelectorAll("section")) {
-    const any = [...sec.querySelectorAll("figure")].some((f) => !f.hidden);
+    const any = [...sec.querySelectorAll("figure")].some(shown);
     sec.hidden = !any;
     if (q && any) sec.querySelector("details").open = true;  // what a search finds, shown
   }
+  updateCounts();
 });
+updateCounts();
 </script>
 </body>
 </html>
