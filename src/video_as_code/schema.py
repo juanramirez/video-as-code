@@ -166,6 +166,58 @@ def _dust_pictures(pictures: tuple[str, ...] | None, base: Path, ctx: str, error
     return tuple(out)
 
 
+FONT_WEIGHTS = {"thin": 100, "light": 300, "normal": 400, "medium": 500, "semibold": 600, "bold": 700, "black": 900}
+
+
+def _rgba(value: Any) -> Optional[tuple[int, int, int, int]]:
+    if isinstance(value, (list, tuple)) and len(value) == 4 and all(
+        isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 255 for v in value
+    ):
+        return tuple(value)
+    return None
+
+
+def _title_style(item: dict, errors: list[str]) -> Optional[dict]:
+    """A title's `font_weight`, `italic`, `outline`/`outline_color` and
+    `shadow` (see titles.py) - None if one is wrong (and why, in errors)."""
+    clip_id = item.get("id")
+    before = len(errors)
+    weight = item.get("font_weight", 400)
+    if isinstance(weight, str):
+        weight = FONT_WEIGHTS.get(weight.lower(), weight)
+    if isinstance(weight, bool) or not isinstance(weight, int) or not 100 <= weight <= 900:
+        errors.append(msg("validation.title_font_weight_invalid", id=clip_id, value=item.get("font_weight"),
+                          names=", ".join(FONT_WEIGHTS)))
+    italic = item.get("italic", False)
+    if not isinstance(italic, bool):
+        errors.append(msg("validation.title_italic_invalid", id=clip_id, value=italic))
+    outline = item.get("outline", 0)
+    if isinstance(outline, bool) or not isinstance(outline, (int, float)) or outline < 0:
+        errors.append(msg("validation.title_outline_invalid", id=clip_id, value=outline))
+    outline_color = _rgba(item.get("outline_color", [0, 0, 0, 255]))
+    if outline_color is None:
+        errors.append(msg("validation.title_color_invalid", id=clip_id, field="outline_color", value=item.get("outline_color")))
+    shadow_raw = item.get("shadow", False)
+    shadow = None
+    if shadow_raw is True:
+        shadow = ((0, 0, 0, 160), 6, 3, 3)
+    elif isinstance(shadow_raw, dict) and not set(shadow_raw) - {"color", "blur", "offset"}:
+        color = _rgba(shadow_raw.get("color", [0, 0, 0, 160]))
+        blur = shadow_raw.get("blur", 6)
+        offset = shadow_raw.get("offset", [3, 3])
+        if (color is not None and isinstance(blur, int) and not isinstance(blur, bool) and blur >= 0
+                and isinstance(offset, (list, tuple)) and len(offset) == 2
+                and all(isinstance(v, int) and not isinstance(v, bool) for v in offset)):
+            shadow = (color, blur, int(offset[0]), int(offset[1]))
+        else:
+            errors.append(msg("validation.title_shadow_invalid", id=clip_id, value=shadow_raw))
+    elif shadow_raw is not False and shadow_raw is not None:
+        errors.append(msg("validation.title_shadow_invalid", id=clip_id, value=shadow_raw))
+    if len(errors) > before:
+        return None
+    return {"font_weight": weight, "italic": italic, "outline": float(outline), "outline_color": outline_color, "shadow": shadow}
+
+
 def _parse_lut(raw: Any, ctx: str, errors: list[str]) -> Optional[str]:
     """`lut:` as written: a file name (resolved by _lut_file)."""
     if raw is None:
@@ -346,6 +398,9 @@ def _parse_bin_clip(
         if font_size <= 0:
             errors.append(msg("validation.title_font_size_invalid", id=item.get("id"), font_size=font_size))
             return None
+        style = _title_style(item, errors)
+        if style is None:
+            return None
         return BinClipSpec(
             id=str(item["id"]),
             path=None,
@@ -356,6 +411,7 @@ def _parse_bin_clip(
             font_size=font_size,
             font_color=tuple(item.get("color", (255, 255, 255, 255))),
             background=tuple(item.get("background", (0, 0, 0, 0))),
+            **style,
         )
 
     if item.get("derive") is not None:
@@ -1387,6 +1443,11 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     font_size=clip.font_size,
                     font_color=clip.font_color,
                     background=clip.background,
+                    font_weight=clip.font_weight,
+                    italic=clip.italic,
+                    outline=clip.outline,
+                    outline_color=clip.outline_color,
+                    shadow=clip.shadow,
                 ),
             )
         elif kind == "image":

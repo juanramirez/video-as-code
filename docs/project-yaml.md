@@ -113,6 +113,15 @@ or the input changes.
 | `font_size` | `48` | Size in pixels. |
 | `color` | `[255, 255, 255, 255]` | Text colour. |
 | `background` | `[0, 0, 0, 0]` | Background colour (transparent by default). |
+| `font_weight` | `400` | Weight, from `100` to `900` (`400` normal, `700` bold) or a name: `thin`, `light`, `normal`, `medium`, `semibold`, `bold`, `black` - the font needs a face of about that weight. |
+| `italic` | `false` | Italic. |
+| `outline` | `0` | An outline around each letter, this many pixels wide. |
+| `outline_color` | `[0, 0, 0, 255]` | Its colour. |
+| `shadow` | `false` | A drop shadow: `true` (soft, dark, 3 px down and right), or `{color: [r, g, b, a], blur: 6, offset: [3, 3]}`. |
+
+`font` takes any font installed on the machine that renders (`fc-list`
+lists them, e.g. `"DejaVu Serif"`, `"Ubuntu"`); one it doesn't have is
+replaced by a default one without warning.
 
 ## `timeline.tracks:`
 

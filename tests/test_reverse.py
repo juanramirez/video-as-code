@@ -1249,3 +1249,25 @@ scenes:
 
     (t,) = reverse.import_kdenlive(kdenlive_path).data["transitions"]
     assert (t["luma"], t["softness"], t["reverse"]) == ("openshot/ramp_left", 0.2, True)
+
+
+def test_round_trip_preserves_title_style(tmp_path: Path):
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        """
+project: {id: p1, title: T, fps: 25, width: 320, height: 240}
+bin:
+  - {id: card, type: title, text: "Hi", font_weight: 700, italic: true, outline: 2, outline_color: [255, 0, 0, 255], shadow: {color: [0, 0, 0, 200], blur: 4, offset: [2, 2]}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {clip: card, start: 0, duration: 1}
+""",
+        encoding="utf-8",
+    )
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive_path)
+    (card,) = [c for c in reverse.import_kdenlive(kdenlive_path).data["bin"] if c.get("type") == "title"]
+    assert (card["font_weight"], card["italic"], card["outline"], card["outline_color"]) == (700, True, 2.0, [255, 0, 0, 255])
+    assert card["shadow"] == {"color": [0, 0, 0, 200], "blur": 4, "offset": [2, 2]}

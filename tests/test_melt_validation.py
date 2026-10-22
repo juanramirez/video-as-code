@@ -3129,3 +3129,35 @@ timeline:
     _assert_no_fatal_load_error(result)
     r, g, b = _mean_rgb_at_x(rendered, timestamp=0.5, frac_x=0.5)
     assert r < 40 and g > 200 and b > 200, f"expected red inverted to cyan, got {(r, g, b)}"
+
+
+def test_title_style_renders(tmp_path: Path, melt):
+    """A bold title puts down more ink than a normal one, and a red
+    outline round white letters shows as red (titles.py's font_weight,
+    outline)."""
+    def render(name: str, keys: str) -> Path:
+        yaml_path = tmp_path / f"{name}.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - {{id: card, type: title, text: "Hello", font_size: 60, background: [0, 0, 0, 255], {keys}}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: card, start: 0, duration: 1}}
+""",
+            encoding="utf-8",
+        )
+        kdenlive_path = tmp_path / f"{name}.kdenlive"
+        xmlgen.write(load_and_resolve(yaml_path), kdenlive_path)
+        out = tmp_path / f"{name}.mp4"
+        _assert_no_fatal_load_error(_run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{out}"]))
+        return out
+
+    plain = _mean_rgb(render("plain", "font_weight: 400"), timestamp=0.5)
+    bold = _mean_rgb(render("bold", "font_weight: 700"), timestamp=0.5)
+    outlined = _mean_rgb(render("outlined", "outline: 4, outline_color: [255, 0, 0, 255]"), timestamp=0.5)
+    assert sum(bold) > 1.15 * sum(plain), f"bold should put down more ink: {plain=} {bold=}"
+    assert outlined[0] - outlined[1] > 3 * (plain[0] - plain[1]) + 2, f"expected a red outline: {plain=} {outlined=}"

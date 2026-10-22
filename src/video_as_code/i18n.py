@@ -92,6 +92,11 @@ _EN: dict[str, str] = {
     "validation.bin_type_invalid": "bin[{id}].type={type!r} is invalid, must be one of {valid}",
     "validation.title_missing_text": "bin[{id}]: type: title requires 'text'",
     "validation.title_font_size_invalid": "bin[{id}]: font_size must be greater than 0, got {font_size}",
+    "validation.title_font_weight_invalid": "bin[{id}]: font_weight={value!r} must be a number from 100 to 900 (400 normal, 700 bold) or one of: {names}",
+    "validation.title_italic_invalid": "bin[{id}]: italic={value!r} must be true or false",
+    "validation.title_outline_invalid": "bin[{id}]: outline={value!r} must be a width in pixels, 0 or more",
+    "validation.title_color_invalid": "bin[{id}]: {field}={value!r} must be [r, g, b, a], each 0-255",
+    "validation.title_shadow_invalid": "bin[{id}]: shadow={value!r} must be true, false or {{color: [r, g, b, a], blur: <px>, offset: [x, y]}}",
     "validation.colorspace_invalid": "project.colorspace must be greater than 0, got {colorspace}",
     "validation.pip_size_invalid": "{ctx}: position/size must have a positive width and height, got w={w:g} h={h:g}",
     "validation.pip_out_of_bounds": (
@@ -598,6 +603,11 @@ _ES: dict[str, str] = {
     "validation.bin_type_invalid": "bin[{id}].type={type!r} inválido, debe ser uno de {valid}",
     "validation.title_missing_text": "bin[{id}]: type: title requiere 'text'",
     "validation.title_font_size_invalid": "bin[{id}]: font_size debe ser mayor que 0, se recibió {font_size}",
+    "validation.title_font_weight_invalid": "bin[{id}]: font_weight={value!r} debe ser un número de 100 a 900 (400 normal, 700 negrita) o uno de: {names}",
+    "validation.title_italic_invalid": "bin[{id}]: italic={value!r} debe ser true o false",
+    "validation.title_outline_invalid": "bin[{id}]: outline={value!r} debe ser un grosor en píxeles, 0 o más",
+    "validation.title_color_invalid": "bin[{id}]: {field}={value!r} debe ser [r, g, b, a], cada uno de 0 a 255",
+    "validation.title_shadow_invalid": "bin[{id}]: shadow={value!r} debe ser true, false o {{color: [r, g, b, a], blur: <px>, offset: [x, y]}}",
     "validation.colorspace_invalid": "project.colorspace debe ser mayor que 0, se recibió {colorspace}",
     "validation.pip_size_invalid": "{ctx}: position/size debe tener ancho y alto positivos, se recibió w={w:g} h={h:g}",
     "validation.pip_out_of_bounds": (

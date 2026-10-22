@@ -65,6 +65,11 @@ def render_title_xml(
     font_size: int = 48,
     font_color: tuple[int, int, int, int] = (255, 255, 255, 255),
     background: tuple[int, int, int, int] = (0, 0, 0, 0),
+    font_weight: int = 400,
+    italic: bool = False,
+    outline: float = 0.0,
+    outline_color: tuple[int, int, int, int] = (0, 0, 0, 255),
+    shadow: Optional[tuple[tuple[int, int, int, int], int, int, int]] = None,
 ) -> str:
     def rgba(c: tuple[int, int, int, int]) -> str:
         return ",".join(str(v) for v in c)
@@ -105,18 +110,26 @@ def render_title_xml(
         {
             "font": font,
             "font-pixel-size": str(font_size),
-            "font-italic": "0",
+            "font-italic": "1" if italic else "0",
             "font-underline": "0",
-            "font-weight": "50",
+            # Qt 6's scale (kdenlive writes QFont::weight(), 400 normal);
+            # Qt 5's 50 rendered the same, but a font with a Thin face
+            # could pick it, and kdenlive's title editor would show it so
+            "font-weight": str(font_weight),
             "font-color": rgba(font_color),
-            "font-outline": "0",
-            "font-outline-color": "0,0,0,255",
+            "font-outline": format(outline, "g"),
+            "font-outline-color": rgba(outline_color),
             "box-width": str(box_width),
             "box-height": str(box_height),
             "alignment": str(ALIGNMENT_CENTER),
             "letter-spacing": "0",
         },
     )
+    if shadow is not None:
+        # kdenlive's own form (MyTextItem::shadowInfo), which MLT's
+        # kdenlivetitle reads: enabled;#AARRGGBB;blur;x;y
+        (r, g, b, a), blur, dx, dy = shadow
+        content.set("shadow", f"1;#{a:02x}{r:02x}{g:02x}{b:02x};{blur};{dx};{dy}")
     content.text = text
     ET.SubElement(root, "startviewport", {"rect": f"0,0,{width},{height}"})
     ET.SubElement(root, "endviewport", {"rect": f"0,0,{width},{height}"})
@@ -175,10 +188,40 @@ def parse_title_xml(xml_text: str) -> Optional[dict]:
     except ValueError:
         font_size = 48
 
-    return {
+    title = {
         "text": content.text,
         "font": content.get("font", "Sans"),
         "font_size": font_size,
         "color": font_color or [255, 255, 255, 255],
         "background": background or [0, 0, 0, 0],
     }
+    # the rest only when not the default
+    try:
+        weight = int(content.get("font-weight", 400))
+    except ValueError:
+        weight = 400
+    if weight < 100:  # Qt 5's scale (50 normal, 75 bold), as older files have it
+        weight = {50: 400, 75: 700}.get(weight, max(100, min(900, round(weight / 99 * 900 / 100) * 100)))
+    if weight != 400:
+        title["font_weight"] = weight
+    if content.get("font-italic", "0") not in ("", "0"):
+        title["italic"] = True
+    try:
+        outline = float(content.get("font-outline", 0))
+    except ValueError:
+        outline = 0.0
+    if outline:
+        title["outline"] = outline
+        title["outline_color"] = parse_rgba(content.get("font-outline-color")) or [0, 0, 0, 255]
+    shadow = (content.get("shadow") or "").split(";")
+    if len(shadow) == 5 and shadow[0] not in ("", "0") and shadow[1].startswith("#") and len(shadow[1]) == 9:
+        try:
+            argb = int(shadow[1][1:], 16)
+            title["shadow"] = {
+                "color": [(argb >> 16) & 255, (argb >> 8) & 255, argb & 255, (argb >> 24) & 255],
+                "blur": int(shadow[2]),
+                "offset": [int(shadow[3]), int(shadow[4])],
+            }
+        except ValueError:
+            pass
+    return title

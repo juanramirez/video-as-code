@@ -153,6 +153,12 @@ class BinClipSpec:
     font_size: int = 48
     font_color: tuple[int, int, int, int] = (255, 255, 255, 255)
     background: tuple[int, int, int, int] = (0, 0, 0, 0)
+    # (Qt 6's weights: 400 normal, 700 bold - see titles.py)
+    font_weight: int = 400
+    italic: bool = False
+    outline: float = 0.0  # pixels around each letter, in outline_color
+    outline_color: tuple[int, int, int, int] = (0, 0, 0, 255)
+    shadow: Optional[tuple[tuple[int, int, int, int], int, int, int]] = None  # (color, blur, x, y)
 
 
 @dataclass(frozen=True)
