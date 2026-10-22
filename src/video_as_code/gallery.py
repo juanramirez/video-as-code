@@ -940,6 +940,19 @@ def build(
 
 # --- page --------------------------------------------------------------------
 
+def _failure(detail: str) -> str:
+    """What went wrong with a render, in a line."""
+    if detail == msg("gallery.timed_out", seconds=_RENDER_TIMEOUT_S):
+        return detail
+    if re.search(r"Assertion|Segmentation|core dumped|malloc|Aborted", detail):
+        return msg("gallery.failed_crash")
+    if re.search(r"Cannot configure the filter graph|Error initializing filter|Invalid argument", detail):
+        return msg("gallery.failed_setup")
+    if "validation problem" in detail:
+        return msg("gallery.failed_invalid")
+    return msg("gallery.failed")
+
+
 def _page(
     previews: list[tuple[Entry, Path]],
     errors: dict[str, str],
@@ -981,7 +994,9 @@ def _page(
                 if out is None:
                     media = ""
                 elif out.name in errors:
-                    media = f'<div class="failed"><strong>{html.escape(msg("gallery.failed"))}</strong><pre>{html.escape(errors[out.name])}</pre></div>'
+                    detail = errors[out.name]
+                    media = (f'<div class="failed"><strong>{html.escape(_failure(detail))}</strong>'
+                             f'<details><summary>{html.escape(msg("gallery.failed_details"))}</summary><pre>{html.escape(detail)}</pre></details></div>')
                 else:
                     if entry.section == "melt_audio":
                         media = f'<audio src="{rel(out)}" controls preload="none"></audio>'
@@ -1078,14 +1093,14 @@ nav a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; 
         color: var(--fg); text-decoration: none; font-size: 13px; }
 nav a:hover { border-color: var(--muted); }
 section { scroll-margin-top: 170px; }
-summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; margin: 24px 0 8px; list-style: none; }
-summary::-webkit-details-marker { display: none; }
+section > details > summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; margin: 24px 0 8px; list-style: none; }
+section > details > summary::-webkit-details-marker { display: none; }
 /* a triangle drawn, not a character: the same in every font */
-summary::before { content: ""; flex: none; width: 0; height: 0; align-self: center; border-style: solid;
+section > details > summary::before { content: ""; flex: none; width: 0; height: 0; align-self: center; border-style: solid;
                   border-width: 5px 0 5px 7px; border-color: transparent transparent transparent var(--muted);
                   transition: transform .15s; }
-details[open] > summary::before { transform: rotate(90deg); }
-summary h2 { margin: 0; }
+section > details[open] > summary::before { transform: rotate(90deg); }
+section > details > summary h2 { margin: 0; }
 .count { color: var(--muted); font-size: 13px; }
 h2 { font-size: 16px; margin: 32px 0 4px; }
 p { margin: 0 0 12px; color: var(--muted); }
@@ -1110,6 +1125,8 @@ pre { margin: 0; padding: 6px 8px; background: var(--code); border-radius: 4px; 
 figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .failed { aspect-ratio: 16 / 9; overflow: auto; color: var(--bad); font-size: 12px; }
 .failed pre { cursor: auto; white-space: pre-wrap; }
+.failed strong { display: block; margin-bottom: 6px; }
+.failed summary { cursor: pointer; color: var(--muted, inherit); }
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg);
          padding: 6px 12px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .toast.on { opacity: 1; }

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from video_as_code import cli, gallery
+from video_as_code import cli, gallery, i18n
 from video_as_code.schema import load_and_resolve
 
 
@@ -156,6 +156,12 @@ def test_tweaks_from_ranges():
     # the far end of each range first, then the near ends
     assert gallery._tweaks(entry) == [{"level": 11.25}, {"u": 64}, {"flag": True}, {"level": 3.75}, {"u": 191}]
     assert gallery._tweaks(entry, tries=2) == [{"level": 11.25}, {"u": 64}]
+
+
+def test_failures_told_in_a_line():
+    assert "crashed" in gallery._failure("melt: filter.c:12: f: Assertion `x' failed.")
+    assert "ffmpeg" in gallery._failure("[Parsed_x] Cannot configure the filter graph")
+    assert gallery._failure("something else") == i18n.msg("gallery.failed")
 
 
 def test_audio_analysers_listed_without_a_preview():
