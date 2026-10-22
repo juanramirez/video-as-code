@@ -24,7 +24,7 @@ from . import probe, sources_lock, titles
 from . import upscale as upscale_mod
 from .errors import ValidationErrors
 from .i18n import msg
-from .lumas import AVAILABLE_LUMAS
+from . import lumas
 from .models import (
     AFFINE_STYLES,
     AffineTransitionSpec,
@@ -1259,10 +1259,20 @@ def _parse_transition(
 
     if t_type == "wipe":
         luma = item.get("luma", "linear_x")
-        if luma not in AVAILABLE_LUMAS:
-            errors.append(msg("validation.transition_luma_invalid", ctx=ctx, luma=luma, valid=list(AVAILABLE_LUMAS)))
+        problem = lumas.luma_problem(ctx, luma, "validation.transition_luma_invalid")
+        if problem:
+            errors.append(problem)
             return None, None
-        return WipeTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, luma=luma), None
+        softness = lumas.wipe_softness(item.get("softness", 0), ctx, "softness", errors)
+        reverse = item.get("reverse", False)
+        if not isinstance(reverse, bool):
+            errors.append(msg("validation.wipe_reverse_invalid", ctx=ctx, field="reverse", value=reverse))
+        if softness is None or not isinstance(reverse, bool):
+            return None, None
+        return (
+            WipeTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, luma=luma, softness=softness, reverse=reverse),
+            None,
+        )
 
     style = item.get("style", "zoom")
     if style not in AFFINE_STYLES:
@@ -1723,6 +1733,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             start_frame=fps.seconds_to_frames(w.start),
             end_frame=fps.seconds_to_frames(w.end) - 1,
             luma=w.luma,
+            softness=w.softness,
+            reverse=w.reverse,
         )
         for w in doc.wipe_transitions
     ]

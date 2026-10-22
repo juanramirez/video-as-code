@@ -31,6 +31,7 @@ video-as-code validate project.yaml                     # validate without build
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
 video-as-code render project.yaml [-o output.mp4] [--split]  # build + render straight to video via melt
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
+video-as-code transitions                               # every wipe shape a luma: can name
 ```
 
 `build` and `render` also take `--fetch`, to run `fetch` first, and
@@ -344,6 +345,53 @@ the first time just starts counting, and a file only on this machine
 sources folder (a project and its preview) share that record. `render
 --no-prune` skips it once.
 
+### OpenShot's transitions: `luma: openshot/<name>`
+
+A `wipe` can also take any of the 412 transitions of
+[OpenShot](https://www.openshot.org), on top of this project's own 12
+shapes - `melt` itself ships none. They're grayscale masks, as MLT's
+`luma` transition uses them, so they render in the same single melt
+pass and open in kdenlive as an ordinary wipe:
+
+```yaml
+scenes:
+  - transition: wipe
+    luma: openshot/twirl_12
+    luma_softness: 0.2     # softer edge, 0..1
+    luma_reverse: true     # light parts first
+    clips: [...]
+```
+
+They're not bundled (they're GPL-3.0+): they're read from openshot-qt
+(`sudo apt install openshot-qt`), or from the folder
+`VIDEO_AS_CODE_OPENSHOT_TRANSITIONS` points at, and each one used is
+converted to PGM once, under `~/.cache/video-as-code/lumas-openshot/`.
+`video-as-code transitions` lists every name. Like OpenShot, MLT
+stretches each map to the frame - about half of them are 4:3.
+
+What they add, by family (`<family>_<n>`, how many):
+`twirl_*` (39), `distortion_*` (24), `luminous_boxes_*` (22),
+`ray_light_*` (20), `deform_*` (18), `cross_*` (17), `board_*` (14),
+`barr_ripple_*` (12), `wandering_*` (12), `boxes_*` (11), `future_*` (11),
+`luminous_spiral_*` (11), `flower_*` (10), `fish-eyes_*` (9),
+`fractal_*` (8), `postime_*` (8), `fogg_*` (7), `stretched_*` (5),
+`hourglass_*`, `luminous_frame_*`, `mosaic_*`, `mozaic_*`, `ripple_*`,
+`sunlight_*`, `whirpool_*`, `wipe_diagonal_*` (4 each), `hatched_*`,
+`triangle_*` (3 each), and two each of `big_barr_shaking_*`, `checked_*`,
+`clouds_*`, `frame_*`, `middle_barr_ripple_*`, `ray_light_left_*`,
+`ray_light_right_*`, `right_mozaic_*`, `sphere_*`, `spiral_*`,
+`spiral_abstract_*`, `spiral_big_*`, `spiral_small_*`, `stain_*`,
+`star_*` and `strange_barr_*`. Then 84 single ones: arrows
+(`left_arrow`, `middle_top_arrow`, `ripple_luminous_low_arrow`...),
+bars and blinds (`big_barr`, `crossed_barr`, `blinds_sliding`,
+`vertical_blinds_in_to_out`...), lozenges, mosaics, `clock_left_to_right`,
+`wave_left_up` and its three siblings, `bubbles`, `puzzle`, `mountains`,
+`spots`, `sun_shaking`, `dissolve`, `openshot_logo`... The 7 in
+OpenShot's `common/` (`fade`, `circle_in_to_out`/`circle_out_to_in`,
+`wipe_left_to_right` and the other three wipes) are what `dissolve`,
+`radial`, `linear_x` and `linear_y` already do; `openshot/fade` is all
+one shade, which MLT plays as a cut - use `transition: dissolve`.
+
 ### `video-as-code reconstruct`: recovering a YAML from a rendered video
 
 ```bash
@@ -408,6 +456,7 @@ Verified by the test suite (`pytest`):
   static or animated picture-in-picture (`qtblend`), edge crop,
   freeze-frame/hold, an "old film" filter pack (jitter/flicker/burn,
   dust, scratches, grain), heart/bowtie procedural wipe shapes,
+  OpenShot's 412 transitions as wipe shapes (`lumas.py`),
   lift/gamma/gain color grading, video stabilization (`deshake`),
   title clips (`titles.py`, multi-line text), guides/markers, bin
   folders, track name/hidden/locked/audio-muted state, project notes,
@@ -420,7 +469,7 @@ Verified by the test suite (`pytest`):
   rendered video + assets folder -> YAML, by content-based matching
   instead of XML parsing. See the *Usage* section above and `ROADMAP.md`
   for how it works and its known limitations.
-- **CLI** (`cli.py`): `build` / `validate` / `import` / `render` / `reconstruct`.
+- **CLI** (`cli.py`): `build` / `validate` / `import` / `render` / `reconstruct` / `transitions`.
 - **Seconds<->frames conversion** (`timecode.py`): common NTSC framerates
   (23.976, 29.97...) as an exact fraction; deterministic round-half-up on
   exact ties (see note below).

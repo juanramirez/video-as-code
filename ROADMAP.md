@@ -1251,3 +1251,16 @@ whole video can be built from a fresh checkout anywhere.
   from source, given FREI0R_PATH). `probe.melt_env` now sets FREI0R_PATH
   for every render, unless it's already set (`probe.frei0r_dirs`,
   `tests/test_mltdata.py`).
+- **OpenShot's transitions as wipe shapes** — **implemented** (2026-10-22):
+  `luma: openshot/<name>` takes any of the 412 masks openshot-qt ships
+  (`lumas.py`), read from the user's install - they're GPL-3.0+, so not
+  bundled - and converted to PGM once into the user cache: read as
+  JPG/SVG, MLT keeps the map's own proportions and the wipe comes out
+  off-centre. Chosen over running libopenshot itself, since OpenShot's
+  transitions are exactly that - a mask its Mask effect plays as MLT's
+  `luma` does - so they render in the same melt pass and open in
+  kdenlive. Also `luma_softness`/`luma_reverse` (`softness`/`reverse`
+  on `transitions:`), the latter emitted as luma's `invert`: its own
+  `reverse` property, found by rendering, changes nothing. `video-as-code
+  transitions` lists them (`tests/test_lumas.py`,
+  `tests/test_melt_validation.py::test_openshot_luma_wipes_the_whole_frame`).

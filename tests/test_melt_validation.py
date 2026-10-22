@@ -3022,3 +3022,46 @@ timeline:
     assert lum[37] > lum[26] + 5  # brightening through its first second
     assert lum[50] > lum[37] + 5
     assert abs(lum[70] - lum[55]) < 2  # then held
+
+
+def test_openshot_luma_wipes_the_whole_frame(tmp_path: Path, assets_dir: Path, melt_with_qtblend, openshot_transitions):
+    """An OpenShot map (`luma: openshot/<name>`, a JPG converted to PGM by
+    lumas.py) wipes across the whole frame: the square stand-in map,
+    dark on the left, reaches both edges of a 4:3 frame only stretched
+    to it - read as a JPG, MLT keeps its proportions and the wipe comes
+    out off-centre. `luma_reverse` sweeps the other way."""
+    for reverse_, left_first in ((False, True), (True, False)):
+        yaml_path = tmp_path / f"project_{reverse_}.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: wipe
+    transition_duration: 1.0
+    luma: openshot/ramp_left
+    luma_reverse: {str(reverse_).lower()}
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+            encoding="utf-8",
+        )
+        kdenlive_path = tmp_path / f"project_{reverse_}.kdenlive"
+        xmlgen.write(load_and_resolve(yaml_path), kdenlive_path)
+        rendered = tmp_path / f"rendered_{reverse_}.mp4"
+        result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+        _assert_no_fatal_load_error(result)
+
+        def red_fraction_at(t: float, frac_x: float) -> float:
+            r, _g, b = _mean_rgb_at_x(rendered, timestamp=t, frac_x=frac_x)
+            return r / (r + b + 1e-6)
+
+        # the transition spans [1.5, 2.5)s; red -> blue
+        left, right = red_fraction_at(1.7, 0.03), red_fraction_at(1.7, 0.97)
+        early, late = (left, right) if left_first else (right, left)
+        assert early < 0.5 < late, f"[reverse={reverse_}] {left=:.2f} {right=:.2f}"
+        left, right = red_fraction_at(2.3, 0.03), red_fraction_at(2.3, 0.97)
+        early, late = (left, right) if left_first else (right, left)
+        assert early < 0.5 < late, f"[reverse={reverse_}] near the end: {left=:.2f} {right=:.2f}"

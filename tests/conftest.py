@@ -66,6 +66,34 @@ def assets_dir(tmp_path_factory) -> Path:
     return d
 
 
+@pytest.fixture(scope="session")
+def _openshot_dir(tmp_path_factory) -> Path:
+    if not FFMPEG_AVAILABLE:
+        pytest.skip("ffmpeg is not available: can't generate the test assets")
+    d = tmp_path_factory.mktemp("openshot_transitions")
+    (d / "common").mkdir()
+    (d / "extra").mkdir()
+    # laid out as openshot-qt's: grayscale JPGs (and SVGs) under common/ and
+    # extra/. A square map, dark on the left: a 4:3 frame shows it whole
+    # only if it's stretched to the frame, as OpenShot and lumas.py do.
+    for folder, name, expr in (("extra", "ramp_left", "X/W*255"), ("common", "ramp_top", "Y/H*255")):
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:size=120x120",
+             "-vf", f"geq=lum='{expr}':cb=128:cr=128,format=gray", "-frames:v", "1", str(d / folder / f"{name}.jpg")],
+            check=True,
+        )
+    return d
+
+
+@pytest.fixture
+def openshot_transitions(_openshot_dir, tmp_path, monkeypatch) -> Path:
+    """A stand-in for openshot-qt's transitions folder (lumas.py), with a
+    cache folder of this test's own for the PGMs made from it."""
+    monkeypatch.setenv("VIDEO_AS_CODE_OPENSHOT_TRANSITIONS", str(_openshot_dir))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    return _openshot_dir
+
+
 _LOCAL_MLT_BUILD = Path.home() / "dev" / "mlt" / "install"
 
 

@@ -52,6 +52,21 @@ _EN: dict[str, str] = {
     "validation.transition_missing_span": "{ctx} is invalid (missing 'start' or 'end')",
     "validation.transition_end_not_after_start": "{ctx}: 'end' ({end}) must be greater than 'start' ({start})",
     "validation.transition_luma_invalid": "{ctx}.luma={luma!r} must be one of {valid}",
+    "validation.luma_openshot_missing": (
+        "{ctx}.luma={luma!r}: OpenShot's transitions weren't found - install openshot-qt "
+        "(e.g. `sudo apt install openshot-qt`), or set {env} to its transitions folder"
+    ),
+    "validation.luma_openshot_unknown": (
+        "{ctx}.luma={luma!r} isn't one of OpenShot's transitions (closest: {close}); "
+        "`video-as-code transitions` lists them all"
+    ),
+    "validation.luma_openshot_unknown_no_close": (
+        "{ctx}.luma={luma!r} isn't one of OpenShot's transitions; `video-as-code transitions` lists them all"
+    ),
+    "validation.wipe_softness_invalid": "{ctx}.{field}={value!r} must be a number from 0 (hard edge) to 1 (softest)",
+    "validation.wipe_reverse_invalid": "{ctx}.{field}={value!r} must be true or false",
+    "lumas.ffmpeg_unavailable": "ffmpeg is not available on PATH; can't convert the OpenShot transition '{path}' into a luma map",
+    "lumas.convert_failed": "ffmpeg failed converting the OpenShot transition '{path}' into a luma map: {stderr}",
     "validation.transition_style_invalid": "{ctx}.style={style!r} must be one of {valid}",
     "validation.project_field_required": "project.{field} is required",
     "validation.bin_entry_invalid": "Invalid 'bin:' entry (missing 'id' or 'path'): {item!r}",
@@ -357,6 +372,8 @@ _EN: dict[str, str] = {
     "cli.help.import": "Converts an existing .kdenlive to YAML",
     "cli.help.kdenlive_path": "Path to the source .kdenlive file",
     "cli.help.import_output": "Output path (default: same name with .yaml extension)",
+    "cli.help.transitions": "Lists every wipe shape a luma: can name - this project's own and, with openshot-qt installed, OpenShot's (openshot/<name>)",
+    "cli.transitions_no_openshot": "(OpenShot's transitions weren't found: install openshot-qt, or set {env} to its transitions folder)",
     "cli.help.reconstruct": "Reconstructs a YAML from an already-rendered video + an assets folder (best-effort, content-based matching)",
     "cli.help.reconstruct_video": "Path to the already-rendered video file",
     "cli.help.reconstruct_assets_dir": "Path to the folder of candidate source assets",
@@ -432,6 +449,21 @@ _ES: dict[str, str] = {
     "validation.transition_missing_span": "{ctx} inválida (falta 'start' o 'end')",
     "validation.transition_end_not_after_start": "{ctx}: 'end' ({end}) debe ser mayor que 'start' ({start})",
     "validation.transition_luma_invalid": "{ctx}.luma={luma!r} debe ser uno de {valid}",
+    "validation.luma_openshot_missing": (
+        "{ctx}.luma={luma!r}: no se encuentran las transiciones de OpenShot - instala openshot-qt "
+        "(p. ej. `sudo apt install openshot-qt`) o apunta {env} a su carpeta de transiciones"
+    ),
+    "validation.luma_openshot_unknown": (
+        "{ctx}.luma={luma!r} no es una de las transiciones de OpenShot (las más parecidas: {close}); "
+        "`video-as-code transitions` las lista todas"
+    ),
+    "validation.luma_openshot_unknown_no_close": (
+        "{ctx}.luma={luma!r} no es una de las transiciones de OpenShot; `video-as-code transitions` las lista todas"
+    ),
+    "validation.wipe_softness_invalid": "{ctx}.{field}={value!r} debe ser un número de 0 (borde duro) a 1 (el más suave)",
+    "validation.wipe_reverse_invalid": "{ctx}.{field}={value!r} debe ser true o false",
+    "lumas.ffmpeg_unavailable": "ffmpeg no está en el PATH; no se puede convertir la transición de OpenShot '{path}' en un mapa de luma",
+    "lumas.convert_failed": "ffmpeg falló al convertir la transición de OpenShot '{path}' en un mapa de luma: {stderr}",
     "validation.transition_style_invalid": "{ctx}.style={style!r} debe ser uno de {valid}",
     "validation.project_field_required": "project.{field} es obligatorio",
     "validation.bin_entry_invalid": "Entrada de 'bin:' inválida (falta 'id' o 'path'): {item!r}",
@@ -737,6 +769,8 @@ _ES: dict[str, str] = {
     "cli.help.import": "Convierte un .kdenlive existente a YAML",
     "cli.help.kdenlive_path": "Ruta al archivo .kdenlive de origen",
     "cli.help.import_output": "Ruta de salida (por defecto: mismo nombre con extensión .yaml)",
+    "cli.help.transitions": "Lista cada forma de barrido que puede nombrar un luma: - las propias y, con openshot-qt instalado, las de OpenShot (openshot/<nombre>)",
+    "cli.transitions_no_openshot": "(no se encuentran las transiciones de OpenShot: instala openshot-qt o apunta {env} a su carpeta de transiciones)",
     "cli.help.reconstruct": "Reconstruye un YAML a partir de un vídeo ya renderizado + una carpeta de assets (best-effort, matching por contenido)",
     "cli.help.reconstruct_video": "Ruta al archivo de vídeo ya renderizado",
     "cli.help.reconstruct_assets_dir": "Ruta a la carpeta de assets candidatos",

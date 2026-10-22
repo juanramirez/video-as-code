@@ -210,7 +210,9 @@ at second 0.
 | `duration` | - | Total length of the scene, split evenly across its clips. |
 | `transition` | `none` | Between consecutive clips: `none`, `dissolve`, `wipe`, `affine`, `iris`, `flip`, `glitch`, `delaygrab` or `cairogradient`. All but `none`/`dissolve` need video. |
 | `transition_duration` | `1.0` | Length of each transition. |
-| `luma` | `linear_x` | With `wipe`: its shape - `linear_x`, `linear_y`, `diagonal`, `radial`, `square`, `clock`, `spiral`, `bars_horizontal`, `bars_vertical`, `checkerboard`, `heart` or `bowtie`. |
+| `luma` | `linear_x` | With `wipe`: its shape - `linear_x`, `linear_y`, `diagonal`, `radial`, `square`, `clock`, `spiral`, `bars_horizontal`, `bars_vertical`, `checkerboard`, `heart` or `bowtie`; or, with openshot-qt installed, one of OpenShot's 412 as `openshot/<name>` (see the README's *OpenShot's transitions*). |
+| `luma_softness` | `0` | With `wipe`: how soft the edge between the two clips is, from `0` (hard) to `1`. |
+| `luma_reverse` | `false` | With `wipe`: the shape's light parts change first instead of its dark ones. |
 | `style` | `zoom` | With `affine`: `zoom` or `slide`. |
 
 A scene's clip is a file path (`photos/beach.jpg`, added to the bin by
@@ -239,4 +241,6 @@ A transition between two tracks over a time window, written directly
 | `track_a`, `track_b` | *(required)* | The two tracks, by `name`. |
 | `start`, `end` | *(required)* | The window, in timeline seconds. |
 | `luma` | `linear_x` | With `wipe`: its shape (see `scenes:`). |
+| `softness` | `0` | With `wipe`: as a scene's `luma_softness`. |
+| `reverse` | `false` | With `wipe`: as a scene's `luma_reverse`. |
 | `style` | `zoom` | With `affine`: `zoom` or `slide`. |

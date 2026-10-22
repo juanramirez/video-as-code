@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from . import autoprune, fetch, fetch_resolve, i18n, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import autoprune, fetch, fetch_resolve, i18n, lumas, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -347,6 +347,15 @@ def cmd_reconstruct(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_transitions(args: argparse.Namespace) -> int:
+    """Every `luma:` a wipe can name, one per line."""
+    if lumas.openshot_dir() is None:
+        print(msg("cli.transitions_no_openshot", env=lumas.OPENSHOT_DIR_ENV), file=sys.stderr)
+    for name, _ in lumas.all_lumas():
+        print(name)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="video-as-code", description=msg("cli.help.description"))
     parser.add_argument(
@@ -392,6 +401,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_upscaler = sub.add_parser("install-upscaler", help=msg("cli.help.install_upscaler"))
     p_upscaler.set_defaults(func=cmd_install_upscaler)
+
+    p_transitions = sub.add_parser("transitions", help=msg("cli.help.transitions"))
+    p_transitions.set_defaults(func=cmd_transitions)
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
     p_reconstruct.add_argument("video", help=msg("cli.help.reconstruct_video"))

@@ -19,10 +19,29 @@ and its neighboring comment) - not worth chasing why when the direct PGM
 path just works. Kept tiny (64x64 - MLT scales the map to the actual
 frame size at render time, so resolution here doesn't need to match the
 project's) to stay in line with this repo's tiny-committed-assets
-precedent."""
+precedent.
+
+`openshot/<name>`: OpenShot's own transitions (412 of them, from
+openshot-qt) are grayscale masks too - OpenShot plays them with its Mask
+effect, which works as MLT's `luma` does: so they're used here as luma
+maps. They're GPL-3.0+, so not bundled either: they're read from the
+user's own openshot-qt install (OPENSHOT_DIR_ENV, else the usual places,
+see openshot_dir) and converted to PGM once (JPG/SVG through the generic
+loader keeps the picture's own proportions instead of filling the frame,
+so the wipe comes out off-centre), cached under the user's cache folder.
+Like OpenShot, MLT stretches each map to the frame - a 4:3 one too."""
 from __future__ import annotations
 
+import difflib
+import glob
+import os
+import re
+import subprocess
 from pathlib import Path
+from typing import Any, Optional
+
+from .errors import KdenliveAsCodeError
+from .i18n import msg
 
 LUMAS_DIR = Path(__file__).parent / "lumas_data"
 
@@ -42,5 +61,109 @@ AVAILABLE_LUMAS = (
 )
 
 
+OPENSHOT_PREFIX = "openshot/"
+OPENSHOT_DIR_ENV = "VIDEO_AS_CODE_OPENSHOT_TRANSITIONS"
+OPENSHOT_CACHE = "lumas-openshot"  # folder under the cache root; reverse.py recognizes it
+_OPENSHOT_DIRS = (
+    "/usr/lib/python3*/dist-packages/openshot_qt/transitions",  # Debian/Ubuntu
+    "/usr/lib/python3*/site-packages/openshot_qt/transitions",  # Fedora/Arch
+    "/usr/share/openshot-qt/transitions",
+)
+_OPENSHOT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
+def openshot_dir() -> Optional[Path]:
+    """openshot-qt's transitions folder (with common/ and extra/), or None."""
+    env = os.environ.get(OPENSHOT_DIR_ENV)
+    candidates = [env] if env else [p for pattern in _OPENSHOT_DIRS for p in sorted(glob.glob(pattern))]
+    for candidate in candidates:
+        if Path(candidate).is_dir():
+            return Path(candidate)
+    return None
+
+
+def openshot_transitions(folder: Optional[Path] = None) -> dict[str, Path]:
+    """name -> file, for every map in `folder` (default openshot_dir())."""
+    folder = folder or openshot_dir()
+    if folder is None:
+        return {}
+    found = {}
+    for path in sorted(folder.glob("*/*")):
+        if path.suffix.lower() in (".jpg", ".jpeg", ".png", ".svg") and _OPENSHOT_NAME.match(path.stem):
+            found[path.stem] = path
+    return found
+
+
+def all_lumas() -> list[tuple[str, Path]]:
+    """(`luma:` value, map file) for every wipe shape, this project's own first."""
+    own = [(name, LUMAS_DIR / f"{name}.pgm") for name in AVAILABLE_LUMAS]
+    return own + [(OPENSHOT_PREFIX + name, path) for name, path in openshot_transitions().items()]
+
+
+def luma_problem(ctx: str, luma: object, invalid_key: str) -> Optional[str]:
+    """Why `luma` can't be used as a wipe's map - None if it can.
+    `invalid_key`: the caller's own message for a name that's neither."""
+    if isinstance(luma, str) and luma.startswith(OPENSHOT_PREFIX):
+        name = luma[len(OPENSHOT_PREFIX):]
+        if openshot_dir() is None:
+            return msg("validation.luma_openshot_missing", ctx=ctx, luma=luma, env=OPENSHOT_DIR_ENV)
+        known = openshot_transitions()
+        if name not in known:
+            close = [OPENSHOT_PREFIX + c for c in difflib.get_close_matches(name, known, n=3)]
+            if not close:
+                return msg("validation.luma_openshot_unknown_no_close", ctx=ctx, luma=luma)
+            return msg("validation.luma_openshot_unknown", ctx=ctx, luma=luma, close=", ".join(close))
+        return None
+    if luma not in AVAILABLE_LUMAS:
+        return msg(invalid_key, ctx=ctx, luma=luma, valid=list(AVAILABLE_LUMAS))
+    return None
+
+
 def luma_path(name: str) -> Path:
-    return LUMAS_DIR / f"{name}.pgm"
+    """The .pgm MLT reads for `name` - for an OpenShot one, converted from
+    its file the first time (and again if that file changes)."""
+    if not name.startswith(OPENSHOT_PREFIX):
+        return LUMAS_DIR / f"{name}.pgm"
+    stem = name[len(OPENSHOT_PREFIX):]
+    source = openshot_transitions().get(stem)
+    if source is None:
+        raise KdenliveAsCodeError(msg("validation.luma_openshot_missing", ctx="luma", luma=name, env=OPENSHOT_DIR_ENV))
+    from .mltdata import default_cache_root
+
+    target = default_cache_root() / OPENSHOT_CACHE / f"{stem}.pgm"
+    if target.exists() and target.stat().st_mtime >= source.stat().st_mtime:
+        return target
+    target.parent.mkdir(parents=True, exist_ok=True)
+    partial = target.with_name(f"{stem}.partial.pgm")
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-i", str(source), "-frames:v", "1", "-pix_fmt", "gray", "-c:v", "pgm", "-f", "image2", str(partial)],
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        raise KdenliveAsCodeError(msg("lumas.ffmpeg_unavailable", path=source))
+    if result.returncode != 0:
+        partial.unlink(missing_ok=True)
+        raise KdenliveAsCodeError(msg("lumas.convert_failed", path=source, stderr=result.stderr.strip()))
+    partial.replace(target)
+    return target
+
+
+def name_from_resource(resource: str) -> Optional[str]:
+    """The `luma:` a .kdenlive's luma resource was built from, if it's
+    one of ours (reverse.py)."""
+    path = Path(resource)
+    if path.parent.name == OPENSHOT_CACHE and _OPENSHOT_NAME.match(path.stem):
+        return OPENSHOT_PREFIX + path.stem
+    if path.stem in AVAILABLE_LUMAS:
+        return path.stem
+    return None
+
+
+def wipe_softness(value: Any, ctx: str, key: str, errors: list[str]) -> Optional[float]:
+    """A wipe's `softness` (scenes.py's `luma_softness` too): 0..1."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+        errors.append(msg("validation.wipe_softness_invalid", ctx=ctx, field=key, value=value))
+        return None
+    return float(value)

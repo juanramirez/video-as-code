@@ -204,3 +204,10 @@ def test_find_melt_honors_video_as_code_melt(tmp_path: Path, monkeypatch):
     assert probe.find_melt() == str(melt)
     monkeypatch.setenv("VIDEO_AS_CODE_MELT", str(tmp_path / "missing"))
     assert probe.find_melt() is None
+
+
+def test_transitions_lists_own_and_openshot(openshot_transitions, capsys):
+    assert cli.main(["transitions"]) == 0
+    names = capsys.readouterr().out.split()
+    assert names[0] == "linear_x"
+    assert {"openshot/ramp_left", "openshot/ramp_top"} <= set(names)

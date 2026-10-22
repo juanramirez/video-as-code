@@ -847,10 +847,19 @@ class Importer:
         service = props.get("mlt_service")
 
         if service == "luma":
-            luma_name = Path(props.get("resource", "")).stem
-            if luma_name not in lumas.AVAILABLE_LUMAS:
+            luma_name = lumas.name_from_resource(props.get("resource", ""))
+            if luma_name is None:
                 return None
-            return {"type": "wipe", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "luma": luma_name}
+            wipe = {"type": "wipe", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "luma": luma_name}
+            try:
+                softness = float(props.get("softness", 0))
+            except ValueError:
+                return None
+            if softness:
+                wipe["softness"] = softness
+            if props.get("invert", "0") not in ("", "0"):  # see xmlgen.py's wipe
+                wipe["reverse"] = True
+            return wipe
 
         if service == "affine":
             style = self._match_affine_style(props.get("rect", ""), end_frame - start_frame)

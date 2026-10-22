@@ -1222,3 +1222,30 @@ timeline:
     xmlgen.write(resolved2, kdenlive2_path)
 
     assert kdenlive1_path.read_text() == kdenlive2_path.read_text()
+
+
+def test_round_trip_preserves_openshot_wipe_softness_reverse(tmp_path: Path, assets_dir: Path, openshot_transitions):
+    """An OpenShot map comes back as `openshot/<name>` (not the cached
+    PGM's path), with its softness and direction."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: wipe
+    luma: openshot/ramp_left
+    luma_softness: 0.2
+    luma_reverse: true
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+        encoding="utf-8",
+    )
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive_path)
+
+    (t,) = reverse.import_kdenlive(kdenlive_path).data["transitions"]
+    assert (t["luma"], t["softness"], t["reverse"]) == ("openshot/ramp_left", 0.2, True)

@@ -1159,7 +1159,11 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
             _prop(t, "mlt_service", "luma")
             _prop(t, "kdenlive_id", "luma")
             _prop(t, "resource", str(lumas.luma_path(w.luma)))
-            _prop(t, "softness", 0)
+            _prop(t, "softness", f"{w.softness:g}")
+            if w.reverse:
+                # light parts first: `invert`, not MLT's own `reverse` -
+                # which, found by rendering (melt 7.36), changes nothing
+                _prop(t, "invert", 1)
             _prop(t, "alpha_over", 1)
             _prop(t, "fix_background_alpha", 1)
         for a in project.affine_transitions:

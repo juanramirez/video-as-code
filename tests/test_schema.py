@@ -2013,3 +2013,88 @@ timeline:
     with pytest.raises(ValidationErrors) as exc:
         load_yaml(path)
     assert ".ken_burns_from" in str(exc.value)
+
+
+def _two_track_wipe(assets_dir: Path, wipe: str) -> str:
+    return f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: red
+    path: {assets_dir / "photo.png"}
+  - id: blue
+    path: {assets_dir / "photo2.png"}
+timeline:
+  tracks:
+    - type: video
+      name: A
+      clips:
+        - {{clip: red, start: 0, duration: 2.5}}
+    - type: video
+      name: B
+      clips:
+        - {{clip: blue, start: 1.5, duration: 2.5}}
+transitions:
+  - {{type: wipe, track_a: A, track_b: B, start: 1.5, end: 2.5, {wipe}}}
+"""
+
+
+def test_transition_wipe_openshot_luma_softness_reverse(tmp_path: Path, assets_dir: Path, openshot_transitions):
+    path = _write_yaml(tmp_path, _two_track_wipe(assets_dir, "luma: openshot/ramp_left, softness: 0.25, reverse: true"))
+    w = load_and_resolve(path).wipe_transitions[0]
+    assert (w.luma, w.softness, w.reverse) == ("openshot/ramp_left", 0.25, True)
+
+
+@pytest.mark.parametrize(
+    "wipe, expected",
+    [
+        ("luma: openshot/no_such_thing", "openshot"),
+        ("softness: 2", "softness"),
+        ("reverse: sometimes", "reverse"),
+    ],
+)
+def test_transition_wipe_options_rejected(tmp_path: Path, assets_dir: Path, openshot_transitions, wipe: str, expected: str):
+    path = _write_yaml(tmp_path, _two_track_wipe(assets_dir, wipe))
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert expected in str(exc.value)
+
+
+def test_scene_wipe_openshot_luma_softness_reverse(tmp_path: Path, assets_dir: Path, openshot_transitions):
+    path = _write_yaml(
+        tmp_path,
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: wipe
+    luma: openshot/ramp_top
+    luma_softness: 0.3
+    luma_reverse: true
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+    )
+    w = load_and_resolve(path).wipe_transitions[0]
+    assert (w.luma, w.softness, w.reverse) == ("openshot/ramp_top", 0.3, True)
+
+
+def test_scene_wipe_softness_rejected(tmp_path: Path, assets_dir: Path):
+    path = _write_yaml(
+        tmp_path,
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+scenes:
+  - scene: s1
+    transition: wipe
+    luma_softness: -1
+    clips:
+      - {assets_dir / "photo.png"}
+      - {assets_dir / "photo2.png"}
+    duration: 4.0
+""",
+    )
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(path)
+    assert "luma_softness" in str(exc.value)

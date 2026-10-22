@@ -425,7 +425,9 @@ class WipeTransitionSpec:
     track_b: str
     start: float
     end: float
-    luma: str  # one of lumas.AVAILABLE_LUMAS
+    luma: str  # one of lumas.AVAILABLE_LUMAS, or "openshot/<name>" (see lumas.py)
+    softness: float = 0.0  # MLT luma's: 0 a hard edge, 1 the softest
+    reverse: bool = False  # the map's light parts first instead of its dark ones
 
 
 AFFINE_STYLES = ("zoom", "slide")  # shared with scenes.py and schema.py's `transitions:` parsing
@@ -605,6 +607,8 @@ class ResolvedWipeTransition:
     start_frame: int
     end_frame: int  # last included frame (MLT convention, like ResolvedPlacement.out_frame)
     luma: str
+    softness: float = 0.0
+    reverse: bool = False
 
 
 @dataclass
