@@ -213,3 +213,27 @@ def test_openshot_effects_a_card_each(monkeypatch):
     assert cards["Echo"].source == "sound" and "type: audio" in cards["Echo"].project and gallery._audible(cards["Echo"])
     assert not cards["Caption"].render and "type: title" in cards["Caption"].unavailable  # (grey, saying why)
     assert "libopenshot: 9.9" in cards["Wave"].project and cards["Wave"].description == "Waves."
+
+
+# --- part of the docs (docs.py): each card linked to its key ------------------
+
+def test_a_card_knows_its_key():
+    known = {"transition", "luma", "openshot", "derive", "melt", "gl"}
+    card = lambda snippet: gallery.Entry("x", "x", snippet, "")  # noqa: E731
+    assert gallery.doc_key(card("transition: wipe\nluma: heart"), known) == "luma"
+    assert gallery.doc_key(card("derive:\n  openshot:\n    - {effect: Wave}"), known) == "openshot"
+    assert gallery.doc_key(card("melt:\n  - brightness: {level: 2}"), known) == "melt"
+    assert gallery.doc_key(card("transition: gl\ngl: cube\ngl_params: {persp: 1}"), known) == "gl"
+    assert gallery.doc_key(card("speed: 2"), known) is None
+
+
+def test_the_gallery_links_each_card_to_its_key(tmp_path: Path):
+    entry = gallery.Entry("clip", "fade", "fade_in: 1", "", render=False)
+    pictures = [tmp_path / "a.png", tmp_path / "b.png"]
+    for path in pictures:
+        path.write_bytes(b"png")
+    page = gallery._page([(entry, None)], {}, [], pictures, tmp_path, {}, {"fade_in": "../docs/project-yaml.html#key-fade_in"},
+                         "../docs/index.html")
+    assert '<figure id="card-clip-fade"' in page
+    assert 'class="to-doc" href="../docs/project-yaml.html#key-fade_in"' in page
+    assert 'class="docs" href="../docs/index.html"' in page

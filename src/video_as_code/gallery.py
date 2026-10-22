@@ -45,6 +45,7 @@ from .mltdata import default_cache_root
 WIDTH, HEIGHT = 320, 180
 THUMB_SIZE = (WIDTH, HEIGHT)  # the wipe shapes play as big as the videos
 GALLERY_DIR = "gallery"
+DOC_CARDS = "doc-cards.json"  # key of the reference -> the first card for it (for docs.py)
 _IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
 
 
@@ -771,6 +772,22 @@ def _slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
+def card_id(entry: Entry) -> str:
+    return f"card-{_slug(entry.section)}-{_slug(entry.name)}"
+
+
+# keys a snippet has that say less than the one next to them
+_MINOR_KEYS = {"transition_properties", "transition_duration", "duration", "start", "clip", "path", "params", "gl_params"}
+
+
+def doc_key(entry: Entry, known) -> Optional[str]:
+    """The key of the reference `entry` shows: of its snippet's keys, the
+    most specific one the reference has (`luma` rather than `transition`,
+    derive:'s `openshot` rather than `derive`)."""
+    keys = [k for k in re.findall(r"(?m)^\s*([a-z_]+):", entry.snippet) if k in known and k not in _MINOR_KEYS]
+    return keys[-1] if keys else None
+
+
 def _preview_key(entry: Entry, samples: dict[str, Path], base: str) -> str:
     used = sorted(k for k in samples if "{" + k + "}" in entry.project)
     parts = [base, entry.project, *(_file_key(samples[k]) for k in used)]
@@ -830,8 +847,14 @@ def build(
     own: Optional[Path] = None,
     cache_root: Optional[Path] = None,
     on_progress: Callable[[str], None] = lambda text: None,
+    doc_links: Optional[dict[str, str]] = None,
+    docs_home: Optional[str] = None,
 ) -> Path:
-    """Writes the page (rendering what isn't cached yet); returns its path."""
+    """Writes the page (rendering what isn't cached yet); returns its path.
+    Part of the docs (docs.py): `doc_links` maps the reference's keys to
+    their URLs, each card linking to its key's; `docs_home`, the docs'
+    first page, linked at the top - and which card each key's link goes
+    to is written to DOC_CARDS next to the page."""
     if probe.find_melt() is None:
         raise KdenliveAsCodeError(msg("cli.render_missing_melt"))
     root = (cache_root or default_cache_root()) / GALLERY_DIR
@@ -976,7 +999,16 @@ def build(
     page = root / "index.html"
     shown = [(e, out) for e, out in previews if e not in baselines.values()]
     shown += [(e, None) for e in catalog if not e.render]
-    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged), encoding="utf-8")
+    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged, doc_links or {}, docs_home), encoding="utf-8")
+    first: dict[str, str] = {}
+    for section in SECTIONS:  # (in the page's order)
+        if section == "lumas" and luma_cards and "luma" in (doc_links or {}):
+            first.setdefault("luma", f"card-lumas-{_slug(luma_cards[0][0])}")
+        for e, _ in shown:
+            key = doc_key(e, doc_links or {}) if e.section == section else None
+            if key:
+                first.setdefault(key, card_id(e))
+    (root / DOC_CARDS).write_text(json.dumps(first, indent=1), encoding="utf-8")
     return page
 
 
@@ -1002,6 +1034,8 @@ def _page(
     pictures: list[Path],
     root: Path,
     unchanged: Optional[dict[str, bool]] = None,
+    doc_links: Optional[dict[str, str]] = None,
+    docs_home: Optional[str] = None,
 ) -> str:
     def rel(path: Path) -> str:
         return html.escape(path.relative_to(root).as_posix())
@@ -1016,9 +1050,11 @@ def _page(
     sections = []
     for section in SECTIONS:
         if section == "lumas":
+            to_doc = (f' <a class="to-doc" href="{html.escape(doc_links["luma"])}" title="{html.escape(msg("gallery.to_doc", field="luma"))}">'
+                      f'luma:</a>' if "luma" in (doc_links or {}) else "")
             cards = "\n".join(
-                f'<figure class="luma"><canvas width="{THUMB_SIZE[0]}" height="{THUMB_SIZE[1]}" data-src="{inline(thumb)}"></canvas>'
-                f"<pre><code>transition: wipe\nluma: {html.escape(name)}</code></pre></figure>"
+                f'<figure id="card-lumas-{_slug(name)}" class="luma"><canvas width="{THUMB_SIZE[0]}" height="{THUMB_SIZE[1]}" data-src="{inline(thumb)}"></canvas>'
+                f"<pre><code>transition: wipe\nluma: {html.escape(name)}</code></pre>{to_doc}</figure>"
                 for name, thumb in luma_cards
             )
             hint = msg("gallery.lumas_hint")
@@ -1073,8 +1109,11 @@ def _page(
                 attrs = f' class="{" ".join(classes)}"' if classes else ""
                 if entry.unavailable:  # (why it's grey, on the whole card)
                     attrs += f' title="{html.escape(entry.unavailable)}"'
+                key = doc_key(entry, doc_links or {})
+                to_doc = (f' <a class="to-doc" href="{html.escape(doc_links[key])}" title="{html.escape(msg("gallery.to_doc", field=key))}">'
+                          f'{html.escape(key)}:</a>' if key else "")
                 items.append(
-                    f'<figure{attrs}>{media}<figcaption>{html.escape(entry.name)}{badge}</figcaption>{about}'
+                    f'<figure id="{card_id(entry)}"{attrs}>{media}<figcaption>{html.escape(entry.name)}{badge}{to_doc}</figcaption>{about}'
                     f"<pre><code>{html.escape(entry.snippet)}</code></pre></figure>"
                 )
             cards = "\n".join(items)
@@ -1106,6 +1145,7 @@ def _page(
         .replace("{copied}", json.dumps(msg("gallery.copied")))
         .replace("{thumb_w}", str(THUMB_SIZE[0]))
         .replace("{thumb_h}", str(THUMB_SIZE[1]))
+        .replace("{docs}", f'<a class="docs" href="{html.escape(docs_home)}">{html.escape(msg("gallery.docs"))}</a>' if docs_home else "")
         .replace("{sections}", "\n".join(sections))
     )
 
@@ -1172,10 +1212,14 @@ figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg);
          padding: 6px 12px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .toast.on { opacity: 1; }
+a.docs { float: right; margin-top: 4px; }
+a.to-doc { margin-left: 6px; font: 12px ui-monospace, monospace; font-weight: normal; }
+figure:target { outline: 3px solid var(--accent, #2a6fdb); }
 </style>
 </head>
 <body class="hide-unchanged">
 <header>
+{docs}
 <h1>{title}</h1>
 <p>{intro}</p>
 <div class="tabs" role="tablist">{tabs}</div>
@@ -1311,6 +1355,19 @@ document.querySelector('input[type="search"]').addEventListener("input", (e) => 
   updateCounts();
 });
 updateCounts();
+// a link to a card (from the docs): its tab, its section open, it shown
+const card = location.hash.startsWith("#card-") && document.getElementById(location.hash.slice(1));
+if (card) {
+  const sec = card.closest("section");
+  showTab(sec.dataset.tab);
+  sec.querySelector("details").open = true;
+  if (card.matches(".unchanged, .unavailable")) {
+    document.body.classList.remove("hide-unchanged");
+    document.querySelector("label.hide input").checked = false;
+    updateCounts();
+  }
+  card.scrollIntoView({block: "center"});
+}
 </script>
 </body>
 </html>
