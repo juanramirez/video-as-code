@@ -38,6 +38,7 @@ from typing import Callable, Optional
 
 from . import gltransitions, lumas, meltpass, probe
 from .errors import KdenliveAsCodeError
+from . import i18n
 from .i18n import msg
 from .mltdata import default_cache_root
 
@@ -198,7 +199,10 @@ def gl_entries() -> tuple[Entry, ...]:
     plugin is built (gltransitions.py); none before."""
     if not gltransitions.installed():
         return ()
-    return tuple(_scene(name, f"transition: gl\ngl: {name}", section="gl") for name in gltransitions.catalog())
+    return tuple(
+        replace(_scene(name, f"transition: gl\ngl: {name}", section="gl"), description=info.get("description", ""))
+        for name, info in gltransitions.catalog().items()
+    )
 
 
 def _audio(name: str, keys: str) -> Entry:
@@ -709,6 +713,10 @@ def _page(
                         classes.append("unchanged")
                         badge = f'<span class="badge">{html.escape(msg("gallery.unchanged"))}</span>'
                 about = ""
+                if not entry.melt_catalog and not entry.description:
+                    key = f"gallery.about.{_slug(entry.name)}"
+                    if key in i18n.CATALOGS["en"]:
+                        entry = replace(entry, description=msg(key))
                 if entry.title or entry.description:
                     title = entry.title if entry.title and entry.title.lower() != entry.name.lower() else ""
                     text = " - ".join(t for t in (title, entry.description) if t)

@@ -76,6 +76,15 @@ def test_links_to_every_section_folded():
     assert "<details open" not in page
 
 
+def test_own_entries_described():
+    by_name = {e.name: e for e in gallery.CATALOG}
+    entry, out = by_name["chroma_key"], Path(__file__).parent / "files" / "x.mp4"
+    page = gallery._page([(entry, out)], {}, [], [Path(__file__), Path(__file__)], Path(__file__).parent)
+    assert "Makes a colour transparent" in page
+    for e in gallery.CATALOG:  # every one of them has its line
+        assert f"gallery.about.{gallery._slug(e.name)}" in gallery.i18n.CATALOGS["es"], e.name
+
+
 def _catalog(**services) -> dict:
     """A stand-in for melt's catalog: name -> tags."""
     out = {"transition": {}, "filter": {}}
