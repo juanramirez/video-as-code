@@ -148,3 +148,9 @@ def test_tweaks_from_ranges():
         (("default", 1.0), ("maximum", 15.0), ("minimum", 0.0), ("name", "end (*DEPRECATED*)"), ("type", "float")),
     ))
     assert gallery._tweaks(entry) == [{"level": 11.25}, {"u": 64}, {"flag": True}]
+
+
+def test_clip_keys_that_change_over_time_apart():
+    sections = {e.name: e.section for e in gallery.CATALOG}
+    assert sections["color_grade_keyframes"] == sections["speed"] == sections["fade_in / fade_out"] == "clip_time"
+    assert sections["position / size"] == sections["color_grade"] == sections["lut"] == "clip"

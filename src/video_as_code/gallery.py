@@ -147,6 +147,14 @@ timeline:
     return Entry("title", name, "type: title\n" + keys.strip(), project)
 
 
+# the clip keys that change it as it plays - fades, keyframed motion and
+# colour, speed and freezes: a list of their own, apart from those that
+# hold over the whole clip
+_OVER_TIME = {
+    "fade_in / fade_out", "speed", "speed, backwards", "speed_ramp", "boomerang", "freeze_at",
+    "position_keyframes", "ken_burns_from / to", "color_grade_keyframes",
+}
+
 CATALOG: tuple[Entry, ...] = (
     _scene("dissolve", "transition: dissolve"),
     _scene("wipe", "transition: wipe\nluma: radial"),
@@ -197,9 +205,11 @@ CATALOG: tuple[Entry, ...] = (
     _title("title card, outline", 'text: "Hello"\nfont: "Noto Serif"\nfont_size: 44\nitalic: true\noutline: 2\noutline_color: [180, 30, 30, 255]'),
 )
 
-SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")
+CATALOG = tuple(replace(e, section="clip_time") if e.section == "clip" and e.name in _OVER_TIME else e for e in CATALOG)
+
+SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "clip_time", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")
 # the page's two tabs: what goes between clips, and what goes on one
-TABS = {"transitions": ("transitions", "lumas", "gl", "melt_transitions"), "effects": ("clip", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")}
+TABS = {"transitions": ("transitions", "lumas", "gl", "melt_transitions"), "effects": ("clip", "clip_time", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")}
 
 
 def gl_entries() -> tuple[Entry, ...]:
