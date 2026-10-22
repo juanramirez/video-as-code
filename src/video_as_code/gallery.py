@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import lumas, probe
+from . import gltransitions, lumas, probe
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .mltdata import default_cache_root
@@ -61,7 +61,7 @@ def _indent(text: str, spaces: int) -> str:
 _HEADER = f"project: {{id: gallery, title: Gallery, fps: 25, width: {WIDTH}, height: {HEIGHT}}}\n"
 
 
-def _scene(name: str, keys: str) -> Entry:
+def _scene(name: str, keys: str, section: str = "transitions") -> Entry:
     """A transition between two stills, as a `scenes:` entry."""
     project = _HEADER + f"""scenes:
   - scene: s
@@ -70,7 +70,7 @@ def _scene(name: str, keys: str) -> Entry:
     clips: ["{{a}}", "{{b}}"]
     duration: 4.4
 """
-    return Entry("transitions", name, keys.strip(), project)
+    return Entry(section, name, keys.strip(), project)
 
 
 def _clip(name: str, keys: str, source: str = "a", background: bool = False) -> Entry:
@@ -183,7 +183,15 @@ CATALOG: tuple[Entry, ...] = (
     _title("title card", 'text: "Hello"\nfont_size: 40\nbackground: [0, 0, 0, 120]'),
 )
 
-SECTIONS = ("transitions", "lumas", "clip", "derive", "title")
+SECTIONS = ("transitions", "lumas", "gl", "clip", "derive", "title")
+
+
+def gl_entries() -> tuple[Entry, ...]:
+    """One per gl-transitions transition, with its defaults - once its
+    plugin is built (gltransitions.py); none before."""
+    if not gltransitions.installed():
+        return ()
+    return tuple(_scene(name, f"transition: gl\ngl: {name}", section="gl") for name in gltransitions.catalog())
 
 
 # --- samples -----------------------------------------------------------------
@@ -237,8 +245,9 @@ def _with_own(samples: dict[str, Path], own: Optional[Path]) -> dict[str, Path]:
 # --- previews ----------------------------------------------------------------
 
 def _code_key() -> str:
-    """This package's own code and data: a change to how anything is
-    built renders every preview again. Not the messages or this page's own code, which
+    """This package's own code and data (the gl-transitions shaders and
+    plugin source among them): a change to how anything is built renders
+    every preview again. Not the messages or this page's own code, which
     don't change a render (an entry's project is in its own key)."""
     h = hashlib.sha256()
     package = Path(__file__).parent
@@ -318,7 +327,7 @@ def build(
     samples = _with_own(_make_samples(root / "samples"), own)
     base = _code_key() + "\n" + str(probe.find_melt())
 
-    previews = [(e, files / f"{_slug(e.name)}-{_preview_key(e, samples, base)}.mp4") for e in CATALOG]
+    previews = [(e, files / f"{_slug(e.section)}-{_slug(e.name)}-{_preview_key(e, samples, base)}.mp4") for e in (*CATALOG, *gl_entries())]
     errors_file = root / "errors.json"
     try:
         errors: dict[str, str] = json.loads(errors_file.read_text(encoding="utf-8"))
@@ -419,6 +428,8 @@ def _page(
                 )
             cards = "\n".join(items)
             hint = msg(f"gallery.hint_{section}")
+            if section == "gl" and not items:
+                hint = msg("gallery.hint_gl_not_installed")
         sections.append(
             f'<section data-section="{section}"{extra}><h2>{html.escape(msg(f"gallery.section_{section}"))}</h2>'
             f'<p>{html.escape(hint)}</p><div class="grid">{cards}</div></section>'

@@ -30,6 +30,7 @@ def test_page_from_cached_renders(tmp_path: Path, melt, openshot_transitions, mo
     broken = gallery._clip("broken", "speed: 1000", source="video")
     by_name = {e.name: e for e in gallery.CATALOG}
     monkeypatch.setattr(gallery, "CATALOG", (by_name["dissolve"], by_name["fade_in / fade_out"], broken))
+    monkeypatch.setattr(gallery, "gl_entries", lambda: ())  # (whether or not this machine built the plugin)
     rendered = []
     real_render = gallery._render
     monkeypatch.setattr(gallery, "_render", lambda *a: rendered.append(a[0].name) or real_render(*a))
@@ -39,7 +40,7 @@ def test_page_from_cached_renders(tmp_path: Path, melt, openshot_transitions, mo
     assert sorted(rendered) == sorted(["dissolve", "fade_in / fade_out", "broken"])
     assert text.count("<video") == 2  # the broken one shows its error instead
     assert "speed" in text and "luma: openshot/ramp_left" in text
-    assert "files/dissolve-" in text
+    assert "files/transitions-dissolve-" in text
     # what the page reads the pixels of is in it, not in files beside it
     # (a page opened from a file can't read another file's pixels)
     for src in ('data-src="data:image/jpeg;base64,', 'data-from="data:image/jpeg;base64,', 'data-to="data:image/jpeg;base64,'):
@@ -55,6 +56,7 @@ def test_page_from_cached_renders(tmp_path: Path, melt, openshot_transitions, mo
 def test_cli_gallery_without_opening(tmp_path: Path, melt, openshot_transitions, monkeypatch, capsys):
     # (openshot_transitions: a cache folder of the test's own, and 2 OpenShot maps, not a real install's 412)
     monkeypatch.setattr(gallery, "CATALOG", (gallery.CATALOG[0],))
+    monkeypatch.setattr(gallery, "gl_entries", lambda: ())
     monkeypatch.setattr("webbrowser.open", lambda url: pytest.fail("opened the browser"))
     assert cli.main(["gallery", "--no-open"]) == 0
     assert (tmp_path / "cache" / "video-as-code" / "gallery" / "index.html").exists()
