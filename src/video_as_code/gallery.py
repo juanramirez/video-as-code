@@ -767,7 +767,10 @@ def build(
             for values in _tweaks(entry):
                 variant = _with_values(entry, values)
                 v_out = output(variant)
-                if not v_out.exists() and _render(variant, samples, work, v_out):
+                error = None if v_out.exists() else _render(variant, samples, work, v_out)
+                if error == msg("gallery.timed_out", seconds=_RENDER_TIMEOUT_S):
+                    break  # (one that hangs would hang with every value: not three times)
+                if error:
                     continue
                 if not _unchanged(variant, v_out, baseline_outs, sound_baseline_out):
                     return out.name, {"values": values, "file": v_out.name}
@@ -897,7 +900,12 @@ def _page(
                     elif entry.tweaked:
                         note = msg("gallery.tweaked", values=entry.tweaked)
                     elif "unchanged" in classes:
-                        note = msg("gallery.needs_values")
+                        tried = _tweaks(entry)
+                        if tried:  # (tried, and none changed it)
+                            shown_values = "; ".join(", ".join(f"{k}: {json.dumps(v)}" for k, v in t.items()) for t in tried)
+                            note = msg("gallery.no_change_found", tried=shown_values)
+                        else:  # (nothing it could try)
+                            note = msg("gallery.needs_values")
                     text = " - ".join(t for t in (note, title, entry.description) if t)
                     about = f'<p class="about" title="{html.escape(text)}">{html.escape(text)}</p>'
                 attrs = f' class="{" ".join(classes)}"' if classes else ""
