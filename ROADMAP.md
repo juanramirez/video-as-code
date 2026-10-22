@@ -1329,3 +1329,11 @@ whole video can be built from a fresh checkout anywhere.
   one alone. Checked by real render: a dissolve between two parts
   mixes them halfway (`tests/test_parts.py`). Not yet: fetch, --proxy,
   --split, autoprune and import with parts (BACKLOG.md).
+- **`parts:` with the rest of the tool** — **implemented** (2026-10-22):
+  `fetch` goes through each part in its own folder (parts.register makes
+  load_yaml read a part file as the project it is part of, so fetch's
+  interactive fixes land in the part's file), autoprune too (not with
+  `--part`), `--proxy` makes each part's copies in its folder, `--split`
+  places a part's clips where the part plays (splitrender._placements),
+  and `import` turns a timeline of whole sequences in turn back into
+  `parts:` and a file per part (`tests/test_parts.py`).

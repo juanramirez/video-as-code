@@ -18,10 +18,11 @@ using the original .kdenlive for that part).
 from __future__ import annotations
 
 import json
+import os
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Optional
 
 from . import gltransitions, lumas, meltpass, probe, titles, xmlgen
@@ -90,6 +91,9 @@ class ImportResult:
     data: dict
     raw_items: list[RawItem] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # a project of nested sequences in the shape `parts:` makes (parts.py):
+    # each part's file, by its path relative to the main one's folder
+    files: dict[str, dict] = field(default_factory=dict)
 
 
 def _pretty(el: ET.Element) -> str:
@@ -155,6 +159,7 @@ class Importer:
         self.root = root
         self.path = kdenlive_path
         self.base_dir = kdenlive_path.parent
+        self.absolute_paths = False  # (a part's importer: see parts_of)
         self.by_id: dict[str, ET.Element] = {
             el.get("id"): el for el in root.iter() if el.get("id") is not None
         }
@@ -285,10 +290,12 @@ class Importer:
             return self.bin_by_path[resource]
         p = Path(resource)
         try:
+            if self.absolute_paths:  # (a part's file may be written anywhere)
+                raise ValueError
             rel = Path(resource).resolve().relative_to(self.base_dir.resolve())
             display_path = str(rel)
         except ValueError:
-            display_path = resource
+            display_path = resource if p.is_absolute() else str((Path(self.root.get("root") or self.base_dir) / p).resolve())
         base_id = p.stem or "clip"
         clip_id, n = base_id, 2
         existing_ids = {c["id"] for c in self.bin_entries}
@@ -989,11 +996,35 @@ class Importer:
         self.preregister_bin_order()
 
         sequence = self.find_main_sequence()
+        title = _props(sequence).get("kdenlive:clipname", self.path.stem)
+        project_yaml = {
+            "id": self.path.stem,
+            "title": title,
+            "fps": self.fps.num if self.fps.den == 1 else round(self.fps.fps, 3),
+            "width": self.width,
+            "height": self.height,
+            "colorspace": self.colorspace,
+        }
+        main_bin = self.by_id.get("main_bin")
+        notes = _props(main_bin).get("kdenlive:documentnotes") if main_bin is not None else None
+        if notes:
+            project_yaml["notes"] = notes
+
+        files: dict[str, dict] = {}
+        parts_yaml = self.parts_of(sequence, "", files)
+        if parts_yaml is not None:  # a project of parts (parts.py)
+            return ImportResult(data={"project": project_yaml, "parts": parts_yaml}, warnings=self.warnings, files=files)
+
         for extra in self.other_sequences(sequence):
             self.raw_items.append(RawItem(msg("reverse.extra_sequence_not_imported"), _pretty(extra)))
-        guides = self.parse_guides(sequence)
+        data = {"project": project_yaml, **self.sequence_yaml(sequence)}
+        if self.raw_items:
+            data["x_kdenlive_raw"] = [{"where": r.where, "xml": r.xml} for r in self.raw_items]
+        return ImportResult(data=data, raw_items=self.raw_items, warnings=self.warnings)
 
-        title = _props(sequence).get("kdenlive:clipname", self.path.stem)
+    def sequence_yaml(self, sequence: ET.Element) -> dict:
+        """One sequence's bin:, timeline:, guides: and transitions:."""
+        guides = self.parse_guides(sequence)
         track_els = [t for t in sequence.findall("track") if t.get("producer") not in self.black_ids]
 
         tracks_yaml = []
@@ -1023,32 +1054,116 @@ class Importer:
 
         transitions_yaml = self.convert_cross_track_transitions(sequence, track_names_by_position)
 
-        project_yaml = {
-            "id": self.path.stem,
-            "title": title,
-            "fps": self.fps.num if self.fps.den == 1 else round(self.fps.fps, 3),
-            "width": self.width,
-            "height": self.height,
-            "colorspace": self.colorspace,
-        }
-        main_bin = self.by_id.get("main_bin")
-        notes = _props(main_bin).get("kdenlive:documentnotes") if main_bin is not None else None
-        if notes:
-            project_yaml["notes"] = notes
-
-        data = {
-            "project": project_yaml,
-            "bin": self.bin_entries,
-            "timeline": {"tracks": tracks_yaml},
-        }
+        data = {"bin": self.bin_entries, "timeline": {"tracks": tracks_yaml}}
         if guides:
             data["guides"] = guides
         if transitions_yaml:
             data["transitions"] = transitions_yaml
-        if self.raw_items:
-            data["x_kdenlive_raw"] = [{"where": r.where, "xml": r.xml} for r in self.raw_items]
+        return data
 
-        return ImportResult(data=data, raw_items=self.raw_items, warnings=self.warnings)
+    # -- a project of parts (parts.py) ----------------------------------------
+
+    def _is_sequence(self, el: Optional[ET.Element]) -> bool:
+        return el is not None and el.tag == "tractor" and "kdenlive:uuid" in _props(el)
+
+    def parts_of(self, sequence: ET.Element, own_file: str, files: dict[str, dict]) -> Optional[list]:
+        """`sequence` as a `parts:` list - each part's file added to
+        `files` - if it has the shape parts.py gives a file with parts:
+        its tracks hold only whole other sequences, each once, one after
+        the other or overlapping by a transition this importer knows
+        (a wipe, affine, gl or melt/ transition between the two tracks, or
+        a fade - a dissolve - or reveal on one of them). None otherwise."""
+        placed = []  # (start, end, track position, entry, sequence)
+        for pos, track_el in enumerate((t for t in sequence.findall("track") if t.get("producer") not in self.black_ids), start=1):
+            try:
+                playlist, _kind, _meta = self.resolve_track_playlist(track_el, f"track {pos}")
+            except ValueError:
+                return None
+            cursor = 0
+            for child in playlist:
+                if child.tag == "blank":
+                    cursor += int(child.get("length"))
+                elif child.tag == "entry":
+                    nested = self.by_id.get(child.get("producer"))
+                    if not self._is_sequence(nested):
+                        return None
+                    first = _parse_frame_value(child.get("in", "0"), self.fps)
+                    last = _parse_frame_value(child.get("out"), self.fps)
+                    whole = _parse_frame_value(nested.get("out"), self.fps)
+                    if first != 0 or last != whole:
+                        return None  # (a part is placed whole)
+                    placed.append((cursor, cursor + last, pos, child, nested))
+                    cursor += last + 1
+        if not placed or len({id(p[4]) for p in placed}) != len(placed):
+            return None
+        placed.sort(key=lambda p: p[0])
+        transitions = [t for t in sequence.findall("transition") if _props(t).get("a_track", "0") != "0"]
+        names = {pos: f"T{pos}" for pos in range(1, 64)}
+        entries = []
+        for i, (start, end, pos, entry_el, nested) in enumerate(placed):
+            name = _props(nested).get("kdenlive:clipname") or nested.get("id").strip("{}")
+            file = f"{name}.yaml"
+            here = str(PurePosixPath(own_file).parent) if own_file else "."
+            entry: dict = {"file": os.path.relpath(file, here).replace(os.sep, "/")}
+            if i > 0:
+                prev_start, prev_end, prev_pos, prev_el, _ = placed[i - 1]
+                if start <= prev_end:  # overlapping: a transition into this part
+                    overlap = round(self.fps.frames_to_seconds(prev_end - start + 1), 3)
+                    keys = self._part_transition(transitions, names, start, prev_end, prev_el, entry_el, prev_end, start)
+                    if keys is None:
+                        return None
+                    entry.update(keys)
+                    entry["transition_duration"] = overlap
+                elif start != prev_end + 1:
+                    return None  # (a gap: not parts in turn)
+            sub = Importer(self.root, self.path)
+            sub.absolute_paths = True
+            nested_parts = sub.parts_of(nested, file, files)
+            if nested_parts is not None:
+                files[file] = {"parts": nested_parts}
+            else:
+                sub.preregister_bin_order()
+                part = sub.sequence_yaml(nested)
+                used = {c.get("clip") for t in part["timeline"]["tracks"] for c in t["clips"]}
+                part["bin"] = [b for b in part["bin"] if b.get("id") in used]
+                if sub.raw_items:
+                    part["x_kdenlive_raw"] = [{"where": r.where, "xml": r.xml} for r in sub.raw_items]
+                self.warnings += sub.warnings
+                files[file] = part
+            entries.append(entry if len(entry) > 1 else entry["file"])
+        return entries
+
+    def _part_transition(self, transitions, names, start, end, prev_el, entry_el, prev_end, this_start) -> Optional[dict]:
+        """A parts: entry's transition keys for the overlap start..end."""
+        for t in transitions:
+            if t.get("in") is None:
+                continue
+            if _parse_frame_value(t.get("in"), self.fps) == start and _parse_frame_value(t.get("out"), self.fps) == end:
+                found = self._recognize_cross_track_transition(t, _props(t), names)
+                if found is None:
+                    return None
+                kind = found["type"]
+                if kind == "wipe":
+                    keys = {"transition": "wipe", "luma": found["luma"]}
+                    if found.get("softness"):
+                        keys["luma_softness"] = found["softness"]
+                    if found.get("reverse"):
+                        keys["luma_reverse"] = True
+                    return keys
+                if kind == "affine":
+                    return {"transition": "affine", "style": found["style"]}
+                if kind == "gl":
+                    return {"transition": "gl", "gl": found["gl"], **({"gl_params": found["gl_params"]} if found.get("gl_params") else {})}
+                return {"transition": kind, **({"transition_properties": found["properties"]} if found.get("properties") else {})}
+        # no transition element: a fade (dissolve) or reveal on one of them
+        for el in (entry_el, prev_el):
+            for filt in el.findall("filter"):
+                got = self.convert_clip_filter(filt, 0, 1 << 30, "parts")
+                if "reveal" in got:
+                    return {"transition": got["reveal"]}
+                if "fade_in" in got or "fade_out" in got:
+                    return {"transition": "dissolve"}
+        return None
 
 
 def import_kdenlive(path: str | Path) -> ImportResult:

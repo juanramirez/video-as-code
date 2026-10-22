@@ -265,6 +265,11 @@ def cmd_import(args: argparse.Namespace) -> int:
 
     try:
         output.write_text(_dump_yaml(result.data), encoding="utf-8")
+        for rel, data in result.files.items():  # (a project of parts: each part's file, by the main one)
+            part_file = output.parent / rel
+            part_file.parent.mkdir(parents=True, exist_ok=True)
+            part_file.write_text(_dump_yaml(data), encoding="utf-8")
+            print(msg("cli.import_done", output=part_file))
     except OSError as exc:
         print(msg("cli.write_failed", path=output, exc=exc), file=sys.stderr)
         return 1

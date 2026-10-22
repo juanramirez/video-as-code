@@ -228,3 +228,29 @@ def test_split_trim_counts_a_parts_clips_where_it_plays(trip: Path, tmp_path: Pa
     trimmed = splitrender.trim(root, 0, 20, margin=0)
     kept = {paths.get(e.get("producer"), "") for pl in trimmed.iter("playlist") if pl.get("id") != "main_bin" for e in pl.iter("entry")}
     assert not any(k.endswith(("green.png", "yellow.png")) for k in kept)  # (the mountains don't play in 0-20)
+
+
+@pytest.mark.parametrize("transition", ["dissolve", "wipe, luma: radial", "gl, gl: cube"])
+def test_import_brings_the_parts_back(trip: Path, tmp_path: Path, transition: str):
+    """build, then import: a main file with parts: and a file per part
+    (by its sequence's name), which builds again into the same timeline."""
+    if transition.startswith("gl"):
+        from video_as_code import gltransitions
+        if not gltransitions.installed():
+            pytest.skip("transition: gl needs its plugin built")
+    trip.write_text(trip.read_text(encoding="utf-8").replace("transition: dissolve, transition_duration: 1",
+                                                          f"transition: {transition}, transition_duration: 1"), encoding="utf-8")
+    before = load_and_resolve(trip)
+    built = tmp_path / "built.kdenlive"
+    xmlgen.write(before, built)
+    out = tmp_path / "back" / "trip.yaml"
+    out.parent.mkdir()
+    assert cli.main(["import", str(built), "-o", str(out)]) == 0
+    assert (out.parent / "intro.yaml").exists() and (out.parent / "mountains" / "all.yaml").exists()
+    assert (out.parent / "mountains" / "peak.yaml").exists()
+    assert "peak.yaml" in (out.parent / "mountains" / "all.yaml").read_text(encoding="utf-8")
+    after = load_and_resolve(out)
+    assert after.total_frames == before.total_frames
+    assert [len(t.placements) for t in after.tracks] == [len(t.placements) for t in before.tracks]
+    assert len(after.wipe_transitions) == len(before.wipe_transitions)
+    assert len(after.melt_transitions) == len(before.melt_transitions)

@@ -435,4 +435,9 @@ scenes:
 - `--proxy` makes each part's light copies in that part's own `.proxies/`;
   `--split` cuts segments on the whole timeline, a part's clips counted
   where the part plays.
-- Not yet: `import` keeps nested sequences in `x_kdenlive_raw`.
+- `import` of a `.kdenlive` whose timeline is parts in turn (the shape a
+  build gives it: sequences placed whole, each once, one after the other
+  or overlapping by a transition it knows) writes the main file with
+  `parts:` and a file per part, named after its sequence and next to the
+  main one, its paths absolute. Nested sequences in any other shape stay
+  in `x_kdenlive_raw`.
