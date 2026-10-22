@@ -28,7 +28,8 @@ def test_every_entry_is_a_valid_project(entry: gallery.Entry, samples: dict[str,
 
 def test_page_from_cached_renders(tmp_path: Path, melt, openshot_transitions, monkeypatch):
     broken = gallery._clip("broken", "speed: 1000", source="video")
-    monkeypatch.setattr(gallery, "CATALOG", (gallery.CATALOG[0], gallery.CATALOG[10], broken))
+    by_name = {e.name: e for e in gallery.CATALOG}
+    monkeypatch.setattr(gallery, "CATALOG", (by_name["dissolve"], by_name["fade_in / fade_out"], broken))
     rendered = []
     real_render = gallery._render
     monkeypatch.setattr(gallery, "_render", lambda *a: rendered.append(a[0].name) or real_render(*a))
