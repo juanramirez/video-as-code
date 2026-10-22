@@ -22,6 +22,7 @@ openshot-qt install, never checked in: OpenShot's maps are GPL-3.0+.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import html
 import json
@@ -383,16 +384,22 @@ def _page(
     def rel(path: Path) -> str:
         return html.escape(path.relative_to(root).as_posix())
 
+    def inline(path: Path) -> str:
+        # the page reads these pixels (getImageData), which a page opened
+        # from a file may not do with an image it loads from another file
+        # (the canvas is "tainted"): so they go in the page itself
+        return "data:image/jpeg;base64," + base64.b64encode(path.read_bytes()).decode("ascii")
+
     sections = []
     for section in SECTIONS:
         if section == "lumas":
             cards = "\n".join(
-                f'<figure class="luma"><canvas width="{THUMB_SIZE[0]}" height="{THUMB_SIZE[1]}" data-src="{rel(thumb)}"></canvas>'
+                f'<figure class="luma"><canvas width="{THUMB_SIZE[0]}" height="{THUMB_SIZE[1]}" data-src="{inline(thumb)}"></canvas>'
                 f"<pre><code>luma: {html.escape(name)}</code></pre></figure>"
                 for name, thumb in luma_cards
             )
             hint = msg("gallery.lumas_hint")
-            extra = f' data-from="{rel(pictures[0])}" data-to="{rel(pictures[1])}"'
+            extra = f' data-from="{inline(pictures[0])}" data-to="{inline(pictures[1])}"'
         else:
             extra = ""
             items = []
