@@ -132,6 +132,21 @@ def _build_media_element(
         _prop(el, "kdenlive:control_uuid", control_uuid)
         return el, xml_id
 
+    if kind == "animation":
+        # a Lottie animation: MLT's glaxnimate producer, a plain <producer>
+        # like a title - kdenlive's "Animation" clip (ClipType 16)
+        xml_id = ids.next("producer")
+        el = ET.Element("producer", {"id": xml_id, "in": str(in_frame), "out": str(out_frame)})
+        _prop(el, "length", out_frame + 1)
+        _prop(el, "eof", "pause")
+        _prop(el, "resource", str(path))
+        _prop(el, "mlt_service", "glaxnimate")
+        _prop(el, "kdenlive:clip_type", 16)
+        _prop(el, "kdenlive:folderid", folder_id)
+        _prop(el, "kdenlive:id", numeric_id)
+        _prop(el, "kdenlive:control_uuid", control_uuid)
+        return el, xml_id
+
     if kind == "title":
         # Real kdenlive titles are a plain <producer> too, not <chain>
         # (confirmed against a real project with an actual title clip -

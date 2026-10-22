@@ -13,6 +13,9 @@ from .i18n import msg
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".svg", ".webp", ".tiff", ".tif"}
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus", ".wma"}
+# Lottie animations (LottieFiles' .json; Telegram's gzipped .tgs), played by
+# MLT's glaxnimate producer - kdenlive's "Animation" clips
+ANIMATION_EXTENSIONS = {".json", ".tgs"}
 
 
 class ProbeError(RuntimeError):
@@ -20,13 +23,29 @@ class ProbeError(RuntimeError):
 
 
 def guess_type(path: Path) -> str:
-    """'image' | 'audio' | 'video', based on the file extension."""
+    """'image' | 'audio' | 'animation' | 'video', based on the file extension."""
     ext = path.suffix.lower()
     if ext in IMAGE_EXTENSIONS:
         return "image"
+    if ext in ANIMATION_EXTENSIONS:
+        return "animation"
     if ext in AUDIO_EXTENSIONS:
         return "audio"
     return "video"
+
+
+def animation_duration_seconds(path: Path) -> float:
+    """A Lottie animation's length, from its own frames (`ip`..`op` at `fr`
+    per second) - ffprobe doesn't read them."""
+    import gzip
+    import json
+
+    try:
+        raw = path.read_bytes()
+        data = json.loads(gzip.decompress(raw) if raw[:2] == b"\x1f\x8b" else raw)
+        return (float(data["op"]) - float(data.get("ip", 0))) / float(data["fr"])
+    except (OSError, ValueError, KeyError, TypeError, ZeroDivisionError) as exc:
+        raise ProbeError(msg("probe.animation_unreadable", path=path, exc=exc)) from exc
 
 
 def ffprobe_available() -> bool:

@@ -18,6 +18,8 @@ _EN: dict[str, str] = {
     ),
     "probe.ffprobe_failed": "ffprobe failed analyzing '{path}': {stderr}",
     "probe.ffprobe_timeout": "ffprobe did not respond in time analyzing '{path}'",
+    "probe.animation_unreadable": "Couldn't read the Lottie animation '{path}' (its fr, ip and op): {exc}",
+    "validation.animation_needs_glaxnimate": "bin[{id}]: a Lottie animation needs melt's glaxnimate module, which this melt hasn't got (`melt -query producers`; the distributions' melt has it)",
     "probe.duration_unreadable": "Could not read the duration of '{path}' from ffprobe's output",
     "probe.ffmpeg_unavailable": (
         "ffmpeg is not available on PATH; can't pre-render a reversed derivative of '{path}' "
@@ -558,6 +560,8 @@ _ES: dict[str, str] = {
     ),
     "probe.ffprobe_failed": "ffprobe falló al analizar '{path}': {stderr}",
     "probe.ffprobe_timeout": "ffprobe no respondió a tiempo analizando '{path}'",
+    "probe.animation_unreadable": "No se pudo leer la animación Lottie '{path}' (sus fr, ip y op): {exc}",
+    "validation.animation_needs_glaxnimate": "bin[{id}]: una animación Lottie necesita el módulo glaxnimate de melt, que este melt no tiene (`melt -query producers`; el melt de las distribuciones lo tiene)",
     "probe.duration_unreadable": "No se pudo leer la duración de '{path}' en la salida de ffprobe",
     "probe.ffmpeg_unavailable": (
         "ffmpeg no está disponible en PATH; no se puede generar un derivado invertido de "

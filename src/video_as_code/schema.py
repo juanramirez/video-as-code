@@ -1507,6 +1507,15 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             duration_seconds = doc.project.default_image_duration
         elif kind == "sequence":  # a part's timeline (parts.py): as long as it is
             duration_seconds = clip.sequence.total_frames / fps.fps
+        elif kind == "animation":  # a Lottie animation: as long as its own frames say
+            if not meltpass.is_known("producer", "glaxnimate") and meltpass._services("producer") is not None:
+                errors.append(msg("validation.animation_needs_glaxnimate", id=clip_id))
+                continue
+            try:
+                duration_seconds = probe.animation_duration_seconds(clip.path)
+            except probe.ProbeError as exc:
+                errors.append(str(exc))
+                continue
         else:
             try:
                 duration_seconds = probe.probe_duration_seconds(str(clip.path))

@@ -469,6 +469,13 @@ part alone; `fetch`, `--proxy` and `--split` work on each part, and
 `import` brings a project of parts back as files. See
 `docs/project-yaml.md`.
 
+### Lottie animations
+
+A Lottie animation (`.json`, or Telegram's `.tgs`) goes in the bin like
+any clip and plays, with its transparency, over the tracks below -
+animated titles, stickers, overlays from LottieFiles. melt's
+`glaxnimate` module plays it (the distributions' melt has it).
+
 ### `video-as-code gallery`: every transition and effect, in the browser
 
 Opens a page with everything a project YAML can ask for - the

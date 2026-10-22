@@ -1337,3 +1337,9 @@ whole video can be built from a fresh checkout anywhere.
   places a part's clips where the part plays (splitrender._placements),
   and `import` turns a timeline of whole sequences in turn back into
   `parts:` and a file per part (`tests/test_parts.py`).
+- **Lottie animations** — **implemented** (2026-10-22): a `.json` or
+  `.tgs` bin clip is `type: animation`, played by melt's glaxnimate
+  producer (kdenlive's ClipType 16), its length read from its own
+  frames. Checked by real render over a clip below; a melt without the
+  module (a from-source build may lack it) is a validation error
+  (`tests/test_animation.py`).

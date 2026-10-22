@@ -274,8 +274,6 @@ melt 7.32.0, not assumed.
 - **Single-clip GLSL filters**: the same kind of frei0r plugin as
   `frei0r.gltransition`, as a filter (Shadertoy-style glitch, CRT,
   waves...).
-- **Lottie animations**: MLT's `glaxnimate` producer plays Lottie/JSON
-  animations (LottieFiles) - animated titles, stickers, overlays.
 - **`lut:` from a LUT pack by name**, and a gallery card per LUT found
   next to the project.
 

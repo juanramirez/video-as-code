@@ -69,7 +69,7 @@ Other keys every entry may have:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `type` | from the extension | `video`, `audio`, `image` or `title`. Only needed to override the guess, or for titles. |
+| `type` | from the extension | `video`, `audio`, `image`, `animation` or `title`. Only needed to override the guess, or for titles. |
 | `folder` | - | Bin folder to show it in when the project is opened in kdenlive. |
 | `local_name` | - | With `source:`/`url:` only: the local file name to use instead of the automatic one (same extension as the original). |
 
@@ -106,6 +106,16 @@ Then any of these operations, applied in this order:
 A gif stays a gif, a still becomes `.png`, audio `.m4a` and video `.mp4`.
 Outputs are cached in `<dir>/.derived/` and regenerated only when the spec
 or the input changes.
+
+### Lottie animations (`type: animation`)
+
+A `.json` Lottie animation (LottieFiles' format) or a `.tgs` one
+(Telegram's, gzipped) is a bin clip like a video: played by melt's
+`glaxnimate` module - kdenlive's "Animation" clips - with its own
+transparency, so on a track above it plays over what's below; as long
+as its own frames say (`ip` to `op` at `fr` per second). The
+distributions' melt has the module; one without it is an error that
+says so.
 
 ### Title cards (`type: title`)
 
