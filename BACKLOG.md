@@ -250,14 +250,6 @@ melt 7.32.0, not assumed.
 
 ## Asked for, not started (2026-10-22)
 
-- **`video-as-code docs`**: the documentation as a local web - README,
-  `docs/project-yaml.md` and the rest rendered to HTML - with the
-  gallery as part of it, each key in the reference linking to its card
-  and each card to its key; built on the user's machine (their melt,
-  their plugins: no licence trouble with OpenShot's maps or Ubuntu's
-  photos), the README staying as GitHub's front page. Its own section
-  in the README saying what it builds and where. Markdown to HTML via
-  an optional `markdown` dependency, or a small converter of our own.
 - **`derive: {ffmpeg: "<filtergraph>"}`**: an ffmpeg filtergraph written
   by hand, for what neither derive:'s own operations nor melt's
   `avfilter.*` bridge (single input, and some filters it handles badly)

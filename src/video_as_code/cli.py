@@ -433,6 +433,28 @@ def cmd_gallery(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_docs(args: argparse.Namespace) -> int:
+    """The documentation as a local web, with the gallery in it, opened in
+    the browser (docs.py)."""
+    from . import docs
+
+    own = Path(args.with_file) if args.with_file else None
+    if own is not None and not own.is_file():
+        print(msg("cli.gallery_with_missing", path=own), file=sys.stderr)
+        return 1
+    try:
+        page = docs.build(own=own.resolve() if own else None, on_progress=lambda text: print(text, file=sys.stderr))
+    except (KdenliveAsCodeError, OSError) as exc:
+        print(msg("cli.docs_failed", exc=exc), file=sys.stderr)
+        return 1
+    print(msg("cli.docs_done", path=page))
+    if not args.no_open:
+        import webbrowser
+
+        webbrowser.open(page.as_uri())
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="video-as-code", description=msg("cli.help.description"))
     parser.add_argument(
@@ -492,6 +514,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_gallery.add_argument("--with", dest="with_file", metavar="FILE", help=msg("cli.help.gallery_with"))
     p_gallery.add_argument("--no-open", action="store_true", help=msg("cli.help.gallery_no_open"))
     p_gallery.set_defaults(func=cmd_gallery)
+
+    p_docs = sub.add_parser("docs", help=msg("cli.help.docs"))
+    p_docs.add_argument("--with", dest="with_file", metavar="FILE", help=msg("cli.help.docs_with"))
+    p_docs.add_argument("--no-open", action="store_true", help=msg("cli.help.docs_no_open"))
+    p_docs.set_defaults(func=cmd_docs)
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
     p_reconstruct.add_argument("video", help=msg("cli.help.reconstruct_video"))

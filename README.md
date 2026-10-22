@@ -19,6 +19,9 @@ pip install -e ".[dev]"
 pip install -e ".[dev,reconstruct]"
 ```
 
+`video-as-code docs` needs the optional `docs` extra (Python-Markdown):
+`pip install -e ".[docs]"`.
+
 The rest of `video-as-code` (`build`/`validate`/`import`) only ever needs PyYAML —
 `reconstruct.py` is imported lazily, so skipping this extra doesn't affect
 anything else.
@@ -33,6 +36,7 @@ video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # build 
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
+video-as-code docs [--with photo.jpg]                   # this documentation as a local web, the gallery in it
 video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
 ```
 
@@ -540,6 +544,30 @@ thumbnails (a minute or two); everything is cached in
 `~/.cache/video-as-code/gallery/`, so it then opens at once, and after
 an update of the tool or of `melt` only what changed is rendered
 again. `--no-open` only writes the page and prints where it is.
+
+### `video-as-code docs`: this documentation as a local web, with the gallery
+
+```bash
+video-as-code docs [--with photo.jpg] [--no-open]
+```
+
+Builds this README and the guides in `docs/` (making a video, the
+project YAML reference, reconstructing) as HTML pages, with the
+gallery as one more of them, and opens them in the browser. The two are
+linked both ways: each key of the reference that has cards in the
+gallery (`transition`, `luma`, `lut`, `glsl`, `melt`, `title_style`,
+derive:'s `openshot`...) has a ▶ to its first card, and each card names
+its key, linked to its row in the reference.
+
+It's built on your machine, not published: the gallery's previews are
+renders with your `melt`, your plugins and your wallpapers, and the
+pages come from the Markdown of this checkout (a `pip install` without
+the source has no docs to build). Pages go to
+`~/.cache/video-as-code/docs/`, next to the gallery's
+`~/.cache/video-as-code/gallery/`; the gallery is rendered and cached as
+`video-as-code gallery` does. `--with` and `--no-open` as there. Needs
+the `docs` extra (see *Install*). This README stays as it is - the
+project's front page on GitHub - and is the docs' first page.
 
 ### `video-as-code reconstruct`: recovering a YAML from a rendered video
 

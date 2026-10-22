@@ -1366,3 +1366,14 @@ whole video can be built from a fresh checkout anywhere.
   defaults, over the video sample or the sample sound (ChromaKey over
   the green screen, Deinterlace over the combed video); the two refused
   ones grey, with the reason.
+- **`video-as-code docs`** — **implemented** (2026-10-22): the README
+  and `docs/*.md` as a local web (Python-Markdown, the `docs` extra),
+  built under the user cache next to the gallery, which is part of it:
+  the reference's key rows get anchors (`key-<name>`), each card in the
+  gallery names its key and links to its row (`gallery.doc_key`: the
+  most specific key of its snippet the reference has), and each row
+  with cards links to the first one (written by the gallery to
+  `doc-cards.json`); a link to a card opens its tab and section and
+  shows it even when the "hide" box would hide it. Built on the user's
+  machine, not published (their melt, their wallpapers, OpenShot's
+  GPL maps). `docs.py`, `tests/test_docs.py`.

@@ -20,6 +20,9 @@ reconstruct = [
 upscale = [
     "Pillow>=9.0",
 ]
+docs = [
+    "markdown>=3.0",
+]
 
 [project.scripts]
 video-as-code = "video_as_code.cli:main"
