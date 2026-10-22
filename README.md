@@ -439,8 +439,9 @@ transitions between clips, the wipe shapes, the clip effects, the
 renders: each is a tiny project rendered by `video-as-code render`
 itself, with the same `melt`, so what the page shows is what a render
 gives, and one that no longer renders shows its error instead. They
-play over generated sample pictures; `--with photo.jpg` (or a video)
-puts your own under them.
+play over photos of Ubuntu's own wallpapers when they're installed
+(`/usr/share/backgrounds`, read there, not bundled), else over generated
+pictures; `--with photo.jpg` (or a video) puts your own under them.
 
 The first run renders ~40 previews and makes the wipe shapes'
 thumbnails (a minute or two); everything is cached in

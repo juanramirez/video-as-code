@@ -205,31 +205,80 @@ def _ffmpeg(args: list[str]) -> None:
         raise KdenliveAsCodeError(msg("gallery.ffmpeg_failed", stderr=result.stderr.strip()))
 
 
-def _make_samples(folder: Path) -> dict[str, Path]:
-    """The generated pictures and videos the previews play over."""
-    folder.mkdir(parents=True, exist_ok=True)
-    s = f"{WIDTH}x{HEIGHT}"
-    recipes = {
-        "a.png": ["-f", "lavfi", "-i", f"mandelbrot=s={s}:start_scale=1.2", "-frames:v", "1"],
-        "b.png": ["-f", "lavfi", "-i", f"gradients=s={s}:c0=0x1f6f8b:c1=0xf2c14e:c2=0xd1495b:nb_colors=3:seed=7", "-frames:v", "1"],
-        "portrait.png": ["-f", "lavfi", "-i", "mandelbrot=s=120x200:start_scale=0.9", "-frames:v", "1"],
-        "video.mp4": ["-f", "lavfi", "-i", f"mandelbrot=s={s}:rate=25", "-t", "10", "-pix_fmt", "yuv420p"],
-        "shaky.mp4": [
-            "-f", "lavfi", "-i", "testsrc2=s=400x240:rate=25", "-t", "4",
-            "-vf", f"crop={WIDTH}:{HEIGHT}:x='40+30*sin(t*9)':y='30+25*sin(t*13)'", "-pix_fmt", "yuv420p",
+# Photos the previews play over, when the system has them: Ubuntu's own
+# wallpapers (ubuntu-wallpapers), read where they're installed, never
+# checked in - a bluebell wood and a red maple leaf for the two stills,
+# a pan across an aurora for the video. Otherwise, generated pictures.
+BACKGROUNDS_DIR = Path("/usr/share/backgrounds")
+_PHOTOS = {"a": "mendhak-Bluebells_Suspended_In_Time.jpg", "b": "mendhak-Red_Acer.jpg", "video": "mizuno-as-Big_Dipper.jpg"}
+_SAMPLE_SIZE = (960, 540)  # bigger than the previews: a zoom or a crop stays sharp
+
+
+def _photos() -> Optional[dict[str, Path]]:
+    found = {key: BACKGROUNDS_DIR / name for key, name in _PHOTOS.items()}
+    return found if all(path.is_file() for path in found.values()) else None
+
+
+def _recipes() -> dict[str, list[str]]:
+    """file name -> ffmpeg arguments that make it."""
+    w, h = _SAMPLE_SIZE
+    s = f"{w}x{h}"
+    fill = f"scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}"
+    green = [  # a red square moving across a green screen - for chroma_key, photos or not
+        "-f", "lavfi", "-i", f"color=c=0x00ff00:s={s}:rate=25",
+        "-f", "lavfi", "-i", "color=c=0xd04040:s=240x240:rate=25",
+        "-filter_complex", "[0][1]overlay=x='90+t*150':y=150", "-t", "4", "-pix_fmt", "yuv420p",
+    ]
+    photos = _photos()
+    if photos is None:
+        return {
+            "a.png": ["-f", "lavfi", "-i", f"mandelbrot=s={s}:start_scale=1.2", "-frames:v", "1"],
+            "b.png": ["-f", "lavfi", "-i", f"gradients=s={s}:c0=0x1f6f8b:c1=0xf2c14e:c2=0xd1495b:nb_colors=3:seed=7", "-frames:v", "1"],
+            "portrait.png": ["-f", "lavfi", "-i", "mandelbrot=s=360x600:start_scale=0.9", "-frames:v", "1"],
+            "video.mp4": ["-f", "lavfi", "-i", f"mandelbrot=s={s}:rate=25", "-t", "10", "-pix_fmt", "yuv420p"],
+            "shaky.mp4": [
+                "-f", "lavfi", "-i", "testsrc2=s=1100x620:rate=25", "-t", "4",
+                "-vf", f"crop={w}:{h}:x='70+60*sin(t*9)':y='40+35*sin(t*13)'", "-pix_fmt", "yuv420p",
+            ],
+            "green.mp4": green,
+        }
+    return {
+        "a.png": ["-i", str(photos["a"]), "-frames:v", "1", "-vf", fill],
+        "b.png": ["-i", str(photos["b"]), "-frames:v", "1", "-vf", fill],
+        "portrait.png": ["-i", str(photos["b"]), "-frames:v", "1", "-vf", "scale=-2:640,crop=400:640"],
+        "video.mp4": [  # a slow pan across the aurora, left to right
+            "-loop", "1", "-framerate", "25", "-i", str(photos["video"]), "-t", "10",
+            "-vf", f"scale={w * 5 // 3}:{h * 5 // 3}:force_original_aspect_ratio=increase,crop={w * 5 // 3}:{h * 5 // 3},"
+                   f"crop={w}:{h}:x='(iw-ow)*t/10':y='(ih-oh)/2'",
+            "-pix_fmt", "yuv420p",
         ],
-        "green.mp4": [  # a red square moving across a green screen
-            "-f", "lavfi", "-i", f"color=c=0x00ff00:s={s}:rate=25",
-            "-f", "lavfi", "-i", "color=c=0xd04040:s=80x80:rate=25",
-            "-filter_complex", "[0][1]overlay=x='30+t*50':y=50", "-t", "4", "-pix_fmt", "yuv420p",
+        "shaky.mp4": [  # the wood, shaken - for stabilize
+            "-loop", "1", "-framerate", "25", "-i", str(photos["a"]), "-t", "4",
+            "-vf", f"scale=1100:620:force_original_aspect_ratio=increase,crop=1100:620,"
+                   f"crop={w}:{h}:x='70+60*sin(t*9)':y='40+35*sin(t*13)'",
+            "-pix_fmt", "yuv420p",
         ],
+        "green.mp4": green,
     }
+
+
+def _make_samples(folder: Path) -> dict[str, Path]:
+    """The pictures and videos the previews play over, made once: each
+    named by its recipe, so a different one (the photos installed or
+    removed, a new recipe) makes it again."""
+    folder.mkdir(parents=True, exist_ok=True)
     paths = {}
-    for name, args in recipes.items():
-        path = folder / name
+    for name, args in _recipes().items():
+        stem, ext = name.rsplit(".", 1)
+        path = folder / f"{stem}-{hashlib.sha256(repr(args).encode()).hexdigest()[:10]}.{ext}"
         if not path.exists():
-            _ffmpeg([*args, str(path)])
-        paths[Path(name).stem] = path
+            partial = path.with_name(f"{path.stem}.partial.{ext}")
+            _ffmpeg([*args, str(partial)])
+            partial.replace(path)
+        paths[stem] = path
+    for path in folder.iterdir():  # samples of older recipes
+        if path not in paths.values():
+            path.unlink()
     return paths
 
 
