@@ -202,6 +202,18 @@ CATALOG: tuple[Entry, ...] = (
     _derive("vignette", "vignette: 0.5", source="a"),
     _derive("rotate", "rotate: 90", source="a"),
     _title("title card", 'text: "Hello"\nfont: "DejaVu Serif"\nfont_size: 44\nfont_weight: bold\nshadow: true'),
+    Entry("title", "Lottie animation", 'bin:\n  - {id: ball, path: ball.json}   # .json or .tgs', _HEADER + """bin:
+  - {id: a, path: "{a}"}
+  - {id: ball, path: "{ball}"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {clip: a, start: 0, duration: 3}
+    - type: video
+      clips:
+        - {clip: ball, start: 0}
+"""),
     _title("title card, outline", 'text: "Hello"\nfont: "Noto Serif"\nfont_size: 44\nitalic: true\noutline: 2\noutline_color: [180, 30, 30, 255]'),
 )
 
@@ -578,6 +590,31 @@ def _recipes() -> dict[str, list[str]]:
     }
 
 
+def _bouncing_ball(path: Path) -> None:
+    """A Lottie animation for `type: animation`'s preview: an orange ball
+    bouncing across the frame, on nothing (transparent), 3 s."""
+    w, h, frames = _SAMPLE_SIZE[0], _SAMPLE_SIZE[1], 75
+    ease = {"i": {"x": [0.4], "y": [0.0]}, "o": {"x": [0.6], "y": [1.0]}}
+    bounces = []
+    for n in range(4):  # (down, up, down... with the x moving on)
+        t = round(n * (frames - 1) / 3)
+        bounces.append({"t": t, "s": [w * (0.12 + 0.76 * n / 3), h * (0.78 if n % 2 == 0 else 0.25), 0], **ease})
+    data = {
+        "v": "5.7.4", "fr": 25, "ip": 0, "op": frames, "w": w, "h": h, "nm": "ball", "ddd": 0, "assets": [],
+        "layers": [{
+            "ddd": 0, "ind": 1, "ty": 4, "nm": "ball", "sr": 1, "ao": 0, "ip": 0, "op": frames, "st": 0, "bm": 0,
+            "ks": {"o": {"a": 0, "k": 100}, "r": {"a": 0, "k": 0}, "a": {"a": 0, "k": [0, 0, 0]},
+                   "s": {"a": 0, "k": [100, 100, 100]}, "p": {"a": 1, "k": bounces}},
+            "shapes": [
+                {"ty": "el", "d": 1, "s": {"a": 0, "k": [110, 110]}, "p": {"a": 0, "k": [0, 0]}},
+                {"ty": "fl", "c": {"a": 0, "k": [0.95, 0.55, 0.15, 1]}, "o": {"a": 0, "k": 100}, "r": 1},
+                {"ty": "st", "c": {"a": 0, "k": [1, 1, 1, 1]}, "o": {"a": 0, "k": 100}, "w": {"a": 0, "k": 6}, "lc": 2, "lj": 2},
+            ],
+        }],
+    }
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
 def _teal_orange(path: Path, size: int = 17) -> None:
     """A "teal and orange" look as a .cube LUT, for `lut:`'s preview:
     shadows toward teal, highlights toward orange, a little more colour."""
@@ -613,6 +650,10 @@ def _make_samples(folder: Path) -> dict[str, Path]:
     if not lut.exists():
         _teal_orange(lut)
     paths["lut"] = lut
+    ball = folder / f"ball-{hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:10]}.json"
+    if not ball.exists():
+        _bouncing_ball(ball)
+    paths["ball"] = ball
     for path in folder.iterdir():  # samples of older recipes
         if path not in paths.values():
             path.unlink()
