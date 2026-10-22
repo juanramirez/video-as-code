@@ -967,7 +967,10 @@ nav a:hover { border-color: var(--muted); }
 section { scroll-margin-top: 170px; }
 summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; margin: 24px 0 8px; list-style: none; }
 summary::-webkit-details-marker { display: none; }
-summary::before { content: "▸"; color: var(--muted); transition: transform .15s; }
+/* a triangle drawn, not a character: the same in every font */
+summary::before { content: ""; flex: none; width: 0; height: 0; align-self: center; border-style: solid;
+                  border-width: 5px 0 5px 7px; border-color: transparent transparent transparent var(--muted);
+                  transition: transform .15s; }
 details[open] > summary::before { transform: rotate(90deg); }
 summary h2 { margin: 0; }
 .count { color: var(--muted); font-size: 13px; }
