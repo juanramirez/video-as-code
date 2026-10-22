@@ -883,7 +883,7 @@ def _page(
                         classes.append("unchanged")
                         badge = f'<span class="badge">{html.escape(msg("gallery.unchanged"))}</span>'
                     elif entry.tweaked:
-                        badge = f'<span class="badge">{html.escape(msg("gallery.tweaked_badge"))}</span>'
+                        badge = f'<span class="badge tweaked">{html.escape(msg("gallery.tweaked_badge"))}</span>'
                 about = ""
                 if not entry.melt_catalog and not entry.description:
                     key = f"gallery.about.{_slug(entry.name)}"
@@ -947,7 +947,7 @@ _PAGE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
 <style>
-:root { --bg: #f6f5f2; --fg: #22211f; --muted: #6b6862; --card: #ffffff; --line: #dedbd4; --code: #f0eee9; --bad: #b3261e; }
+:root { --accent: #f2c14e; --on-accent: #3a2a00; --bg: #f6f5f2; --fg: #22211f; --muted: #6b6862; --card: #ffffff; --line: #dedbd4; --code: #f0eee9; --bad: #b3261e; }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #181816; --fg: #ecebe7; --muted: #9c9890; --card: #23221f; --line: #34332f; --code: #1c1b19; --bad: #f2b8b5; }
 }
@@ -980,6 +980,7 @@ figure { margin: 0; background: var(--card); border: 1px solid var(--line); bord
          display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 video, canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 4px; background: #000; }
 figcaption { font-weight: 600; overflow-wrap: anywhere; }
+.badge.tweaked { background: var(--accent); color: var(--on-accent); border-color: transparent; font-weight: 600; }
 .badge { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 999px; font-weight: 400;
          font-size: 11px; color: var(--muted); border: 1px solid var(--line); }
 .about { margin: 0; font-size: 12px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3;
