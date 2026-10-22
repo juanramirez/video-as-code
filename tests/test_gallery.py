@@ -33,6 +33,7 @@ def test_page_from_cached_renders(tmp_path: Path, melt, openshot_transitions, mo
     monkeypatch.setattr(gallery, "gl_entries", lambda: ())
     monkeypatch.setattr(gallery, "lut_entries", lambda: ())
     monkeypatch.setattr(gallery, "glsl_entries", lambda: ())  # (whether or not this machine built the plugin)
+    monkeypatch.setattr(gallery, "openshot_entries", lambda: ())  # (whether or not libopenshot is here)
     monkeypatch.setattr(gallery, "melt_entries", lambda cache=None: ())
     rendered = []
     real_render = gallery._render
@@ -62,6 +63,7 @@ def test_cli_gallery_without_opening(tmp_path: Path, melt, openshot_transitions,
     monkeypatch.setattr(gallery, "gl_entries", lambda: ())
     monkeypatch.setattr(gallery, "lut_entries", lambda: ())
     monkeypatch.setattr(gallery, "glsl_entries", lambda: ())
+    monkeypatch.setattr(gallery, "openshot_entries", lambda: ())
     monkeypatch.setattr(gallery, "melt_entries", lambda cache=None: ())
     monkeypatch.setattr("webbrowser.open", lambda url: pytest.fail("opened the browser"))
     assert cli.main(["gallery", "--no-open"]) == 0
@@ -126,6 +128,7 @@ def test_melt_section_tells_what_changes_nothing(tmp_path: Path, melt, monkeypat
     monkeypatch.setattr(gallery, "gl_entries", lambda: ())
     monkeypatch.setattr(gallery, "lut_entries", lambda: ())
     monkeypatch.setattr(gallery, "glsl_entries", lambda: ())
+    monkeypatch.setattr(gallery, "openshot_entries", lambda: ())
     real = {name: (kind, gallery._describe_service(kind, name)) for kind, name in (
         ("filter", "brightness"), ("filter", "avfilter.hue"), ("filter", "avfilter.negate"), ("filter", "avfilter.aecho"),
     )}
@@ -190,3 +193,23 @@ def test_a_card_per_bundled_glsl_shader(monkeypatch):
     entries = {e.name: e for e in gallery.glsl_entries()}
     assert entries["glsl: crt"].section == "clip" and entries["glsl: wave"].section == "clip_time"
     assert entries["glsl: vhs"].snippet == "glsl: vhs" and entries["glsl: vhs"].source == "video"
+
+
+def test_openshot_effects_a_card_each(monkeypatch):
+    """Over the video sample, a sound one over the sample sound, the
+    libopenshot version in the project (a new one renders them anew)."""
+    from video_as_code import openshot_effects
+    monkeypatch.setattr(openshot_effects, "catalog", lambda: {
+        "Wave": {"props": {}, "description": "Waves.", "audio": False},
+        "ChromaKey": {"props": {}, "description": "", "audio": False},
+        "Echo": {"props": {}, "description": "", "audio": True},
+        "Caption": {"props": {}, "description": "", "audio": False},
+    })
+    monkeypatch.setattr(openshot_effects, "version", lambda: "9.9")
+    cards = {e.name: e for e in gallery.openshot_entries()}
+    assert {e.section for e in cards.values()} == {"openshot"}
+    assert cards["Wave"].source == "video" and "trim: [0, 3]" in cards["Wave"].project
+    assert cards["ChromaKey"].source == "green" and 'color: "#00ff00"' in cards["ChromaKey"].snippet
+    assert cards["Echo"].source == "sound" and "type: audio" in cards["Echo"].project and gallery._audible(cards["Echo"])
+    assert not cards["Caption"].render and "type: title" in cards["Caption"].unavailable  # (grey, saying why)
+    assert "libopenshot: 9.9" in cards["Wave"].project and cards["Wave"].description == "Waves."

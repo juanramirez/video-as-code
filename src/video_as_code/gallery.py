@@ -36,7 +36,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import glfilters, gltransitions, lumas, meltpass, probe
+from . import glfilters, gltransitions, lumas, meltpass, openshot_effects, probe
 from .errors import KdenliveAsCodeError
 from . import i18n
 from .i18n import msg
@@ -114,7 +114,7 @@ def _clip(name: str, keys: str, source: str = "a", background: bool = False) -> 
     return Entry("clip", name, keys.strip(), project, source=source)
 
 
-def _derive(name: str, keys: str, source: str = "portrait") -> Entry:
+def _derive(name: str, keys: str, source: str = "portrait", audio: bool = False) -> Entry:
     project = _HEADER + f"""bin:
   - id: d
     derive:
@@ -122,7 +122,7 @@ def _derive(name: str, keys: str, source: str = "portrait") -> Entry:
 {_indent(keys, 6)}
 timeline:
   tracks:
-    - type: video
+    - type: {"audio" if audio else "video"}
       clips:
         - {{clip: d, start: 0, duration: 3}}
 """
@@ -219,9 +219,9 @@ timeline:
 
 CATALOG = tuple(replace(e, section="clip_time") if e.section == "clip" and e.name in _OVER_TIME else e for e in CATALOG)
 
-SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "clip_time", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")
+SECTIONS = ("transitions", "lumas", "gl", "melt_transitions", "clip", "clip_time", "derive", "openshot", "title", "melt_filters", "melt_analysis", "melt_audio")
 # the page's two tabs: what goes between clips, and what goes on one
-TABS = {"transitions": ("transitions", "lumas", "gl", "melt_transitions"), "effects": ("clip", "clip_time", "derive", "title", "melt_filters", "melt_analysis", "melt_audio")}
+TABS = {"transitions": ("transitions", "lumas", "gl", "melt_transitions"), "effects": ("clip", "clip_time", "derive", "openshot", "title", "melt_filters", "melt_analysis", "melt_audio")}
 
 
 def lut_entries() -> tuple[Entry, ...]:
@@ -251,6 +251,43 @@ def glsl_entries() -> tuple[Entry, ...]:
                 section="clip_time" if info.get("animated") else "clip", description=info.get("description", ""))
         for name, info in glfilters.catalog().items()
     )
+
+
+# what a libopenshot effect needs to show anything, and the sample it shows best on
+_OPENSHOT_KEYS = {
+    "ChromaKey": {"color": "#00ff00"},
+    "ColorMap": {"lut_path": "{lut}"},
+}
+_PLAIN = re.compile(r"[\w./-]+")  # (YAML without quotes)
+_OPENSHOT_SOURCES = {"ChromaKey": "green", "Deinterlace": "interlaced"}
+
+
+def openshot_entries() -> tuple[Entry, ...]:
+    """One per libopenshot effect (`derive: {openshot: ...}`,
+    openshot_effects.py), with its defaults - a picture one over the video
+    sample, a sound one over the sample sound; none without libopenshot."""
+    effects = openshot_effects.catalog()
+    if not effects:
+        return ()
+    version = f"# libopenshot: {openshot_effects.version()}\n"  # (in the project: a new one renders anew)
+    out = []
+    for name, info in effects.items():
+        spec = json.dumps({"effect": name, **_OPENSHOT_KEYS.get(name, {})})
+        keys = f"openshot: [{spec}]"
+        if info.get("audio"):
+            entry = replace(_derive(name, keys, source="sound", audio=True), source="sound")
+        else:
+            source = _OPENSHOT_SOURCES.get(name, "video")
+            entry = replace(_derive(name, f"trim: [0, 3]\n{keys}", source=source), source=source)
+        shown = {"effect": name, **_OPENSHOT_KEYS.get(name, {})}
+        shown = {k: {"{lut}": "looks/teal-orange.cube"}.get(v, v) for k, v in shown.items()}
+        flow = ", ".join(f"{k}: {v if _PLAIN.fullmatch(v) else json.dumps(v)}" for k, v in shown.items())
+        snippet = f"derive:\n  openshot:\n    - {{{flow}}}"
+        why = openshot_effects.UNSUPPORTED.get(name)
+        out.append(replace(entry, section="openshot", project=version + entry.project, snippet=snippet,
+                           description=info.get("description", ""), render=why is None,
+                           unavailable=why and msg(why, ctx=name)))
+    return tuple(out)
 
 
 def gl_entries() -> tuple[Entry, ...]:
@@ -454,12 +491,17 @@ def _unchanged(entry: Entry, out: Path, baselines: dict[str, Path], sound_baseli
     """Whether `entry`, at its defaults, changes nothing: a filter's frame
     like the unfiltered one (its sound like the sample's, for an audio
     one), a transition's middle like its start or end."""
-    if entry.section == "melt_audio":
+    if _audible(entry):
         return _sounds_the_same(out, sound_baseline)
     if entry.section == "melt_transitions":
         middle = 2.2  # (_scene: 4.4 s, the clips overlapping around it)
         return _frames_psnr(out, middle, out, 0.4) > _SAME_DB or _frames_psnr(out, middle, out, 4.2) > _SAME_DB
     return _frames_psnr(out, 1.5, baselines[entry.source], 1.5) > _SAME_DB
+
+
+def _audible(entry: Entry) -> bool:
+    """Whether `entry`'s preview is a sound, not a picture."""
+    return entry.section == "melt_audio" or entry.source == "sound"
 
 
 def _tweaks(entry: Entry, tries: int = 5) -> list[dict]:
@@ -808,7 +850,7 @@ def build(
     melt_catalog = melt_entries(root / "melt-catalog.json")
     if melt_catalog:  # the references "no change" is told against
         melt_catalog = (replace(_SOUND_BASELINE, melt_catalog=True), *melt_catalog)
-    catalog = (*CATALOG, *lut_entries(), *glsl_entries(), *gl_entries(), *melt_catalog)
+    catalog = (*CATALOG, *lut_entries(), *glsl_entries(), *openshot_entries(), *gl_entries(), *melt_catalog)
     baselines = {source: replace(e, melt_catalog=True) for source, e in _BASELINES.items()}
     previews = [(e, output(e)) for e in catalog if e.render]
     if melt_catalog:
@@ -998,7 +1040,7 @@ def _page(
                     media = (f'<div class="failed"><strong>{html.escape(_failure(detail))}</strong>'
                              f'<details><summary>{html.escape(msg("gallery.failed_details"))}</summary><pre>{html.escape(detail)}</pre></details></div>')
                 else:
-                    if entry.section == "melt_audio":
+                    if _audible(entry):
                         media = f'<audio src="{rel(out)}" controls preload="none"></audio>'
                     else:
                         media = f'<video src="{rel(out)}" muted loop playsinline preload="none"></video>'

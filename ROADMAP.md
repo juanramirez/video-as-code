@@ -1360,3 +1360,9 @@ whole video can be built from a fresh checkout anywhere.
   describe its catalog, which validates each effect and property (kept
   in the user cache per libopenshot version). Checked by real render:
   Negate on a video and on a still (`tests/test_openshot_effects.py`).
+  `Caption` and `Mask` refused, saying why (the first drew nothing even
+  inside a libopenshot timeline of its own; the second needs a reader
+  for its mask). The gallery has a section with each effect, at its
+  defaults, over the video sample or the sample sound (ChromaKey over
+  the green screen, Deinterlace over the combed video); the two refused
+  ones grey, with the reason.

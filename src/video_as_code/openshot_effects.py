@@ -62,14 +62,22 @@ def python() -> Optional[str]:
 
 
 @functools.lru_cache(maxsize=None)
+def version() -> Optional[str]:
+    """libopenshot's version, or None without it."""
+    exe = python()
+    if exe is None:
+        return None
+    return subprocess.run([exe, "-I", "-c", "import openshot; print(openshot.OPENSHOT_VERSION_FULL)"],
+                          capture_output=True, text=True).stdout.strip()
+
+
+@functools.lru_cache(maxsize=None)
 def catalog() -> dict[str, dict]:
     """effect -> {props: {name: kind}, description, audio}; {} without libopenshot."""
     exe = python()
     if exe is None:
         return {}
-    version = subprocess.run([exe, "-I", "-c", "import openshot; print(openshot.OPENSHOT_VERSION_FULL)"],
-                             capture_output=True, text=True).stdout.strip()
-    cache = default_cache_root() / "openshot" / f"effects-{version}.json"
+    cache = default_cache_root() / "openshot" / f"effects-{version()}.json"
     try:
         return json.loads(cache.read_text(encoding="utf-8"))
     except (OSError, ValueError):
