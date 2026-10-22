@@ -19,6 +19,7 @@ guides: [...]        # timeline markers
 transitions: [...]   # wipe/affine transitions between two tracks
 presets: {...}       # named sets of keys, used with use: (below)
 presets_file: ...    # a file of presets shared by several projects
+parts: [...]         # instead of the rest: the project in several files (below)
 ```
 
 `timeline:` and `scenes:` can be mixed: scenes compile into extra tracks
@@ -381,3 +382,51 @@ presets_file: presets.yaml
 bin:
   - {id: card, type: title, text: "Day one", use: title-style}
 ```
+
+## `parts:` - a project in several files
+
+The main file has `project:` and, instead of `bin:`/`scenes:`/`timeline:`,
+a list of parts, each a file of its own; a part may list parts in turn:
+
+```yaml
+# trip.yaml
+project: {id: trip, title: Trip, fps: 25, width: 1920, height: 1080}
+presets_file: presets.yaml
+parts:
+  - intro.yaml
+  - beach.yaml
+  - {file: mountains/all.yaml, transition: gl, gl: cube, transition_duration: 1.2}
+```
+
+```yaml
+# beach.yaml - a part: no project:, the rest as in any project file
+bin:
+  - {id: wave, path: media/wave.mp4}
+scenes:
+  - use: page
+    clips: [{clip: wave}, media/sand.jpg]
+```
+
+| Key | Where | Meaning |
+|---|---|---|
+| `parts` | the main file, or a part | The parts, played one after the other: a file name (relative to the file listing it), or `{file: ..., ...}` with the keys of the transition into that part. A file with `parts:` has no `bin:`, `scenes:`, `timeline:`, `transitions:` or `guides:` of its own. |
+| `file` | a `parts:` entry | The part's file. |
+| `transition` and its keys | a `parts:` entry | From the part before into this one: `dissolve`, `wipe` (with `luma`, `luma_softness`, `luma_reverse`), `affine` (`style`), `iris`, `flip`, `gl` (`gl`, `gl_params`) or `melt/<service>` (`transition_properties`), over `transition_duration` (default 1). The parts overlap by it; none, a cut. glitch, delaygrab and cairogradient (bursts on a clip) don't go between parts. |
+
+- Each part is a sequence of its own in the `.kdenlive` - kdenlive's
+  nested sequences, named after the part's file - placed in the one that
+  lists it; the main file's is the timeline kdenlive opens.
+- A part has no `project:`: it takes the main file's. Its relative paths
+  are its own folder's, so a part can be moved with its media.
+- A part's bin ids are its own: two parts may both have a clip `a`.
+- Presets: the main file's (and its `presets_file:`) are in force in
+  every part; a part's own add to them for itself and the parts it lists.
+- A part that lists itself, through any number of others, is an error
+  that shows the chain.
+- `--part <path>` (on `build`, `render`, `validate`) takes one part
+  alone: its file's path from the main file's folder, without `.yaml`
+  (`--part mountains/all`); the output is named after both
+  (`trip-mountains-all.mp4`).
+- Not yet: `fetch`, `--fetch`, `--proxy` and `--split` on a project with
+  parts say so and stop; old files aren't pruned before its renders; and
+  `import` keeps nested sequences in `x_kdenlive_raw`.

@@ -64,6 +64,9 @@ def used_paths(project: ResolvedProject) -> set[Path]:
     its placements point at (a boomerang's pre-reversed copy, a proxy)."""
     paths = {clip.path for clip in project.bin_clips}
     paths |= {p.bin_clip.path for track in project.tracks for p in track.placements}
+    for clip in project.bin_clips:  # (a part's, in a project of several files - parts.py)
+        if clip.sequence is not None:
+            paths |= used_paths(clip.sequence)
     return paths
 
 

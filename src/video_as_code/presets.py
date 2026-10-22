@@ -59,9 +59,16 @@ def _from_file(path: Path, errors: list[str]) -> dict:
 def expand(data: dict, project_file: Path, errors: list[str]) -> dict:
     """`data` (a project file as read) with every `use:` replaced by its
     presets' keys, and `presets`/`presets_file` gone."""
+    return expand_with(data, project_file, errors)[0]
+
+
+def expand_with(data: dict, project_file: Path, errors: list[str], inherited: dict | None = None) -> tuple[dict, dict]:
+    """expand(), starting from `inherited` presets (a part's, from the
+    file that includes it - parts.py); also returns the presets in force
+    in this file, for the parts it includes."""
     data = dict(data)
-    presets: dict = {}
-    origin: dict[str, str] = {}  # (where each came from, for messages)
+    presets: dict = dict(inherited or {})
+    origin: dict[str, str] = {name: "an including file" for name in presets}  # (where each came from, for messages)
     file_raw = data.pop("presets_file", None)
     if file_raw is not None:
         if not isinstance(file_raw, str):
@@ -123,4 +130,4 @@ def expand(data: dict, project_file: Path, errors: list[str]) -> dict:
             return [walk(v, f"{where}[{i}]") for i, v in enumerate(node)]
         return node
 
-    return walk(data, "")
+    return walk(data, ""), presets

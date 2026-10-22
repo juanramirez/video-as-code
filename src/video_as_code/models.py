@@ -126,8 +126,9 @@ class DeriveSpec:
 class BinClipSpec:
     id: str
     path: Optional[Path]  # None for type: title - schema.py generates and fills it in
-    type: Optional[str] = None  # overrides the extension-based autodetection
+    type: Optional[str] = None  # overrides the extension-based autodetection ("sequence": a part's, parts.py)
     folder: Optional[str] = None  # bin folder name (root-level only), None = no folder
+    sequence: Optional["ResolvedProject"] = None  # with type "sequence": the part's resolved timeline (parts.py)
     # Instead of `path:`: the item's ORIGINAL file name in the project's
     # shared album (`project.sources.album`), e.g. "PXL_20250830_085416309.mp4".
     # `video-as-code fetch` downloads it to <sources_dir>/<local name> -
@@ -520,6 +521,10 @@ class ResolvedBinClip:
     kind: str  # video | audio | image
     duration_frames: int
     folder: Optional[str] = None
+    # a part's own timeline, placed as a clip (parts.py): kdenlive's nested
+    # sequence, by its uuid
+    sequence: Optional["ResolvedProject"] = None
+    sequence_uuid: Optional[str] = None
 
 
 @dataclass
@@ -686,6 +691,7 @@ class ResolvedProject:
     melt_transitions: list[ResolvedMeltTransition] = field(default_factory=list)
     guides: list[ResolvedGuide] = field(default_factory=list)
     notes: Optional[str] = None
+    part_path: str = ""  # a part's, in a project of several files (parts.py); "" for the main one
 
     @property
     def total_frames(self) -> int:

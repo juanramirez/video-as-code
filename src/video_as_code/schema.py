@@ -59,16 +59,18 @@ RESERVED_TOP_LEVEL_KEYS = {
 }
 
 
-def load_yaml(path: str | Path) -> ProjectDoc:
+def load_yaml(path: str | Path, data: Optional[dict] = None) -> ProjectDoc:
+    """`data`: the file's contents already read (a part of a project, with
+    the main file's `project:` put in - parts.py); else it's read here."""
     path = Path(path).resolve()
-    if not path.exists():
-        raise ValidationErrors([msg("validation.yaml_missing", path=path)])
-
-    with path.open("r", encoding="utf-8") as fh:
-        try:
-            data = yaml.safe_load(fh) or {}
-        except yaml.YAMLError as exc:
-            raise ValidationErrors([msg("validation.yaml_invalid", path=path, exc=exc)]) from exc
+    if data is None:
+        if not path.exists():
+            raise ValidationErrors([msg("validation.yaml_missing", path=path)])
+        with path.open("r", encoding="utf-8") as fh:
+            try:
+                data = yaml.safe_load(fh) or {}
+            except yaml.YAMLError as exc:
+                raise ValidationErrors([msg("validation.yaml_invalid", path=path, exc=exc)]) from exc
 
     errors: list[str] = []
     source_dir = path.parent
@@ -252,11 +254,18 @@ def _lut_file(lut: str | None, base: Path, ctx: str, errors: list[str]) -> str |
     return str(path.resolve())
 
 
-def load_and_resolve(path: str | Path) -> ResolvedProject:
+def load_and_resolve(path: str | Path, part: Optional[str] = None) -> ResolvedProject:
     """High-level entry point: loads the YAML, compiles `scenes:` (if any)
-    into explicit tracks/clips, and validates+resolves the result."""
+    into explicit tracks/clips, and validates+resolves the result. A
+    project in several files (`parts:`) goes through parts.py - which
+    `part`, the path of one of them, picks out alone."""
+    from . import parts as parts_mod  # (it uses this module)
     from . import scenes as scenes_mod  # deferred import: avoids a cycle with schema
 
+    if parts_mod.has_parts(path):
+        return parts_mod.resolve(path, part)
+    if part is not None:
+        raise ValidationErrors([msg("validation.part_without_parts", path=path, part=part)])
     doc = load_yaml(path)
     if doc.scenes_raw:
         errors: list[str] = []
@@ -1459,6 +1468,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             )
         elif kind == "image":
             duration_seconds = doc.project.default_image_duration
+        elif kind == "sequence":  # a part's timeline (parts.py): as long as it is
+            duration_seconds = clip.sequence.total_frames / fps.fps
         else:
             try:
                 duration_seconds = probe.probe_duration_seconds(str(clip.path))
@@ -1472,6 +1483,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             kind=kind,
             duration_frames=fps.seconds_to_frames(duration_seconds),
             folder=clip.folder,
+            sequence=clip.sequence,
         )
 
     if errors:

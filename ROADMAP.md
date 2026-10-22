@@ -1317,3 +1317,15 @@ whole video can be built from a fresh checkout anywhere.
   error); a shared file's presets come first, the project's own replace
   them. Relative paths in a preset are the using file's
   (`tests/test_presets.py`).
+- **`parts:` - a project in several files** — **implemented** (2026-10-22):
+  a main file lists part files, which may list parts; each becomes a
+  kdenlive nested sequence (modeled on kdenlive's own
+  tests/dataset/test-nesting.kdenlive: a sequence's tractor placed in
+  another's track by its uuid), and a file with parts one that plays
+  them in turn on two alternating tracks, overlapping by the incoming
+  part's transition (`parts.py`; xmlgen.py builds each sequence with
+  `_build_sequence`). Parts resolve their own paths, keep their own bin
+  ids (namespaced), inherit presets; cycles are errors; `--part` takes
+  one alone. Checked by real render: a dissolve between two parts
+  mixes them halfway (`tests/test_parts.py`). Not yet: fetch, --proxy,
+  --split, autoprune and import with parts (BACKLOG.md).

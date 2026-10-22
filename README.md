@@ -29,7 +29,7 @@ anything else.
 video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
 video-as-code validate project.yaml                     # validate without building
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
-video-as-code render project.yaml [-o output.mp4] [--split]  # build + render straight to video via melt
+video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # build + render straight to video via melt
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
@@ -446,6 +446,26 @@ scenes:
 `use:` takes a list too; keys written next to it win over the preset's;
 a preset may use others. `presets_file: presets.yaml` brings in another
 file's `presets:`, to share them between projects. See
+`docs/project-yaml.md`.
+
+### A project in several files: `parts:`
+
+A long video can be split into files - a main one with `project:` and a
+list of parts, each with its own `bin:`/`scenes:`/`timeline:`, and parts
+may list parts:
+
+```yaml
+# trip.yaml
+project: {id: trip, title: Trip, fps: 25, width: 1920, height: 1080}
+parts:
+  - intro.yaml
+  - {file: mountains/all.yaml, transition: dissolve, transition_duration: 1}
+```
+
+Each part is a nested sequence in kdenlive; its paths are relative to
+its own file, its bin ids are its own, and the main file's presets reach
+it. `video-as-code render trip.yaml --part mountains/all` renders one
+part alone. Not yet with `fetch`, `--proxy` or `--split`. See
 `docs/project-yaml.md`.
 
 ### `video-as-code gallery`: every transition and effect, in the browser

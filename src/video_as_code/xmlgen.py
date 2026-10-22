@@ -22,7 +22,7 @@ from typing import Optional
 
 from . import lumas
 from .ids import deterministic_document_id, deterministic_uuid
-from .models import MeltService, ResolvedAffineTransition, ResolvedPlacement, ResolvedProject, ResolvedTrack
+from .models import MeltService, ResolvedAffineTransition, ResolvedBinClip, ResolvedPlacement, ResolvedProject, ResolvedTrack
 
 # Keyframed `rect` for each `transition: affine` style (scenes.py), 0-relative
 # to the transition's own `in` (confirmed empirically, same convention the
@@ -934,22 +934,28 @@ def _build_track(
             full_duration_frames = round(placement.bin_clip.duration_frames / abs(placement.speed))
         else:
             full_duration_frames = placement.bin_clip.duration_frames
-        el, xml_id = _build_media_element(
-            ids,
-            path=placement.bin_clip.path,
-            kind=placement.bin_clip.kind,
-            in_frame=0,
-            out_frame=full_duration_frames - 1,
-            numeric_id=placement.bin_clip.numeric_id,
-            control_uuid=control_uuid_for[placement.bin_clip.id],
-            speed=placement.speed,
-            preserve_pitch=placement.preserve_pitch,
-            speed_ramp=placement.speed_ramp,
-            speed_ramp_image_mode=placement.speed_ramp_image_mode,
-            speed_ramp_source_offset_s=placement.speed_ramp_source_offset_s,
-            fps=project.fps.fps,
-        )
-        root.append(el)
+        if placement.bin_clip.sequence is not None:
+            # a part's sequence (parts.py): kdenlive places one by its
+            # uuid, the tractor itself (its tests/dataset/test-nesting)
+            xml_id = placement.bin_clip.sequence_uuid
+            el = None
+        else:
+            el, xml_id = _build_media_element(
+                ids,
+                path=placement.bin_clip.path,
+                kind=placement.bin_clip.kind,
+                in_frame=0,
+                out_frame=full_duration_frames - 1,
+                numeric_id=placement.bin_clip.numeric_id,
+                control_uuid=control_uuid_for[placement.bin_clip.id],
+                speed=placement.speed,
+                preserve_pitch=placement.preserve_pitch,
+                speed_ramp=placement.speed_ramp,
+                speed_ramp_image_mode=placement.speed_ramp_image_mode,
+                speed_ramp_source_offset_s=placement.speed_ramp_source_offset_s,
+                fps=project.fps.fps,
+            )
+            root.append(el)
         entry = ET.SubElement(
             playlist_main,
             "entry",
@@ -1068,40 +1074,34 @@ def _build_track(
     return track_tractor.get("id")
 
 
-def generate(project: ResolvedProject) -> ET.ElementTree:
-    root = ET.Element(
-        "mlt",
-        {
-            "LC_NUMERIC": "C",
-            "producer": "main_bin",
-            "root": str(project.source_dir),
-            "version": MLT_VERSION,
-        },
-    )
+def _nested_sequences(project: ResolvedProject) -> list[tuple[ResolvedBinClip, ResolvedProject]]:
+    """The sequences of `project`'s parts (parts.py), with the bin clip
+    each is placed by, innermost first - each before the one it's in."""
+    out: list[tuple[ResolvedBinClip, ResolvedProject]] = []
+    for clip in project.bin_clips:
+        if clip.sequence is not None:
+            out += _nested_sequences(clip.sequence)
+            out.append((clip, clip.sequence))
+    return out
 
-    dar_n, dar_d = _gcd_ratio(project.width, project.height)
-    ET.SubElement(
-        root,
-        "profile",
-        {
-            "colorspace": str(project.colorspace),
-            "description": f"{project.width}x{project.height} {project.fps.fps:g} fps",
-            "display_aspect_den": str(dar_d),
-            "display_aspect_num": str(dar_n),
-            "frame_rate_den": str(project.fps.den),
-            "frame_rate_num": str(project.fps.num),
-            "height": str(project.height),
-            "progressive": "1",
-            "sample_aspect_den": "1",
-            "sample_aspect_num": "1",
-            "width": str(project.width),
-        },
-    )
 
-    ids = _IdCounters()
-
+def _build_sequence(
+    root: ET.Element,
+    ids: _IdCounters,
+    project: ResolvedProject,
+    sequence_uuid: str,
+    sequence_numeric_id: int,
+    control_uuid_for: dict,
+    black_suffix: str = "",
+) -> int:
+    """Adds one sequence - its black background, its tracks, its
+    transitions and its own tractor - to `root`; returns its length in
+    frames. A project made of parts (parts.py) has one per part, each
+    used in the one that contains it as a clip, and the outermost one is
+    the timeline kdenlive opens."""
     total_frames = max(project.total_frames, 1)
-    black_bg = ET.SubElement(root, "producer", {"id": "producer_black", "in": "0", "out": str(total_frames - 1)})
+    black_id = "producer_black" if not black_suffix else f"producer_black_{black_suffix}"
+    black_bg = ET.SubElement(root, "producer", {"id": black_id, "in": "0", "out": str(total_frames - 1)})
     _prop(black_bg, "length", 2147483647)
     _prop(black_bg, "eof", "continue")
     _prop(black_bg, "resource", "black")
@@ -1110,14 +1110,11 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     _prop(black_bg, "kdenlive:playlistid", "black_track")
     _prop(black_bg, "mlt_image_format", "rgba")
 
-    control_uuid_for = {c.id: deterministic_uuid(project.project_id, "clip", c.id) for c in project.bin_clips}
-
     track_tractor_ids: list[tuple[str, str]] = []  # (kind, xml_id)
     for track in project.tracks:
         tid = _build_track(root, ids, project, track, control_uuid_for)
         track_tractor_ids.append((track.kind, tid))
 
-    sequence_uuid = deterministic_uuid(project.project_id, "sequence")
     sequence = ET.Element("tractor", {"id": sequence_uuid, "in": "0", "out": str(total_frames - 1)})
     has_audio = any(t.kind == "audio" for t in project.tracks)
     has_video = any(t.kind == "video" for t in project.tracks)
@@ -1135,7 +1132,6 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     _prop(sequence, "kdenlive:duration", total_frames)
     _prop(sequence, "kdenlive:maxduration", total_frames)
     _prop(sequence, "kdenlive:producer_type", 17)
-    sequence_numeric_id = len(project.bin_clips) + 1
     _prop(sequence, "kdenlive:id", sequence_numeric_id)
     _prop(sequence, "kdenlive:clip_type", 0)
     _prop(sequence, "kdenlive:folderid", 2)
@@ -1158,7 +1154,7 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     ]
     _prop(sequence, "kdenlive:sequenceproperties.guides", json.dumps(guides_json))
 
-    ET.SubElement(sequence, "track", {"producer": "producer_black"})
+    ET.SubElement(sequence, "track", {"producer": black_id})
     for _, tid in track_tractor_ids:
         ET.SubElement(sequence, "track", {"producer": tid})
 
@@ -1248,6 +1244,55 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     _prop(mf2, "disable", 1)
 
     root.append(sequence)
+    return total_frames
+
+
+def generate(project: ResolvedProject) -> ET.ElementTree:
+    root = ET.Element(
+        "mlt",
+        {
+            "LC_NUMERIC": "C",
+            "producer": "main_bin",
+            "root": str(project.source_dir),
+            "version": MLT_VERSION,
+        },
+    )
+
+    dar_n, dar_d = _gcd_ratio(project.width, project.height)
+    ET.SubElement(
+        root,
+        "profile",
+        {
+            "colorspace": str(project.colorspace),
+            "description": f"{project.width}x{project.height} {project.fps.fps:g} fps",
+            "display_aspect_den": str(dar_d),
+            "display_aspect_num": str(dar_n),
+            "frame_rate_den": str(project.fps.den),
+            "frame_rate_num": str(project.fps.num),
+            "height": str(project.height),
+            "progressive": "1",
+            "sample_aspect_den": "1",
+            "sample_aspect_num": "1",
+            "width": str(project.width),
+        },
+    )
+
+    ids = _IdCounters()
+
+    # every sequence (a part's, then the one that contains it - parts.py),
+    # the outermost last; the bin has every one's clips
+    nested = _nested_sequences(project)  # [(its bin clip, its project)], innermost first
+    every_clip: dict[str, ResolvedBinClip] = {}
+    for seq in [*(p for _, p in nested), project]:
+        for clip in seq.bin_clips:
+            if clip.sequence is None:
+                every_clip.setdefault(clip.id, clip)
+    control_uuid_for = {c.id: deterministic_uuid(project.project_id, "clip", c.id) for c in every_clip.values()}
+    sequence_uuid = deterministic_uuid(project.project_id, "sequence")
+    for n, (clip, seq) in enumerate(nested, start=1):
+        _build_sequence(root, ids, seq, clip.sequence_uuid, clip.numeric_id, control_uuid_for, black_suffix=str(n))
+    sequence_numeric_id = max((c.numeric_id for c in [*every_clip.values(), *(c for c, _ in nested)]), default=0) + 1
+    total_frames = _build_sequence(root, ids, project, sequence_uuid, sequence_numeric_id, control_uuid_for)
 
     # Deterministic folder ids for `folder:` on bin clips (root-level
     # only) - sorted by name so output doesn't depend on YAML ordering.
@@ -1256,12 +1301,12 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     # against kdenlive's own source (BinPlaylist::manageBinItemInsertion,
     # `kdenlive:folder.<parentId>.<id>` = name, set on `main_bin`), not
     # modeled by analogy.
-    folder_names = sorted({c.folder for c in project.bin_clips if c.folder})
+    folder_names = sorted({c.folder for c in every_clip.values() if c.folder})
     folder_ids = {name: i + 3 for i, name in enumerate(folder_names)}
 
     # "Master" bin chains (one full-length reference per asset, for the Project Bin listing).
     bin_chain_ids: dict[str, str] = {}
-    for clip in project.bin_clips:
+    for clip in every_clip.values():
         el, xml_id = _build_media_element(
             ids,
             path=clip.path,
@@ -1311,7 +1356,9 @@ def generate(project: ResolvedProject) -> ET.ElementTree:
     _prop(main_bin, "xml_retain", 1)
 
     ET.SubElement(main_bin, "entry", {"producer": sequence_uuid, "in": "0", "out": "0"})
-    for clip in project.bin_clips:
+    for clip, _ in nested:  # (the parts' sequences, in the bin's sequence folder too)
+        ET.SubElement(main_bin, "entry", {"producer": clip.sequence_uuid, "in": "0", "out": "0"})
+    for clip in every_clip.values():
         ET.SubElement(
             main_bin,
             "entry",

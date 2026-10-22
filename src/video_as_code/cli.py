@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from . import autoprune, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import autoprune, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, parts, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -121,17 +121,45 @@ def cmd_install_gl(args: argparse.Namespace) -> int:
     return 0
 
 
+def _parts_unsupported(yaml_path: Path, args: argparse.Namespace) -> bool:
+    """Whether a project of several files (parts.py) asks for what doesn't
+    go into its parts yet - after saying so."""
+    if not parts.has_parts(yaml_path):
+        return False
+    for option, wanted in (("--fetch", getattr(args, "fetch", False)), ("--proxy", getattr(args, "proxy", None)),
+                           ("--split", getattr(args, "split", False))):
+        if wanted:
+            print(msg("cli.parts_unsupported", option=option), file=sys.stderr)
+            return True
+    return False
+
+
+def _output(yaml_path: Path, args: argparse.Namespace, suffix: str) -> Path:
+    """-o, else the project file's name - and the part's, with --part."""
+    if args.output:
+        return Path(args.output)
+    part = getattr(args, "part", None)
+    if part:
+        return yaml_path.with_name(f"{yaml_path.stem}-{part.strip('/').replace('/', '-')}{suffix}")
+    return yaml_path.with_suffix(suffix)
+
+
 def cmd_fetch(args: argparse.Namespace) -> int:
+    if parts.has_parts(Path(args.project)):
+        print(msg("cli.parts_unsupported", option="fetch"), file=sys.stderr)
+        return 1
     return 0 if _run_fetch(Path(args.project), verify=args.verify, prune=args.prune) else 1
 
 
 def cmd_build(args: argparse.Namespace) -> int:
     yaml_path = Path(args.project)
-    output = Path(args.output) if args.output else yaml_path.with_suffix(".kdenlive")
+    output = _output(yaml_path, args, ".kdenlive")
+    if _parts_unsupported(yaml_path, args):
+        return 1
     if args.fetch and not _run_fetch(yaml_path):
         return 1
     try:
-        resolved = load_and_resolve(yaml_path)
+        resolved = load_and_resolve(yaml_path, part=args.part)
     except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -203,7 +231,7 @@ def _with_proxies(resolved, size_text: Optional[str]):
 
 def cmd_validate(args: argparse.Namespace) -> int:
     try:
-        resolved = load_and_resolve(Path(args.project))
+        resolved = load_and_resolve(Path(args.project), part=args.part)
     except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -237,12 +265,14 @@ def cmd_import(args: argparse.Namespace) -> int:
 
 def cmd_render(args: argparse.Namespace) -> int:
     yaml_path = Path(args.project)
-    output = Path(args.output) if args.output else yaml_path.with_suffix(".mp4")
+    output = _output(yaml_path, args, ".mp4")
+    if _parts_unsupported(yaml_path, args):
+        return 1
     if args.fetch and not _run_fetch(yaml_path):
         return 1
 
     try:
-        resolved = load_and_resolve(yaml_path)
+        resolved = load_and_resolve(yaml_path, part=args.part)
     except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
@@ -400,10 +430,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_build.add_argument("--pack-tracks", action="store_true", help=msg("cli.help.pack_tracks"))
     p_build.add_argument("--fetch", action="store_true", help=msg("cli.help.fetch_first"))
     p_build.add_argument("--proxy", metavar="WxH", help=msg("cli.help.proxy"))
+    p_build.add_argument("--part", metavar="PATH", help=msg("cli.help.part"))
     p_build.set_defaults(func=cmd_build)
 
     p_validate = sub.add_parser("validate", help=msg("cli.help.validate"))
     p_validate.add_argument("project", help=msg("cli.help.project_path"))
+    p_validate.add_argument("--part", metavar="PATH", help=msg("cli.help.part"))
     p_validate.set_defaults(func=cmd_validate)
 
     p_import = sub.add_parser("import", help=msg("cli.help.import"))
@@ -419,6 +451,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_render.add_argument("--split", action="store_true", help=msg("cli.help.render_split"))
     p_render.add_argument("--max-mem", type=int, metavar="MB", help=msg("cli.help.render_max_mem"))
     p_render.add_argument("--proxy", metavar="WxH", help=msg("cli.help.proxy"))
+    p_render.add_argument("--part", metavar="PATH", help=msg("cli.help.part"))
     p_render.add_argument("--no-prune", action="store_true", help=msg("cli.help.no_prune"))
     p_render.set_defaults(func=cmd_render)
 
