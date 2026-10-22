@@ -33,6 +33,7 @@ video-as-code render project.yaml [-o output.mp4] [--split]  # build + render st
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
+video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
 ```
 
 `build` and `render` also take `--fetch`, to run `fetch` first, and
@@ -415,6 +416,18 @@ An unknown service or property is an error, with the closest names, so
 a typo doesn't render as nothing; `import` brings filters and
 transitions it doesn't otherwise recognize back as these entries,
 instead of `x_kdenlive_raw`, when the installed melt has them. See
+`docs/project-yaml.md`.
+
+### `transition: gl`: gl-transitions' 125 shaders
+
+[gl-transitions](https://gl-transitions.com)' collection - cube, doorway,
+page curl, morph, ripple, burn... - as scene transitions:
+`transition: gl` with `gl: cube` (and, optionally, `gl_params: {...}`).
+MLT doesn't run GLSL itself, so `video-as-code install-gl-transitions`
+builds, once, a small frei0r plugin that does (EGL and GLES 3, no
+window): melt then renders them in the same pass as everything else.
+The shaders are bundled (MIT, two BSD; see
+`src/video_as_code/gltransitions_data/LICENSE`). See
 `docs/project-yaml.md`.
 
 ### `video-as-code gallery`: every transition and effect, in the browser

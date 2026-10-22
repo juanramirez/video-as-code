@@ -89,5 +89,6 @@ def test_frei0r_dirs_include_multiarch_and_keep_mlts_defaults(tmp_path: Path):
     assert dirs[:2] == [str(tmp_path / "usr/lib/x86_64-linux-gnu/frei0r-1"), str(tmp_path / "usr/lib/frei0r-1")]
 
 
-def test_melt_env_keeps_the_callers_frei0r_path():
+def test_melt_env_keeps_the_callers_frei0r_path(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))  # (no gl-transitions plugin built)
     assert probe.melt_env({"FREI0R_PATH": "/mine"})["FREI0R_PATH"] == "/mine"

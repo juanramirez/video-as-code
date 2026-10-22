@@ -209,13 +209,15 @@ at second 0.
 | `clips` | *(required)* | The clips (below). |
 | `pacing` | `normal` | How long each clip lasts when `duration` isn't given: `energetic` (stills 1.5 s, videos up to 3 s), `normal` (3 s / up to 6 s) or `slow` (5 s / up to 10 s). A video shorter than its cap plays whole. |
 | `duration` | - | Total length of the scene, split evenly across its clips. |
-| `transition` | `none` | Between consecutive clips: `none`, `dissolve`, `wipe`, `affine`, `iris`, `flip`, `glitch`, `delaygrab` or `cairogradient` - all but `none`/`dissolve` need video - or any MLT transition as `melt/<service>` (below). |
+| `transition` | `none` | Between consecutive clips: `none`, `dissolve`, `wipe`, `affine`, `iris`, `flip`, `glitch`, `delaygrab` or `cairogradient` - all but `none`/`dissolve` need video - `gl` (one of gl-transitions', below) or any MLT transition as `melt/<service>` (below). |
 | `transition_duration` | `1.0` | Length of each transition. |
 | `luma` | `linear_x` | With `wipe`: its shape - `linear_x`, `linear_y`, `diagonal`, `radial`, `square`, `clock`, `spiral`, `bars_horizontal`, `bars_vertical`, `checkerboard`, `heart` or `bowtie`; or, with openshot-qt installed, one of OpenShot's 412 as `openshot/<name>` (see the README's *OpenShot's transitions*). |
 | `luma_softness` | `0` | With `wipe`: how soft the edge between the two clips is, from `0` (hard) to `1`. |
 | `luma_reverse` | `false` | With `wipe`: the shape's light parts change first instead of its dark ones. |
 | `style` | `zoom` | With `affine`: `zoom` or `slide`. |
 | `transition_properties` | - | With `melt/<service>`: its properties, `{<property>: <value>}`. |
+| `gl` | - | With `gl`: which of gl-transitions' 125 (`cube`, `doorway`, `ripple`...; see *`transition: gl`* below). |
+| `gl_params` | - | With `gl`: its parameters, `{<name>: <value>}`; the rest keep their defaults. |
 
 A scene's clip is a file path (`photos/beach.jpg`, added to the bin by
 itself), `{path: ...}`, or `{clip: <bin id>}`; the two map forms may also
@@ -239,7 +241,7 @@ A transition between two tracks over a time window, written directly
 
 | Key | Default | Meaning |
 |---|---|---|
-| `type` | *(required)* | `wipe`, `affine` or `melt/<service>`. |
+| `type` | *(required)* | `wipe`, `affine`, `gl` or `melt/<service>`. |
 | `track_a`, `track_b` | *(required)* | The two tracks, by `name`. |
 | `start`, `end` | *(required)* | The window, in timeline seconds. |
 | `luma` | `linear_x` | With `wipe`: its shape (see `scenes:`). |
@@ -247,6 +249,7 @@ A transition between two tracks over a time window, written directly
 | `reverse` | `false` | With `wipe`: as a scene's `luma_reverse`. |
 | `style` | `zoom` | With `affine`: `zoom` or `slide`. |
 | `properties` | - | With `melt/<service>`: its properties, `{<property>: <value>}`. |
+| `gl`, `gl_params` | - | With `gl`: as on a scene. |
 
 ## `melt:` and `melt/<service>`
 
@@ -289,3 +292,30 @@ a filter it has no description of renders but may not show in its
 effect stack. `import` brings any filter over the whole clip and any
 transition between two tracks that the installed melt has, and that it
 doesn't otherwise recognize, back as these entries.
+
+## `transition: gl`
+
+The 125 transitions of [gl-transitions](https://gl-transitions.com) - a
+cube turning, doors opening, a page curling, a morph, ripples, a burn... -
+each a GLSL shader run on the GPU:
+
+```yaml
+scenes:
+  - transition: gl
+    gl: cube
+    gl_params: {persp: 0.5, reflection: 0.2}   # optional
+    clips: [a.jpg, b.jpg]
+```
+
+`video-as-code gallery` shows every one playing, with its name; each
+one's parameters, their types (`float`, `bool`, `vec2`/`vec3`/`vec4` as
+lists of numbers, `ivec2` as whole numbers) and ranges are in
+`src/video_as_code/gltransitions_data/catalog.json`, and a wrong one is
+an error that says what it takes.
+
+They need a small plugin built once: `video-as-code install-gl-transitions`
+(a C compiler and the EGL, GLES and frei0r headers - `libegl-dev`,
+`libgles-dev`, `frei0r-plugins-dev` on Debian/Ubuntu). In the .kdenlive
+they're a `frei0r.gltransition` transition, which kdenlive renders as
+long as its melt finds the plugin (`FREI0R_PATH`). A machine with no GPU
+renders them on the CPU (Mesa's llvmpipe), more slowly.

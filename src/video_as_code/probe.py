@@ -83,13 +83,19 @@ def melt_env(base: dict[str, str] | None = None, mlt_data: Path | None = None) -
     unaffected - silently, with no error. Forcing the C locale for the
     melt process makes every decimal in the XML mean what it says.
 
-    Also FREI0R_PATH, unless the caller set it: see frei0r_dirs."""
+    Also FREI0R_PATH, unless the caller set it (see frei0r_dirs), with
+    the gl-transitions plugin's folder first once it's built
+    (gltransitions.py)."""
     env = dict(os.environ if base is None else base)
     env["LC_ALL"] = "C"
-    if "FREI0R_PATH" not in env:
-        frei0r_path = frei0r_dirs()
-        if frei0r_path:
-            env["FREI0R_PATH"] = ":".join(frei0r_path)
+    frei0r_path = env["FREI0R_PATH"].split(":") if env.get("FREI0R_PATH") else frei0r_dirs()
+    # this project's own frei0r plugin (transition: gl), when built
+    from .gltransitions import PLUGIN, install_dir
+
+    if (install_dir() / PLUGIN).is_file() and str(install_dir()) not in frei0r_path:
+        frei0r_path = [str(install_dir()), *frei0r_path]
+    if frei0r_path:
+        env["FREI0R_PATH"] = ":".join(frei0r_path)
     if mlt_data is not None:
         env["MLT_DATA"] = str(mlt_data)  # see mltdata.py
     return env

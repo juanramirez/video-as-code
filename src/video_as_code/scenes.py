@@ -118,7 +118,7 @@ from typing import Any, Optional
 
 from . import probe
 from .i18n import msg
-from . import lumas, meltpass
+from . import gltransitions, lumas, meltpass
 from .models import (
     AFFINE_STYLES,
     AffineTransitionSpec,
@@ -305,7 +305,9 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             continue
 
         transition = scene.get("transition", "none")
-        is_melt = isinstance(transition, str) and transition.startswith(meltpass.PREFIX)
+        # melt/<service> and gl both become an MLT transition between the
+        # two alternating tracks (MeltTransitionSpec)
+        is_melt = transition == "gl" or (isinstance(transition, str) and transition.startswith(meltpass.PREFIX))
         if transition not in ("none", "dissolve", "wipe", "affine", "iris", "flip", *BURST_TRANSITIONS) and not is_melt:
             errors.append(msg("validation.scene_transition_invalid", ctx=ctx, transition=transition))
             continue
@@ -315,7 +317,12 @@ def compile_scenes(doc: ProjectDoc, scenes_data: list, errors: list[str]) -> Pro
             else 0.0
         )
         melt_service = None
-        if is_melt:
+        if transition == "gl":
+            # a gl-transitions shader (gltransitions.py)
+            melt_service = gltransitions.parse(scene.get("gl"), scene.get("gl_params"), ctx, errors)
+            if melt_service is None:
+                continue
+        elif is_melt:
             # any MLT transition between the two alternating tracks over
             # each overlap, as wipe/affine - on sound too (`mix`)
             melt_service = meltpass.parse_service(

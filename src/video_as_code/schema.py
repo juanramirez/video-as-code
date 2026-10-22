@@ -24,7 +24,7 @@ from . import probe, sources_lock, titles
 from . import upscale as upscale_mod
 from .errors import ValidationErrors
 from .i18n import msg
-from . import lumas, meltpass
+from . import gltransitions, lumas, meltpass
 from .models import (
     AFFINE_STYLES,
     AffineTransitionSpec,
@@ -1248,7 +1248,7 @@ def _parse_transition(
         return None
     t_type = item["type"]
     is_melt = isinstance(t_type, str) and t_type.startswith(meltpass.PREFIX)
-    if t_type not in ("wipe", "affine") and not is_melt:
+    if t_type not in ("wipe", "affine", "gl") and not is_melt:
         errors.append(msg("validation.transition_type_invalid", ctx=ctx, type=t_type))
         return None
 
@@ -1278,6 +1278,12 @@ def _parse_transition(
         if softness is None or not isinstance(reverse, bool):
             return None
         return WipeTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, luma=luma, softness=softness, reverse=reverse)
+
+    if t_type == "gl":
+        service = gltransitions.parse(item.get("gl"), item.get("gl_params"), ctx, errors)
+        if service is None:
+            return None
+        return MeltTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, melt=service)
 
     if is_melt:
         service = meltpass.parse_service("transition", t_type[len(meltpass.PREFIX):], item.get("properties"), ctx, errors)

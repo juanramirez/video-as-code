@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from . import autoprune, fetch, fetch_resolve, gallery, i18n, lumas, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import autoprune, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -107,6 +107,15 @@ def cmd_install_upscaler(args: argparse.Namespace) -> int:
     try:
         upscale.install(report=lambda text: print(text, file=sys.stderr))
     except KdenliveAsCodeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_install_gl(args: argparse.Namespace) -> int:
+    try:
+        gltransitions.install(report=lambda text: print(text, file=sys.stderr))
+    except (KdenliveAsCodeError, OSError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
     return 0
@@ -421,6 +430,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_upscaler = sub.add_parser("install-upscaler", help=msg("cli.help.install_upscaler"))
     p_upscaler.set_defaults(func=cmd_install_upscaler)
+
+    p_install_gl = sub.add_parser("install-gl-transitions", help=msg("cli.help.install_gl"))
+    p_install_gl.set_defaults(func=cmd_install_gl)
 
     p_transitions = sub.add_parser("transitions", help=msg("cli.help.transitions"))
     p_transitions.set_defaults(func=cmd_transitions)

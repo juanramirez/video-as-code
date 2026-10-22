@@ -1,0 +1,1888 @@
+{
+ "source": "gl-transitions 1.76.1 (npm), https://github.com/gl-transitions/gl-transitions",
+ "transitions": {
+  "AdvancedMosaic": {
+   "author": "Sergey Kosarevsky",
+   "license": "MIT",
+   "description": "Both images break into large blocks that blend, then sharpen into the incoming image",
+   "params": {
+    "pixelSize": {
+     "type": "float",
+     "default": 50
+    }
+   }
+  },
+  "angular": {
+   "author": "Fernando Kuteken",
+   "license": "MIT",
+   "description": "A wipe that sweeps around the center from a starting angle",
+   "params": {
+    "startingAngle": {
+     "type": "float",
+     "default": 90,
+     "min": 0,
+     "max": 360,
+     "description": "Angle where the wipe starts, in degrees"
+    }
+   }
+  },
+  "BlockDissolve": {
+   "author": "nwoeanhinnogaehr",
+   "license": "MIT",
+   "description": "The incoming image appears in small random blocks",
+   "params": {
+    "blocksize": {
+     "type": "float",
+     "default": 0.02
+    }
+   }
+  },
+  "BookFlip": {
+   "author": "hong",
+   "license": "MIT",
+   "description": "The outgoing image turns like a book page from right to left, revealing the incoming one",
+   "params": {}
+  },
+  "Bounce": {
+   "author": "Adrian Purser",
+   "license": "MIT",
+   "description": "The outgoing image drops out of the frame with a few bounces, revealing the incoming one",
+   "params": {
+    "shadow_colour": {
+     "type": "vec4",
+     "default": [
+      0,
+      0,
+      0,
+      0.6
+     ],
+     "color": true,
+     "description": "Color of the shadow cast on the incoming image"
+    },
+    "shadow_height": {
+     "type": "float",
+     "default": 0.075,
+     "min": 0.01,
+     "max": 0.5,
+     "description": "Height of the shadow, relative to the image height"
+    },
+    "bounces": {
+     "type": "float",
+     "default": 3,
+     "min": 1,
+     "max": 10,
+     "description": "Number of bounces before settling"
+    }
+   }
+  },
+  "BowTieHorizontal": {
+   "author": "huynx",
+   "license": "MIT",
+   "description": "Two triangles grow from the left and right edges into a bow tie that reveals the incoming image",
+   "params": {}
+  },
+  "BowTieVertical": {
+   "author": "huynx",
+   "license": "MIT",
+   "description": "Two triangles grow from the top and bottom edges into a bow tie that reveals the incoming image",
+   "params": {}
+  },
+  "BowTieWithParameter": {
+   "author": "KMojek",
+   "license": "MIT",
+   "description": "A bow-tie wipe with an adjustable shape that can run in reverse",
+   "params": {
+    "adjust": {
+     "type": "float",
+     "default": 0.5
+    },
+    "reverse": {
+     "type": "bool",
+     "default": false,
+     "description": "Run the wipe in reverse"
+    }
+   }
+  },
+  "Box": {
+   "author": "lql",
+   "license": "MIT",
+   "description": "The outgoing image shrinks into a box, toward the center or a corner, revealing the incoming one",
+   "params": {
+    "rectIn": {
+     "type": "int",
+     "default": 1
+    },
+    "location": {
+     "type": "int",
+     "default": 0,
+     "min": 0,
+     "max": 4,
+     "description": "Where the box goes: 0 center, 1 left top, 2 left bottom, 3 right top, 4 right bottom"
+    }
+   }
+  },
+  "burn": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A crossfade that brightens toward a color in the middle",
+   "params": {
+    "color": {
+     "type": "vec3",
+     "default": [
+      0.9,
+      0.4,
+      0.2
+     ],
+     "color": true,
+     "description": "Color the images brighten toward"
+    }
+   }
+  },
+  "burn0": {
+   "author": "liubailin2020@gmail.com",
+   "license": "MIT",
+   "description": "The outgoing image burns away in noisy, glowing patches",
+   "params": {
+    "burnColor": {
+     "type": "vec3",
+     "default": [
+      1,
+      0.5,
+      0
+     ],
+     "color": true,
+     "description": "Color of the burning edges"
+    }
+   }
+  },
+  "ButterflyWaveScrawler": {
+   "author": "mandubian",
+   "license": "MIT",
+   "description": "Wavy, color-separated ripples scramble the outgoing image into the incoming one",
+   "params": {
+    "amplitude": {
+     "type": "float",
+     "default": 1
+    },
+    "waves": {
+     "type": "float",
+     "default": 30
+    },
+    "colorSeparation": {
+     "type": "float",
+     "default": 0.3
+    }
+   }
+  },
+  "cannabisleaf": {
+   "author": "@Flexi23",
+   "license": "MIT",
+   "description": "A cannabis-leaf shape grows from the center to reveal the incoming image",
+   "params": {}
+  },
+  "chessboard": {
+   "author": "lql",
+   "license": "MIT",
+   "description": "A chessboard pattern of squares reveals the incoming image",
+   "params": {
+    "grid_num": {
+     "type": "float",
+     "default": 10,
+     "description": "Number of squares per row"
+    }
+   }
+  },
+  "circle": {
+   "author": "Fernando Kuteken",
+   "license": "MIT",
+   "description": "The outgoing image closes into a circle over a background color, then the incoming one opens from it",
+   "params": {
+    "center": {
+     "type": "vec2",
+     "default": [
+      0.5,
+      0.5
+     ],
+     "description": "Center of the circle"
+    },
+    "backColor": {
+     "type": "vec3",
+     "default": [
+      0.1,
+      0.1,
+      0.1
+     ],
+     "color": true,
+     "description": "Background color"
+    }
+   }
+  },
+  "CircleCrop": {
+   "author": "fkuteken",
+   "license": "MIT",
+   "description": "The outgoing image closes into a circle over a background color, then the incoming one opens from it",
+   "params": {
+    "bgcolor": {
+     "type": "vec4",
+     "default": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "color": true,
+     "description": "Background color"
+    }
+   }
+  },
+  "circleopen": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A soft-edged circle opens from the center to reveal the incoming image",
+   "params": {
+    "smoothness": {
+     "type": "float",
+     "default": 0.3,
+     "description": "Softness of the circle's edge"
+    },
+    "opening": {
+     "type": "bool",
+     "default": true,
+     "description": "Open the circle; false closes it instead"
+    }
+   }
+  },
+  "colorphase": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A crossfade in which each color channel changes at a different time",
+   "params": {
+    "fromStep": {
+     "type": "vec4",
+     "default": [
+      0,
+      0.2,
+      0.4,
+      0
+     ],
+     "min": 0,
+     "max": 1,
+     "description": "When each channel (r, g, b, a) starts changing"
+    },
+    "toStep": {
+     "type": "vec4",
+     "default": [
+      0.6,
+      0.8,
+      1,
+      1
+     ],
+     "min": 0,
+     "max": 1,
+     "description": "When each channel (r, g, b, a) finishes changing"
+    }
+   }
+  },
+  "ColourDistance": {
+   "author": "P-Seebauer",
+   "license": "MIT",
+   "description": "Pixels switch to the incoming image in order of how close their colors are",
+   "params": {
+    "power": {
+     "type": "float",
+     "default": 5
+    }
+   }
+  },
+  "coord-from-in": {
+   "author": "haiyoucuv",
+   "license": "MIT",
+   "description": "A crossfade in which the colors of one image displace the other",
+   "params": {}
+  },
+  "CrazyParametricFun": {
+   "author": "mandubian",
+   "license": "MIT",
+   "description": "The outgoing image is pulled along a parametric curve into a psychedelic swirl",
+   "params": {
+    "a": {
+     "type": "float",
+     "default": 4
+    },
+    "b": {
+     "type": "float",
+     "default": 1
+    },
+    "amplitude": {
+     "type": "float",
+     "default": 120
+    },
+    "smoothness": {
+     "type": "float",
+     "default": 0.1
+    }
+   }
+  },
+  "crosshatch": {
+   "author": "pthrasher",
+   "license": "MIT",
+   "description": "The incoming image appears through a crosshatch of lines spreading from the center",
+   "params": {
+    "center": {
+     "type": "vec2",
+     "default": [
+      0.5,
+      0.5
+     ],
+     "description": "Point the lines spread from"
+    },
+    "threshold": {
+     "type": "float",
+     "default": 3
+    },
+    "fadeEdge": {
+     "type": "float",
+     "default": 0.1
+    }
+   }
+  },
+  "crosswarp": {
+   "author": "Eke Péter <peterekepeter@gmail.com>",
+   "license": "MIT",
+   "description": "The outgoing image zooms in while the incoming one zooms out into place, sweeping from right to left",
+   "params": {}
+  },
+  "CrossZoom": {
+   "author": "rectalogic",
+   "license": "MIT",
+   "description": "A crossfade through a strong zoom blur",
+   "params": {
+    "strength": {
+     "type": "float",
+     "default": 0.4,
+     "min": 0,
+     "max": 1,
+     "description": "Blur strength"
+    }
+   }
+  },
+  "cube": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "The two images are faces of a rotating 3D cube, with a floor reflection",
+   "params": {
+    "persp": {
+     "type": "float",
+     "default": 0.7,
+     "min": 0,
+     "max": 1,
+     "description": "Amount of perspective"
+    },
+    "unzoom": {
+     "type": "float",
+     "default": 0.3
+    },
+    "reflection": {
+     "type": "float",
+     "default": 0.4,
+     "min": 0,
+     "max": 1,
+     "description": "Strength of the reflection"
+    },
+    "floating": {
+     "type": "float",
+     "default": 3
+    }
+   }
+  },
+  "DefocusBlur": {
+   "author": "Sergey Kosarevsky",
+   "license": "MIT",
+   "description": "A crossfade through an out-of-focus blur",
+   "params": {
+    "blurSize": {
+     "type": "float",
+     "default": 0.02,
+     "description": "Amount of blur"
+    }
+   }
+  },
+  "Directional": {
+   "author": "Gaëtan Renaudeau",
+   "license": "MIT",
+   "description": "The incoming image pushes the outgoing one out in a given direction",
+   "params": {
+    "direction": {
+     "type": "vec2",
+     "default": [
+      0,
+      1
+     ],
+     "description": "Direction of the movement"
+    }
+   }
+  },
+  "directional-easing": {
+   "author": "Max Plotnikov",
+   "license": "MIT",
+   "description": "Like Directional, with an eased movement",
+   "params": {
+    "direction": {
+     "type": "vec2",
+     "default": [
+      0,
+      1
+     ],
+     "description": "Direction of the movement"
+    }
+   }
+  },
+  "DirectionalScaled": {
+   "author": "Thibaut Foussard",
+   "license": "MIT",
+   "description": "Like Directional, with both images scaled down while they slide",
+   "params": {
+    "direction": {
+     "type": "vec2",
+     "default": [
+      0,
+      1
+     ],
+     "description": "Direction of the movement"
+    },
+    "scale": {
+     "type": "float",
+     "default": 0.7
+    }
+   }
+  },
+  "directionalwarp": {
+   "author": "pschroen",
+   "license": "MIT",
+   "description": "A diagonal wipe with a warped, smeared edge",
+   "params": {
+    "smoothness": {
+     "type": "float",
+     "default": 0.1,
+     "description": "Softness of the edge"
+    },
+    "direction": {
+     "type": "vec2",
+     "default": [
+      -1,
+      1
+     ],
+     "description": "Direction of the wipe"
+    }
+   }
+  },
+  "directionalwipe": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A soft-edged diagonal wipe",
+   "params": {
+    "direction": {
+     "type": "vec2",
+     "default": [
+      1,
+      -1
+     ],
+     "description": "Direction of the wipe"
+    },
+    "smoothness": {
+     "type": "float",
+     "default": 0.5,
+     "description": "Softness of the edge"
+    }
+   }
+  },
+  "displacement": {
+   "author": "Travis Fischer",
+   "license": "MIT",
+   "description": "A crossfade in which a displacement map (an extra grayscale texture) warps both images",
+   "params": {
+    "strength": {
+     "type": "float",
+     "default": 0.5,
+     "description": "Strength of the displacement"
+    }
+   }
+  },
+  "dissolve": {
+   "author": "hjm1fb",
+   "license": "MIT",
+   "description": "The incoming image spreads over the outgoing one with a hot, glowing edge",
+   "params": {
+    "uLineWidth": {
+     "type": "float",
+     "default": 0.1
+    },
+    "uSpreadClr": {
+     "type": "vec3",
+     "default": [
+      1,
+      0,
+      0
+     ],
+     "color": true,
+     "description": "Color of the spreading edge"
+    },
+    "uHotClr": {
+     "type": "vec3",
+     "default": [
+      0.9,
+      0.9,
+      0.2
+     ],
+     "color": true,
+     "description": "Color of the hottest part of the edge"
+    },
+    "uPow": {
+     "type": "float",
+     "default": 5
+    },
+    "uIntensity": {
+     "type": "float",
+     "default": 1
+    }
+   }
+  },
+  "DoomScreenTransition": {
+   "author": "Zeh Fernando",
+   "license": "MIT",
+   "description": "The outgoing image melts down in uneven columns, like the Doom screen wipe",
+   "params": {
+    "bars": {
+     "type": "int",
+     "default": 30
+    },
+    "amplitude": {
+     "type": "float",
+     "default": 2
+    },
+    "noise": {
+     "type": "float",
+     "default": 0.1
+    },
+    "frequency": {
+     "type": "float",
+     "default": 0.5
+    },
+    "dripScale": {
+     "type": "float",
+     "default": 0.5
+    }
+   }
+  },
+  "doorway": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "The outgoing image opens like double doors as the incoming one comes forward, with a floor reflection",
+   "params": {
+    "reflection": {
+     "type": "float",
+     "default": 0.4,
+     "description": "Strength of the reflection"
+    },
+    "perspective": {
+     "type": "float",
+     "default": 0.4,
+     "description": "Amount of perspective"
+    },
+    "depth": {
+     "type": "float",
+     "default": 3
+    }
+   }
+  },
+  "Dreamy": {
+   "author": "mikolalysenko",
+   "license": "MIT",
+   "description": "A crossfade with a gentle wavy distortion",
+   "params": {}
+  },
+  "DreamyZoom": {
+   "author": "Zeh Fernando",
+   "license": "MIT",
+   "description": "Zooms and rotates into a bright flash, then out to the incoming image",
+   "params": {
+    "rotation": {
+     "type": "float",
+     "default": 6
+    },
+    "scale": {
+     "type": "float",
+     "default": 1.2
+    }
+   }
+  },
+  "Drop_Zone_Flicker": {
+   "author": "bread",
+   "license": "MIT",
+   "description": "A flickering glitch with RGB offset, ghosting and scanlines that flashes back to the outgoing image",
+   "params": {
+    "frameRate": {
+     "type": "float",
+     "default": 24
+    },
+    "rgbOffset": {
+     "type": "float",
+     "default": 0.014
+    },
+    "blockAmount": {
+     "type": "float",
+     "default": 0.72
+    },
+    "ghostAmount": {
+     "type": "float",
+     "default": 0.62
+    },
+    "redCyan": {
+     "type": "float",
+     "default": 0.58
+    },
+    "scanline": {
+     "type": "float",
+     "default": 0.075
+    }
+   }
+  },
+  "EdgeTransition": {
+   "author": "Woohyun Kim",
+   "license": "MIT",
+   "description": "Both images fade through black with their edges glowing",
+   "params": {
+    "edge_thickness": {
+     "type": "float",
+     "default": 0.001
+    },
+    "edge_brightness": {
+     "type": "float",
+     "default": 8
+    }
+   }
+  },
+  "fade": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A linear crossfade between the two images",
+   "params": {}
+  },
+  "fadecolor": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A fade through a solid color, black by default",
+   "params": {
+    "color": {
+     "type": "vec3",
+     "default": [
+      0,
+      0,
+      0
+     ],
+     "color": true,
+     "description": "Color to fade through"
+    },
+    "colorPhase": {
+     "type": "float",
+     "default": 0.4,
+     "min": 0,
+     "max": 1,
+     "description": "How long the color shows in the middle"
+    }
+   }
+  },
+  "fadegrayscale": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A crossfade through grayscale",
+   "params": {
+    "intensity": {
+     "type": "float",
+     "default": 0.3,
+     "min": 0,
+     "max": 1,
+     "description": "How long the grayscale phase lasts"
+    }
+   }
+  },
+  "FilmBurn": {
+   "author": "Anastasia Dunbar",
+   "license": "MIT",
+   "description": "Glowing film-burn light leaks wash over the image and reveal the incoming one",
+   "params": {
+    "Seed": {
+     "type": "float",
+     "default": 2.31,
+     "description": "Random seed"
+    }
+   }
+  },
+  "flyeye": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "The image breaks into a fly's-eye grid of lenses with color separation",
+   "params": {
+    "size": {
+     "type": "float",
+     "default": 0.04
+    },
+    "zoom": {
+     "type": "float",
+     "default": 50
+    },
+    "colorSeparation": {
+     "type": "float",
+     "default": 0.3
+    }
+   }
+  },
+  "Fold": {
+   "author": "nwoeanhinnogaehr",
+   "license": "MIT",
+   "description": "The incoming image unfolds from the left while the outgoing one folds away to the right",
+   "params": {}
+  },
+  "fragment": {
+   "author": "lbl",
+   "license": "MIT",
+   "description": "The outgoing image shatters into fragments that fly away",
+   "params": {}
+  },
+  "GlitchDisplace": {
+   "author": "Matt DesLauriers",
+   "license": "MIT",
+   "description": "Blocks of the image are displaced in a glitch that flashes into the incoming image",
+   "params": {}
+  },
+  "GlitchMemories": {
+   "author": "Gunnar Roth",
+   "license": "MIT",
+   "description": "A crossfade with glitchy, color-shifted blocks",
+   "params": {}
+  },
+  "GridFlip": {
+   "author": "TimDonselaar",
+   "license": "MIT",
+   "description": "The image splits into a grid of tiles that flip one by one to the incoming image",
+   "params": {
+    "size": {
+     "type": "ivec2",
+     "default": [
+      4,
+      4
+     ],
+     "description": "Number of tiles (columns, rows)"
+    },
+    "pause": {
+     "type": "float",
+     "default": 0.1
+    },
+    "dividerWidth": {
+     "type": "float",
+     "default": 0.05
+    },
+    "bgcolor": {
+     "type": "vec4",
+     "default": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "color": true,
+     "description": "Color behind the tiles"
+    },
+    "randomness": {
+     "type": "float",
+     "default": 0.1
+    }
+   }
+  },
+  "heart": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A heart shape grows from the center to reveal the incoming image",
+   "params": {}
+  },
+  "hexagonalize": {
+   "author": "Fernando Kuteken",
+   "license": "MIT",
+   "description": "Both images turn into hexagons, crossfade, then sharpen again",
+   "params": {
+    "steps": {
+     "type": "int",
+     "default": 50
+    },
+    "horizontalHexagons": {
+     "type": "float",
+     "default": 20,
+     "description": "Number of hexagons across"
+    }
+   }
+  },
+  "HorizontalClose": {
+   "author": "martiniti",
+   "license": "MIT",
+   "description": "The incoming image closes in from the top and bottom edges toward the middle",
+   "params": {}
+  },
+  "HorizontalOpen": {
+   "author": "martiniti",
+   "license": "MIT",
+   "description": "The incoming image opens from a line in the middle toward the top and bottom edges",
+   "params": {}
+  },
+  "HSVfade": {
+   "author": "nwoeanhinnogaehr",
+   "license": "MIT",
+   "description": "A crossfade through the HSV color space that cycles through hues",
+   "params": {}
+  },
+  "InvertedPageCurl": {
+   "author": "Hewlett-Packard",
+   "license": "BSD 3 Clause",
+   "description": "The outgoing image curls away like a page, revealing the incoming one",
+   "params": {}
+  },
+  "kaleidoscope": {
+   "author": "nwoeanhinnogaehr",
+   "license": "MIT",
+   "description": "A crossfade through a spinning kaleidoscope",
+   "params": {
+    "speed": {
+     "type": "float",
+     "default": 1
+    },
+    "angle": {
+     "type": "float",
+     "default": 1
+    },
+    "power": {
+     "type": "float",
+     "default": 1.5
+    }
+   }
+  },
+  "LeftRight": {
+   "author": "zhmy",
+   "license": "MIT",
+   "description": "The outgoing image shrinks away to the left while the incoming one slides in from the right",
+   "params": {}
+  },
+  "LinearBlur": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A crossfade through a blur",
+   "params": {
+    "intensity": {
+     "type": "float",
+     "default": 0.1,
+     "description": "Amount of blur"
+    }
+   }
+  },
+  "luma": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A wipe that follows the brightness of a grayscale mask (the luma texture)",
+   "params": {}
+  },
+  "luminance_melt": {
+   "author": "0gust1",
+   "license": "MIT",
+   "description": "The outgoing image melts away in noisy vertical streaks, depending on its brightness",
+   "params": {
+    "direction": {
+     "type": "bool",
+     "default": true,
+     "description": "Direction of the melt (false: up, true: down)"
+    },
+    "l_threshold": {
+     "type": "float",
+     "default": 0.8,
+     "min": 0,
+     "max": 1,
+     "description": "Luminance threshold"
+    },
+    "above": {
+     "type": "bool",
+     "default": false,
+     "description": "Melt the parts above the threshold instead of below"
+    }
+   }
+  },
+  "morph": {
+   "author": "paniq",
+   "license": "MIT",
+   "description": "A crossfade in which each image is displaced by the other's colors, like a morph",
+   "params": {
+    "strength": {
+     "type": "float",
+     "default": 0.1,
+     "description": "Strength of the displacement"
+    }
+   }
+  },
+  "Mosaic": {
+   "author": "Xaychru",
+   "license": "MIT",
+   "description": "The view pans across a mosaic of rotated tiles from both images and settles on the incoming one",
+   "params": {
+    "endx": {
+     "type": "int",
+     "default": 2
+    },
+    "endy": {
+     "type": "int",
+     "default": -1
+    }
+   }
+  },
+  "mosaic_transition": {
+   "author": "YueDev",
+   "license": "MIT",
+   "description": "Both images break into mosaic blocks that blend, then sharpen into the incoming image",
+   "params": {
+    "mosaicNum": {
+     "type": "float",
+     "default": 10,
+     "description": "Number of mosaic blocks"
+    }
+   }
+  },
+  "multiply_blend": {
+   "author": "Fernando Kuteken",
+   "license": "MIT",
+   "description": "A crossfade through the multiplied blend of both images",
+   "params": {}
+  },
+  "old_tv_lost_signal": {
+   "author": "mernking (gitlab.com/Godswork)",
+   "license": "MIT",
+   "description": "A crossfade with drifting tracking lines and tearing, like a TV losing its signal",
+   "params": {}
+  },
+  "Overexposure": {
+   "author": "Ben Zhang",
+   "license": "MIT",
+   "description": "A crossfade through a washed-out, overexposed white",
+   "params": {
+    "strength": {
+     "type": "float",
+     "default": 0.6,
+     "description": "Amount of overexposure"
+    }
+   }
+  },
+  "parametric_glitch": {
+   "author": "Yoni Maltsman @friendlyspinach",
+   "license": "MIT",
+   "description": "A crossfade with glitchy horizontal bands and color shifts",
+   "params": {
+    "ampx": {
+     "type": "float",
+     "default": 1,
+     "description": "Horizontal amplitude of the glitch"
+    },
+    "ampy": {
+     "type": "float",
+     "default": 1,
+     "description": "Vertical amplitude of the glitch"
+    }
+   }
+  },
+  "perlin": {
+   "author": "Rich Harris",
+   "license": "MIT",
+   "description": "The incoming image appears through blobs of Perlin noise",
+   "params": {
+    "scale": {
+     "type": "float",
+     "default": 4,
+     "description": "Scale of the noise; higher values make smaller blobs"
+    },
+    "smoothness": {
+     "type": "float",
+     "default": 0.01,
+     "description": "Softness of the blob edges"
+    },
+    "seed": {
+     "type": "float",
+     "default": 12.9898,
+     "description": "Random seed"
+    }
+   }
+  },
+  "pinwheel": {
+   "author": "Mr Speaker",
+   "license": "MIT",
+   "description": "A spinning pinwheel reveals the incoming image",
+   "params": {
+    "speed": {
+     "type": "float",
+     "default": 2,
+     "description": "Rotation speed"
+    }
+   }
+  },
+  "pixelize": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "Both images pixelate, crossfade, then sharpen again",
+   "params": {
+    "squaresMin": {
+     "type": "ivec2",
+     "default": [
+      20,
+      20
+     ],
+     "description": "Number of squares at the strongest pixelation"
+    },
+    "steps": {
+     "type": "int",
+     "default": 50,
+     "description": "Number of pixelation steps; 0 for a continuous effect"
+    }
+   }
+  },
+  "polar_function": {
+   "author": "Fernando Kuteken",
+   "license": "MIT",
+   "description": "A flower shape with several petals grows to reveal the incoming image",
+   "params": {
+    "segments": {
+     "type": "int",
+     "default": 5,
+     "description": "Number of petals"
+    }
+   }
+  },
+  "PolkaDotsCurtain": {
+   "author": "bobylito",
+   "license": "MIT",
+   "description": "The incoming image appears through growing polka dots",
+   "params": {
+    "dots": {
+     "type": "float",
+     "default": 20,
+     "description": "Number of dots across the image"
+    },
+    "center": {
+     "type": "vec2",
+     "default": [
+      0,
+      0
+     ]
+    }
+   }
+  },
+  "powerKaleido": {
+   "author": "Boundless",
+   "license": "MIT",
+   "description": "The image folds into an animated kaleidoscope before revealing the incoming one",
+   "params": {
+    "scale": {
+     "type": "float",
+     "default": 2
+    },
+    "z": {
+     "type": "float",
+     "default": 1.5
+    },
+    "speed": {
+     "type": "float",
+     "default": 5
+    }
+   }
+  },
+  "PuzzleRight": {
+   "author": "JustKirillS",
+   "license": "MIT",
+   "description": "The image splits into a grid of tiles that flip one by one to the incoming image",
+   "params": {
+    "size": {
+     "type": "ivec2",
+     "default": [
+      4,
+      4
+     ]
+    },
+    "pause": {
+     "type": "float",
+     "default": 0.1
+    },
+    "dividerWidth": {
+     "type": "float",
+     "default": 0.005
+    }
+   }
+  },
+  "Radial": {
+   "author": "Xaychru",
+   "license": "MIT",
+   "description": "A radial wipe that sweeps around the center like a clock hand",
+   "params": {
+    "smoothness": {
+     "type": "float",
+     "default": 1
+    }
+   }
+  },
+  "randomNoisex": {
+   "author": "towrabbit",
+   "license": "MIT",
+   "description": "The incoming image appears pixel by pixel in random noise",
+   "params": {}
+  },
+  "randomsquares": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "The incoming image appears in random squares",
+   "params": {
+    "size": {
+     "type": "ivec2",
+     "default": [
+      10,
+      10
+     ],
+     "description": "Number of squares (columns, rows)"
+    },
+    "smoothness": {
+     "type": "float",
+     "default": 0.5,
+     "description": "Softness of each square's switch"
+    }
+   }
+  },
+  "Rectangle": {
+   "author": "martiniti",
+   "license": "MIT",
+   "description": "A rectangle grows from the center to cover the outgoing image, then shrinks to reveal the incoming one",
+   "params": {
+    "bgcolor": {
+     "type": "vec4",
+     "default": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "color": true,
+     "description": "Color of the rectangle"
+    }
+   }
+  },
+  "RectangleCrop": {
+   "author": "martiniti",
+   "license": "MIT",
+   "description": "The outgoing image shrinks into a small rectangle over a background color, then the incoming one grows from it",
+   "params": {
+    "bgcolor": {
+     "type": "vec4",
+     "default": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "color": true,
+     "description": "Background color"
+    }
+   }
+  },
+  "Revolve_Left": {
+   "author": "bread",
+   "license": "MIT",
+   "description": "The outgoing image swirls and zooms with motion blur into the incoming one",
+   "params": {
+    "center": {
+     "type": "vec2",
+     "default": [
+      0.46,
+      0.52
+     ],
+     "description": "Center of the swirl"
+    },
+    "direction": {
+     "type": "float",
+     "default": -1
+    },
+    "maxRotation": {
+     "type": "float",
+     "default": 1.95
+    },
+    "peakZoom": {
+     "type": "float",
+     "default": 2.22
+    },
+    "swirl": {
+     "type": "float",
+     "default": 2.85
+    },
+    "barrel": {
+     "type": "float",
+     "default": 0.38
+    },
+    "motionBlur": {
+     "type": "float",
+     "default": 1
+    },
+    "switchStart": {
+     "type": "float",
+     "default": 0.3
+    },
+    "switchEnd": {
+     "type": "float",
+     "default": 0.5
+    },
+    "shadow": {
+     "type": "float",
+     "default": 0.16
+    }
+   }
+  },
+  "ripple": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "Ripples spread from the center while crossfading",
+   "params": {
+    "amplitude": {
+     "type": "float",
+     "default": 100,
+     "description": "Frequency of the ripples"
+    },
+    "speed": {
+     "type": "float",
+     "default": 50,
+     "description": "Speed of the ripples"
+    }
+   }
+  },
+  "Rolls": {
+   "author": "Mark Craig",
+   "license": "MIT",
+   "description": "The outgoing image rolls away around a corner, revealing the incoming one",
+   "params": {
+    "type": {
+     "type": "int",
+     "default": 0,
+     "min": 0,
+     "max": 3,
+     "description": "Corner to roll around"
+    },
+    "RotDown": {
+     "type": "bool",
+     "default": false,
+     "description": "Roll the outgoing image down instead of up"
+    }
+   }
+  },
+  "rotate_scale_fade": {
+   "author": "Fernando Kuteken",
+   "license": "MIT",
+   "description": "The outgoing image spins and zooms while fading to the incoming one, over a background color",
+   "params": {
+    "center": {
+     "type": "vec2",
+     "default": [
+      0.5,
+      0.5
+     ],
+     "description": "Center of the rotation"
+    },
+    "rotations": {
+     "type": "float",
+     "default": 1,
+     "description": "Number of turns"
+    },
+    "scale": {
+     "type": "float",
+     "default": 8,
+     "description": "Maximum zoom"
+    },
+    "backColor": {
+     "type": "vec4",
+     "default": [
+      0.15,
+      0.15,
+      0.15,
+      1
+     ],
+     "color": true,
+     "description": "Background color"
+    }
+   }
+  },
+  "RotateScaleVanish": {
+   "author": "Mark Craig",
+   "license": "MIT",
+   "description": "The outgoing image spins and shrinks away over the incoming one",
+   "params": {
+    "FadeInSecond": {
+     "type": "bool",
+     "default": true,
+     "description": "Fade in the incoming image"
+    },
+    "ReverseEffect": {
+     "type": "bool",
+     "default": false,
+     "description": "Run the effect in reverse"
+    },
+    "ReverseRotation": {
+     "type": "bool",
+     "default": false,
+     "description": "Rotate the other way"
+    }
+   }
+  },
+  "rotateTransition": {
+   "author": "haiyoucuv",
+   "license": "MIT",
+   "description": "The images spin around the center while crossfading",
+   "params": {}
+  },
+  "scale-in": {
+   "author": "haiyoucuv",
+   "license": "MIT",
+   "description": "The incoming image scales in from the center while fading in",
+   "params": {}
+  },
+  "SimpleFlip": {
+   "author": "nwoeanhinnogaehr",
+   "license": "MIT",
+   "description": "The outgoing image flips around the vertical axis into the incoming one",
+   "params": {}
+  },
+  "SimpleZoom": {
+   "author": "0gust1",
+   "license": "MIT",
+   "description": "Zooms into the outgoing image, then fades to the incoming one",
+   "params": {
+    "zoom_quickness": {
+     "type": "float",
+     "default": 0.8,
+     "min": 0.2,
+     "max": 1,
+     "description": "Part of the transition spent zooming"
+    }
+   }
+  },
+  "SimpleZoomOut": {
+   "author": "Tianshuo",
+   "license": "MIT",
+   "description": "The incoming image zooms out into place while fading in",
+   "params": {
+    "zoom_quickness": {
+     "type": "float",
+     "default": 0.8,
+     "min": 0.2,
+     "max": 1,
+     "description": "Part of the transition spent zooming"
+    },
+    "fade": {
+     "type": "bool",
+     "default": true,
+     "description": "Fade instead of cutting to the incoming image"
+    }
+   }
+  },
+  "Slides": {
+   "author": "Mark Craig",
+   "license": "MIT",
+   "description": "The outgoing image slides out, or the incoming one slides in, toward an edge, a corner or the center",
+   "params": {
+    "type": {
+     "type": "int",
+     "default": 0
+    },
+    "In": {
+     "type": "bool",
+     "default": false,
+     "description": "Slide the incoming image in instead of the outgoing one out"
+    }
+   }
+  },
+  "splitSlideInHorizontal": {
+   "author": "OllyOllyOlly",
+   "license": "MIT",
+   "description": "The incoming image slides in as two halves moving horizontally in opposite directions",
+   "params": {
+    "reverse": {
+     "type": "bool",
+     "default": false,
+     "description": "Swap the directions of the halves"
+    }
+   }
+  },
+  "splitSlideInOutHorizontal": {
+   "author": "OllyOllyOlly",
+   "license": "MIT",
+   "description": "The halves of both images slide horizontally in opposite directions, out and in at once",
+   "params": {
+    "reverse": {
+     "type": "bool",
+     "default": false,
+     "description": "Swap the directions of the halves"
+    }
+   }
+  },
+  "splitSlideInOutVertical": {
+   "author": "OllyOllyOlly",
+   "license": "MIT",
+   "description": "The halves of both images slide vertically in opposite directions, out and in at once",
+   "params": {
+    "reverse": {
+     "type": "bool",
+     "default": false,
+     "description": "Swap the directions of the halves"
+    }
+   }
+  },
+  "splitSlideInVertical": {
+   "author": "OllyOllyOlly",
+   "license": "MIT",
+   "description": "The incoming image slides in as two halves moving vertically in opposite directions",
+   "params": {
+    "reverse": {
+     "type": "bool",
+     "default": false,
+     "description": "Swap the directions of the halves"
+    }
+   }
+  },
+  "splitSlideOutHorizontal": {
+   "author": "OllyOllyOlly",
+   "license": "MIT",
+   "description": "The outgoing image slides out as two halves moving horizontally in opposite directions",
+   "params": {
+    "reverse": {
+     "type": "bool",
+     "default": false,
+     "description": "Swap the directions of the halves"
+    }
+   }
+  },
+  "splitSlideOutVertical": {
+   "author": "OllyOllyOlly",
+   "license": "MIT",
+   "description": "The outgoing image slides out as two halves moving vertically in opposite directions",
+   "params": {
+    "reverse": {
+     "type": "bool",
+     "default": false,
+     "description": "Swap the directions of the halves"
+    }
+   }
+  },
+  "squareswire": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "Squares grow along a diagonal sweep to reveal the incoming image",
+   "params": {
+    "squares": {
+     "type": "ivec2",
+     "default": [
+      10,
+      10
+     ],
+     "description": "Number of squares (columns, rows)"
+    },
+    "direction": {
+     "type": "vec2",
+     "default": [
+      1,
+      -0.5
+     ],
+     "description": "Direction of the sweep"
+    },
+    "smoothness": {
+     "type": "float",
+     "default": 1.6,
+     "description": "Softness of the sweep"
+    }
+   }
+  },
+  "squeeze": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "The outgoing image is squeezed into a line with color separation, revealing the incoming one",
+   "params": {
+    "colorSeparation": {
+     "type": "float",
+     "default": 0.04,
+     "description": "Amount of color separation"
+    }
+   }
+  },
+  "StarWipe": {
+   "author": "Ben Lucas",
+   "license": "MIT",
+   "description": "A growing star reveals the incoming image",
+   "params": {
+    "border_thickness": {
+     "type": "float",
+     "default": 0.01,
+     "description": "Thickness of the star's border"
+    },
+    "star_rotation": {
+     "type": "float",
+     "default": 0.75
+    },
+    "border_color": {
+     "type": "vec4",
+     "default": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "color": true,
+     "description": "Color of the star's border"
+    },
+    "star_center": {
+     "type": "vec2",
+     "default": [
+      0.5,
+      0.5
+     ],
+     "description": "Center of the star"
+    }
+   }
+  },
+  "static_wipe": {
+   "author": "Ben Lucas",
+   "license": "MIT",
+   "description": "A wipe from top to bottom with a band of TV static at its edge",
+   "params": {
+    "u_transitionUpToDown": {
+     "type": "bool",
+     "default": true,
+     "description": "Wipe from top to bottom; false wipes from bottom to top"
+    },
+    "u_max_static_span": {
+     "type": "float",
+     "default": 0.5,
+     "description": "Maximum height of the static band"
+    }
+   }
+  },
+  "StaticFade": {
+   "author": "Ben Lucas",
+   "license": "MIT",
+   "description": "Cuts to the incoming image halfway, hidden behind a burst of TV static",
+   "params": {
+    "n_noise_pixels": {
+     "type": "float",
+     "default": 200
+    },
+    "static_luminosity": {
+     "type": "float",
+     "default": 0.8
+    }
+   }
+  },
+  "StereoViewer": {
+   "author": "Ted Schundler",
+   "license": "BSD 2 Clause",
+   "description": "Both images shrink into rounded cards that swap, like a stereo viewer toy",
+   "params": {
+    "zoom": {
+     "type": "float",
+     "default": 0.88,
+     "min": 0.5,
+     "max": 1,
+     "description": "How much the images zoom out"
+    },
+    "corner_radius": {
+     "type": "float",
+     "default": 0.22
+    }
+   }
+  },
+  "StripDatamoshGlitch": {
+   "author": "bread",
+   "license": "MIT",
+   "description": "A datamosh glitch: torn strips, chroma shifts and scan noise drag the outgoing image into the incoming one",
+   "params": {
+    "strength": {
+     "type": "float",
+     "default": 1
+    },
+    "horizontalBars": {
+     "type": "float",
+     "default": 42
+    },
+    "verticalSlits": {
+     "type": "float",
+     "default": 18
+    },
+    "tear": {
+     "type": "float",
+     "default": 0.18
+    },
+    "chroma": {
+     "type": "float",
+     "default": 0.032
+    },
+    "residue": {
+     "type": "float",
+     "default": 0.62
+    },
+    "noiseAmount": {
+     "type": "float",
+     "default": 0.16
+    },
+    "scanAmount": {
+     "type": "float",
+     "default": 0.13
+    },
+    "flashAmount": {
+     "type": "float",
+     "default": 0.2
+    }
+   }
+  },
+  "swap": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "The two images swap places in 3D, with a floor reflection",
+   "params": {
+    "reflection": {
+     "type": "float",
+     "default": 0.4,
+     "description": "Strength of the reflection"
+    },
+    "perspective": {
+     "type": "float",
+     "default": 0.2,
+     "description": "Amount of perspective"
+    },
+    "depth": {
+     "type": "float",
+     "default": 3
+    }
+   }
+  },
+  "Swirl": {
+   "author": "Sergey Kosarevsky",
+   "license": "MIT",
+   "description": "Both images swirl around the center while crossfading",
+   "params": {}
+  },
+  "tangentMotionBlur": {
+   "author": "chenkai",
+   "license": "MIT",
+   "description": "The outgoing image is flung away along a curve with motion blur",
+   "params": {}
+  },
+  "TilesWave": {
+   "author": "numb3r23",
+   "license": "MIT",
+   "description": "The incoming image is revealed tile by tile in a diagonal wave",
+   "params": {
+    "tileCount": {
+     "type": "ivec2",
+     "default": [
+      8,
+      8
+     ],
+     "description": "Number of tiles (columns, rows)"
+    },
+    "flipX": {
+     "type": "bool",
+     "default": true
+    },
+    "flipY": {
+     "type": "bool",
+     "default": false
+    }
+   }
+  },
+  "TopBottom": {
+   "author": "zhmy",
+   "license": "MIT",
+   "description": "The outgoing image shrinks away upward while the incoming one slides in from the bottom",
+   "params": {}
+  },
+  "TVStatic": {
+   "author": "Brandon Anzaldi",
+   "license": "MIT",
+   "description": "Cuts to full-screen TV static, then to the incoming image",
+   "params": {
+    "offset": {
+     "type": "float",
+     "default": 0.05,
+     "description": "Part of the transition, at each end, that shows the images instead of static"
+    }
+   }
+  },
+  "undulatingBurnOut": {
+   "author": "pthrasher",
+   "license": "MIT",
+   "description": "A circle with a wavy edge burns out from the center to reveal the incoming image",
+   "params": {
+    "smoothness": {
+     "type": "float",
+     "default": 0.03,
+     "description": "Softness of the edge"
+    },
+    "center": {
+     "type": "vec2",
+     "default": [
+      0.5,
+      0.5
+     ],
+     "description": "Center of the circle"
+    },
+    "color": {
+     "type": "vec3",
+     "default": [
+      0,
+      0,
+      0
+     ],
+     "color": true,
+     "description": "Color of the burning edge"
+    }
+   }
+  },
+  "VerticalClose": {
+   "author": "martiniti",
+   "license": "MIT",
+   "description": "The incoming image closes in from the left and right edges toward the middle",
+   "params": {}
+  },
+  "VerticalOpen": {
+   "author": "martiniti",
+   "license": "MIT",
+   "description": "The incoming image opens from a line in the middle toward the left and right edges",
+   "params": {}
+  },
+  "WaterDrop": {
+   "author": "Paweł Płóciennik",
+   "license": "MIT",
+   "description": "Ripples spread from the center like a drop falling into water, crossfading to the incoming image",
+   "params": {
+    "amplitude": {
+     "type": "float",
+     "default": 30,
+     "description": "Frequency of the ripples"
+    },
+    "speed": {
+     "type": "float",
+     "default": 30,
+     "description": "Speed of the ripples"
+    }
+   }
+  },
+  "wind": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "A ragged left-to-right wipe, as if the image was blown away by the wind",
+   "params": {
+    "size": {
+     "type": "float",
+     "default": 0.2,
+     "min": 0,
+     "max": 1,
+     "description": "Width of the ragged edge"
+    },
+    "reversed": {
+     "type": "bool",
+     "default": false,
+     "description": "Wipe from right to left instead"
+    }
+   }
+  },
+  "windowblinds": {
+   "author": "Fabien Benetou",
+   "license": "MIT",
+   "description": "A crossfade through horizontal window blinds",
+   "params": {}
+  },
+  "windowslice": {
+   "author": "gre",
+   "license": "MIT",
+   "description": "The incoming image appears through vertical slices that widen",
+   "params": {
+    "count": {
+     "type": "float",
+     "default": 10,
+     "description": "Number of slices"
+    },
+    "smoothness": {
+     "type": "float",
+     "default": 0.5,
+     "description": "Softness of the slices' edges"
+    }
+   }
+  },
+  "wipeDown": {
+   "author": "Jake Nelson",
+   "license": "MIT",
+   "description": "A hard-edged wipe from top to bottom",
+   "params": {}
+  },
+  "wipeLeft": {
+   "author": "Jake Nelson",
+   "license": "MIT",
+   "description": "A hard-edged wipe from right to left",
+   "params": {}
+  },
+  "wipeRight": {
+   "author": "Jake Nelson",
+   "license": "MIT",
+   "description": "A hard-edged wipe from left to right",
+   "params": {}
+  },
+  "wipeUp": {
+   "author": "Jake Nelson",
+   "license": "MIT",
+   "description": "A hard-edged wipe from bottom to top",
+   "params": {}
+  },
+  "x_axis_translation": {
+   "author": "lizhongjian",
+   "license": "MIT",
+   "description": "The outgoing image slides to the right, uncovering a crossfade to the incoming one",
+   "params": {}
+  },
+  "ZoomInCircles": {
+   "author": "dycm8009",
+   "license": "MIT",
+   "description": "Concentric rings of the outgoing image zoom at different speeds before revealing the incoming one",
+   "params": {}
+  },
+  "zoomInOut": {
+   "author": "OllyOllyOlly",
+   "license": "MIT",
+   "description": "Zooms into the outgoing image until it blurs into a flat color, then out to the incoming one",
+   "params": {}
+  },
+  "ZoomLeftWipe": {
+   "author": "Handk",
+   "license": "MIT",
+   "description": "Zooms into the outgoing image, then the incoming one wipes in from right to left",
+   "params": {
+    "zoom_quickness": {
+     "type": "float",
+     "default": 0.8,
+     "description": "Part of the first half spent zooming (capped at 0.5)"
+    }
+   }
+  },
+  "ZoomRigthWipe": {
+   "author": "Handk",
+   "license": "MIT",
+   "description": "Zooms into the outgoing image, then the incoming one wipes in from left to right",
+   "params": {
+    "zoom_quickness": {
+     "type": "float",
+     "default": 0.8,
+     "description": "Part of the first half spent zooming (capped at 0.5)"
+    }
+   }
+  }
+ }
+}

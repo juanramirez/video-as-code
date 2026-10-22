@@ -32,7 +32,13 @@ build-backend = "setuptools.build_meta"
 where = ["src"]
 
 [tool.setuptools.package-data]
-video_as_code = ["lumas_data/*.pgm"]
+video_as_code = [
+    "lumas_data/*.pgm",
+    "gltransitions_data/*.c",
+    "gltransitions_data/*.json",
+    "gltransitions_data/LICENSE",
+    "gltransitions_data/glsl3/*.glsl",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

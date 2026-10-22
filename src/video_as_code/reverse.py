@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from . import lumas, meltpass, probe, titles, xmlgen
+from . import gltransitions, lumas, meltpass, probe, titles, xmlgen
 from .i18n import msg
 from .timecode import FrameRate, resolve_fps
 
@@ -889,6 +889,15 @@ class Importer:
             style = self._match_affine_style(props.get("rect", ""), end_frame - start_frame)
             if style is not None:
                 return {"type": "affine", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "style": style}
+
+        if service == gltransitions.SERVICE:
+            gl = gltransitions.from_properties(props)
+            if gl is not None:
+                name, params = gl
+                transition = {"type": "gl", "track_a": track_a, "track_b": track_b, "start": start_s, "end": end_s, "gl": name}
+                if params:
+                    transition["gl_params"] = params
+                return transition
 
         # any other (a luma map or affine motion of someone else's
         # included): as `melt/<service>`, if melt has it

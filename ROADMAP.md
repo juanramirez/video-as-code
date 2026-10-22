@@ -1284,3 +1284,19 @@ whole video can be built from a fresh checkout anywhere.
   installed melt has them and takes their properties, instead of
   `x_kdenlive_raw` (`tests/test_meltpass.py`,
   `tests/test_melt_validation.py::test_melt_filter_and_transition_render`).
+- **`transition: gl`** — **implemented** (2026-10-22): gl-transitions'
+  125 GLSL transitions (npm 1.76.1, GLSL ES 3.00 form; MIT, two BSD),
+  bundled with their parameters' types, defaults and ranges
+  (`gltransitions.py`). MLT runs no GLSL of its own, so a frei0r
+  "mixer2" plugin of this project's (`gltransition.c`, EGL + GLES 3, no
+  window; Mesa's surfaceless platform, else an EGL device, else the
+  default display) renders them in melt's pass, built by `video-as-code
+  install-gl-transitions` and put first on FREI0R_PATH by
+  `probe.melt_env`. Chosen over pre-rendering each overlap (seams, a
+  re-encode, not a transition in kdenlive) and over an MLT module
+  (tied to MLT's version). Found along the way: MLT reads a frei0r
+  string parameter as an animation, so the uniforms are passed as
+  `name:v,v name:v` - as `name=v;...` they were keyframes and never
+  arrived (`tests/test_gltransitions.py` renders a vec3 one); and a
+  render with 4 threads (`real_time=-4`) came out identical to one
+  with 1.
