@@ -147,8 +147,7 @@ def _parts_unsupported(yaml_path: Path, args: argparse.Namespace) -> bool:
     go into its parts yet - after saying so."""
     if not parts.has_parts(yaml_path):
         return False
-    for option, wanted in (("--proxy", getattr(args, "proxy", None)),
-                           ("--split", getattr(args, "split", False))):
+    for option, wanted in (("--split", getattr(args, "split", False)),):
         if wanted:
             print(msg("cli.parts_unsupported", option=option), file=sys.stderr)
             return True

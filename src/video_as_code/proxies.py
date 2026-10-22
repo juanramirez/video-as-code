@@ -137,6 +137,21 @@ def apply(
     ranges they use (see the module docstring). A copy that can't be made
     is appended to `errors` (and that video keeps its original)."""
     report = on_progress or (lambda text: None)
+    # a project in several files (parts.py): each part's own, in its own
+    # folder, and the part placed by its new version
+    nested = {
+        id(clip): replace(clip, sequence=apply(clip.sequence, size, errors, on_progress))
+        for clip in project.bin_clips if clip.sequence is not None
+    }
+    if nested:
+        project = replace(
+            project,
+            bin_clips=[nested.get(id(c), c) for c in project.bin_clips],
+            tracks=[
+                replace(t, placements=[replace(p, bin_clip=nested.get(id(p.bin_clip), p.bin_clip)) for p in t.placements])
+                for t in project.tracks
+            ],
+        )
     fps = project.fps.fps
     proxy_dir = project.source_dir / PROXY_DIR
     w, h = size
@@ -171,7 +186,8 @@ def apply(
         spec = DeriveSpec(path=path, trim=(start, end), scale=(w, h))
         # one name per copy: derive.generate deletes other generations of
         # the same name, which would otherwise be this video's other copies
-        name = f"{clip.id}~{start:g}"
+        # (a part's ids carry its path - parts.py: no folders in a file name)
+        name = f"{clip.id.replace('/', '_').replace(':', '_')}~{start:g}"
         output = derive.output_path(name, spec, path, f"path:{path.name}", proxy_dir)
         if not derive.is_current(output, path):
             report(msg("proxy.making", n=n, total=len(jobs), id=clip.id, start=start, end=end))

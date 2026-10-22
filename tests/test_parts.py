@@ -137,8 +137,6 @@ def test_transitions_between_parts(trip: Path):
 def test_cli_part_and_what_doesnt_go_into_parts_yet(trip: Path, capsys):
     assert cli.main(["build", str(trip), "--part", "intro"]) == 0
     assert (trip.parent / "trip-intro.kdenlive").exists()
-    assert cli.main(["render", str(trip), "--proxy", "160x90"]) == 1
-    assert "--proxy" in capsys.readouterr().err
     assert cli.main(["render", str(trip), "--split"]) == 1
 
 
@@ -177,3 +175,20 @@ def test_rendered_parts_dissolve_into_each_other(trip: Path, tmp_path: Path, mel
     assert 20 < g < 110 and 60 < b < 200, (r, g, b)  # halfway from blue to green
     assert rgb(4.5)[1] > 100 and rgb(4.5)[2] < 40  # green: the mountains' first clip
     assert rgb(5.5)[0] > 200 and rgb(5.5)[1] > 200  # yellow
+
+
+def test_proxy_goes_into_the_parts(trip: Path, assets_dir: Path):
+    """--proxy: a part's video read from a light copy, made in the part's
+    own folder."""
+    from video_as_code import proxies
+
+    peak = trip.parent / "mountains" / "peak.yaml"
+    peak.write_text(peak.read_text(encoding="utf-8").replace(
+        "        - {clip: y, start: 2, duration: 1}", f"        - {{clip: v, start: 2, duration: 1}}"
+    ).replace("bin:\n", f"bin:\n  - {{id: v, path: {assets_dir / 'clip.mp4'}}}\n", 1), encoding="utf-8")
+    errors: list[str] = []
+    proxied = proxies.apply(load_and_resolve(trip), (160, 120), errors)
+    assert errors == []
+    peak_seq = proxied.bin_clips[1].sequence.bin_clips[0].sequence
+    (copy,) = [p.bin_clip for t in peak_seq.tracks for p in t.placements if "clip" in p.bin_clip.id or p.bin_clip.id.endswith(":v")]
+    assert copy.path.parent == trip.parent / "mountains" / proxies.PROXY_DIR
