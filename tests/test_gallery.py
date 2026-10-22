@@ -64,3 +64,9 @@ def test_cli_gallery_without_opening(tmp_path: Path, melt, openshot_transitions,
 
 def test_cli_gallery_with_a_missing_file(tmp_path: Path, capsys):
     assert cli.main(["gallery", "--with", str(tmp_path / "nope.jpg"), "--no-open"]) == 1
+
+
+def test_links_to_every_section():
+    page = gallery._page([], {}, [], [Path(__file__), Path(__file__)], Path(__file__).parent)
+    for section in gallery.SECTIONS:
+        assert f'<a href="#{section}">' in page and f'<section id="{section}"' in page

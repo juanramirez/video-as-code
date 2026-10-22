@@ -442,6 +442,7 @@ gives, and one that no longer renders shows its error instead. They
 play over photos of Ubuntu's own wallpapers when they're installed
 (`/usr/share/backgrounds`, read there, not bundled), else over generated
 pictures; `--with photo.jpg` (or a video) puts your own under them.
+Links at the top jump to each section.
 
 The first run renders ~40 previews and makes the wipe shapes'
 thumbnails (a minute or two); everything is cached in

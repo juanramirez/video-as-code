@@ -480,11 +480,13 @@ def _page(
             if section == "gl" and not items:
                 hint = msg("gallery.hint_gl_not_installed")
         sections.append(
-            f'<section data-section="{section}"{extra}><h2>{html.escape(msg(f"gallery.section_{section}"))}</h2>'
+            f'<section id="{section}" data-section="{section}"{extra}><h2>{html.escape(msg(f"gallery.section_{section}"))}</h2>'
             f'<p>{html.escape(hint)}</p><div class="grid">{cards}</div></section>'
         )
+    nav = "".join(f'<a href="#{section}">{html.escape(msg(f"gallery.section_{section}"))}</a>' for section in SECTIONS)
     return (
         _PAGE.replace("{lang}", html.escape(msg("gallery.lang")))
+        .replace("{nav}", nav)
         .replace("{title}", html.escape(msg("gallery.title")))
         .replace("{intro}", html.escape(msg("gallery.intro")))
         .replace("{filter}", html.escape(msg("gallery.filter")))
@@ -511,6 +513,11 @@ body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--f
 header, section { max-width: 1200px; margin: 0 auto; }
 header { position: sticky; top: 0; z-index: 1; background: var(--bg); padding-bottom: 12px; }
 h1 { font-size: 20px; margin: 0 0 6px; }
+nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+nav a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+        color: var(--fg); text-decoration: none; font-size: 13px; }
+nav a:hover { border-color: var(--muted); }
+section { scroll-margin-top: 170px; }
 h2 { font-size: 16px; margin: 32px 0 4px; }
 p { margin: 0 0 12px; color: var(--muted); }
 input { width: 100%; max-width: 320px; padding: 6px 10px; font: inherit; border: 1px solid var(--line);
@@ -534,6 +541,7 @@ figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 <header>
 <h1>{title}</h1>
 <p>{intro}</p>
+<nav>{nav}</nav>
 <input type="search" placeholder="{filter}" aria-label="{filter}">
 </header>
 {sections}
