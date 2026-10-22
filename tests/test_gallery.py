@@ -220,6 +220,29 @@ def test_public_samples_without_the_photos():
     assert "/usr/share/backgrounds" not in recipes and "mandelbrot" in recipes
 
 
+def test_a_render_that_hangs_is_killed_with_what_it_started(tmp_path: Path):
+    """A timed-out render takes its melt with it (it once didn't: a melt
+    that hung went on for hours)."""
+    import subprocess
+    import time
+
+    pid_file = tmp_path / "child.pid"
+    with pytest.raises(subprocess.TimeoutExpired):
+        gallery._run(["sh", "-c", f"sleep 60 & echo $! > {pid_file}; wait"], tmp_path, 5)  # (time to start, even on a busy machine)
+    child = int(pid_file.read_text())
+
+    def alive() -> bool:
+        try:
+            return Path(f"/proc/{child}/stat").read_text().split()[2] != "Z"  # (a zombie is dead)
+        except (FileNotFoundError, ProcessLookupError):
+            return False
+
+    deadline = time.monotonic() + 3  # (a SIGKILL lands soon, not at once)
+    while alive() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not alive()
+
+
 # --- part of the docs (docs.py): each card linked to its key ------------------
 
 def test_a_card_knows_its_key():

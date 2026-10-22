@@ -27,8 +27,10 @@ import functools
 import hashlib
 import html
 import json
+import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -805,6 +807,25 @@ def _preview_key(entry: Entry, samples: dict[str, Path], base: str) -> str:
 _RENDER_TIMEOUT_S = 180  # (a filter of melt's may hang on a still)
 
 
+def _run(cmd: list[str], cwd: Path, timeout: float) -> subprocess.CompletedProcess:
+    """`cmd`, its output captured; on a timeout, it and everything it
+    started killed - a render's melt, not only the render (left alone, a
+    hanging melt went on for hours) - and TimeoutExpired raised."""
+    with subprocess.Popen(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                          errors="replace",  # (a filter of melt's may print bytes that aren't UTF-8)
+                          start_new_session=True) as proc:  # (its own process group: killed whole)
+        try:
+            out, err = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            proc.communicate()
+            raise
+    return subprocess.CompletedProcess(cmd, proc.returncode, out, err)
+
+
 def _render(entry: Entry, samples: dict[str, Path], work: Path, output: Path) -> Optional[str]:
     """Renders `entry` to `output`; the error, if it didn't."""
     project = entry.project
@@ -818,13 +839,10 @@ def _render(entry: Entry, samples: dict[str, Path], work: Path, output: Path) ->
     yaml_path.write_text(project, encoding="utf-8")
     partial = output.with_name(output.stem + ".partial.mp4")
     try:
-        result = subprocess.run(
+        result = _run(
             [sys.executable, "-m", "video_as_code.cli", "render", str(yaml_path), "-o", str(partial), "--no-prune"],
-            capture_output=True,
-            text=True,
-            errors="replace",  # (a filter of melt's may print bytes that aren't UTF-8)
-            timeout=_RENDER_TIMEOUT_S,
-            cwd=folder,  # (some write files where they run: vidstab its .trf)
+            folder,  # (some write files where they run: vidstab its .trf)
+            _RENDER_TIMEOUT_S,
         )
     except subprocess.TimeoutExpired:
         partial.unlink(missing_ok=True)
