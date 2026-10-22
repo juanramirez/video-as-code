@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import yaml
 
@@ -59,10 +59,19 @@ RESERVED_TOP_LEVEL_KEYS = {
 }
 
 
+# A part of a project in several files has no `project:` of its own: how to
+# read each one registered (parts.register) - the file again, with the
+# presets in force there and the main file's `project:` - so that anything
+# that loads a part file (fetch, its interactive fixes, autoprune) can.
+PART_LOADERS: dict[Path, Callable[[], dict]] = {}
+
+
 def load_yaml(path: str | Path, data: Optional[dict] = None) -> ProjectDoc:
     """`data`: the file's contents already read (a part of a project, with
     the main file's `project:` put in - parts.py); else it's read here."""
     path = Path(path).resolve()
+    if data is None and path in PART_LOADERS:
+        data = PART_LOADERS[path]()
     if data is None:
         if not path.exists():
             raise ValidationErrors([msg("validation.yaml_missing", path=path)])

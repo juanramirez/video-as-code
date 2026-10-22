@@ -100,6 +100,42 @@ def resolve(path: str | Path, part: Optional[str] = None) -> ResolvedProject:
     return found
 
 
+def register(path: str | Path) -> list[Path]:
+    """The part files of a main file with `parts:` that have clips of their
+    own (outermost first, in order), each registered so that
+    schema.load_yaml reads it as the project it is part of."""
+    from . import schema
+
+    main = Path(path).resolve()
+    data = _read(main)
+    project_raw = data.get("project") if isinstance(data.get("project"), dict) else {}
+    leaves: list[Path] = []
+
+    def walk(file: Path, data: dict, inherited: Optional[dict], chain: tuple[Path, ...]) -> None:
+        errors: list[str] = []
+        expanded, presets = presets_mod.expand_with(data, file, errors, inherited)
+        if errors:
+            raise ValidationErrors(errors)
+        if "parts" not in expanded:
+            def load(file: Path = file, inherited: Optional[dict] = inherited) -> dict:
+                again, _ = presets_mod.expand_with(_read(file), file, [], inherited)
+                return {**again, "project": project_raw}
+            schema.PART_LOADERS[file] = load
+            leaves.append(file)
+            return
+        for entry in expanded.get("parts") or []:
+            name = entry if isinstance(entry, str) else entry.get("file") if isinstance(entry, dict) else None
+            if not isinstance(name, str):
+                continue
+            child = (Path(name) if Path(name).is_absolute() else file.parent / name).resolve()
+            if child in chain:
+                raise ValidationErrors([msg("validation.parts_cycle", chain=" -> ".join(p.name for p in (*chain, child)))])
+            walk(child, _read(child), presets, (*chain, child))
+
+    walk(main, data, None, (main,))
+    return leaves
+
+
 def deterministic_project_id(project_raw: dict) -> str:
     return str(project_raw.get("id", "project"))
 

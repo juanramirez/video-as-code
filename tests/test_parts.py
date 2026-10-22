@@ -139,7 +139,22 @@ def test_cli_part_and_what_doesnt_go_into_parts_yet(trip: Path, capsys):
     assert (trip.parent / "trip-intro.kdenlive").exists()
     assert cli.main(["render", str(trip), "--proxy", "160x90"]) == 1
     assert "--proxy" in capsys.readouterr().err
-    assert cli.main(["fetch", str(trip)]) == 1
+    assert cli.main(["render", str(trip), "--split"]) == 1
+
+
+def test_a_part_file_reads_as_the_project_it_is_part_of(trip: Path, capsys):
+    """parts.register: load_yaml of a part file (as fetch, its fixes and
+    autoprune do) gets the main file's project: and the presets in force."""
+    from video_as_code import parts
+    from video_as_code.schema import PART_LOADERS, load_yaml
+
+    leaves = parts.register(trip)
+    assert [p.name for p in leaves] == ["intro.yaml", "peak.yaml"]
+    doc = load_yaml(trip.parent / "intro.yaml")
+    assert doc.project.id == "trip" and doc.scenes_raw[0]["transition"] == "dissolve"  # (the main file's `slow`)
+    assert cli.main(["fetch", str(trip)]) == 0  # (nothing to download: each part, in turn)
+    assert "intro.yaml" in capsys.readouterr().err
+    PART_LOADERS.clear()
 
 
 def test_rendered_parts_dissolve_into_each_other(trip: Path, tmp_path: Path, melt):

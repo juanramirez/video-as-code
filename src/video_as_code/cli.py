@@ -30,6 +30,27 @@ def _dump_yaml(data: dict) -> str:
 def _run_fetch(
     yaml_path: Path, verify: bool = False, interactive: Optional[bool] = None, prune: bool = False
 ) -> bool:
+    """_run_fetch_one for a project's file - or, for one in several files
+    (parts.py), for each of its parts, in its own folder (its own lock,
+    its own sources): a fix asked for in the terminal is written into the
+    part's file, where the clip is."""
+    if parts.has_parts(yaml_path):
+        try:
+            leaves = parts.register(yaml_path)
+        except KdenliveAsCodeError as exc:
+            print(str(exc), file=sys.stderr)
+            return False
+        ok = True
+        for leaf in leaves:
+            print(msg("cli.fetch_part", part=leaf), file=sys.stderr)
+            ok = _run_fetch_one(leaf, verify, interactive, prune) and ok
+        return ok
+    return _run_fetch_one(yaml_path, verify, interactive, prune)
+
+
+def _run_fetch_one(
+    yaml_path: Path, verify: bool = False, interactive: Optional[bool] = None, prune: bool = False
+) -> bool:
     """Shared by `fetch` and `build`/`render --fetch`; False (after
     printing why) if anything couldn't be downloaded.
 
@@ -126,7 +147,7 @@ def _parts_unsupported(yaml_path: Path, args: argparse.Namespace) -> bool:
     go into its parts yet - after saying so."""
     if not parts.has_parts(yaml_path):
         return False
-    for option, wanted in (("--fetch", getattr(args, "fetch", False)), ("--proxy", getattr(args, "proxy", None)),
+    for option, wanted in (("--proxy", getattr(args, "proxy", None)),
                            ("--split", getattr(args, "split", False))):
         if wanted:
             print(msg("cli.parts_unsupported", option=option), file=sys.stderr)
@@ -145,9 +166,6 @@ def _output(yaml_path: Path, args: argparse.Namespace, suffix: str) -> Path:
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
-    if parts.has_parts(Path(args.project)):
-        print(msg("cli.parts_unsupported", option="fetch"), file=sys.stderr)
-        return 1
     return 0 if _run_fetch(Path(args.project), verify=args.verify, prune=args.prune) else 1
 
 
@@ -195,17 +213,27 @@ def _record_use(yaml_path: Path, *projects) -> None:
         if project is not None:
             paths |= autoprune.used_paths(project)
     autoprune.record_use(yaml_path.parent, paths)
+    if parts.has_parts(yaml_path):  # (each part's folder keeps its own record)
+        try:
+            for leaf in parts.register(yaml_path):
+                autoprune.record_use(leaf.parent, paths)
+        except KdenliveAsCodeError:
+            pass
 
 
 def _autoprune(yaml_path: Path, needed_by) -> None:
     """Before a render: deletes old files the tool can bring back (see
     autoprune.py), never one this render reads."""
     try:
-        doc = load_yaml(yaml_path)
+        files = parts.register(yaml_path) if parts.has_parts(yaml_path) else [yaml_path]
+        docs = [load_yaml(f) for f in files]  # (a part's folder has its own sources)
     except KdenliveAsCodeError:
         return
-    days = doc.project.prune_after_days
-    deleted, freed = autoprune.prune(doc, autoprune.used_paths(needed_by), days)
+    deleted, freed = [], 0
+    for doc in docs:
+        days = doc.project.prune_after_days
+        d, f = autoprune.prune(doc, autoprune.used_paths(needed_by), days)
+        deleted, freed = deleted + d, freed + f
     if deleted:
         print(msg("cli.autopruned", n=len(deleted), days=days, mb=round(freed / 1e6)), file=sys.stderr)
 
@@ -287,8 +315,10 @@ def cmd_render(args: argparse.Namespace) -> int:
     if resolved is None:
         return 1
     _record_use(yaml_path, original, resolved)
-    if not args.no_prune:
-        # (with --proxy the originals are kept too: recorded as used above)
+    if not args.no_prune and not args.part:
+        # (with --proxy the originals are kept too: recorded as used above;
+        # with --part, the other parts' files aren't read by this render -
+        # not a sign that nothing uses them)
         _autoprune(yaml_path, resolved)
 
     # C locale, or decimals like `gain: 2.5`/`speed: 1.08` get truncated

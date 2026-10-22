@@ -427,6 +427,10 @@ scenes:
   alone: its file's path from the main file's folder, without `.yaml`
   (`--part mountains/all`); the output is named after both
   (`trip-mountains-all.mp4`).
-- Not yet: `fetch`, `--fetch`, `--proxy` and `--split` on a project with
-  parts say so and stop; old files aren't pruned before its renders; and
-  `import` keeps nested sequences in `x_kdenlive_raw`.
+- `fetch` (and `--fetch`) goes through the parts one by one, each in its
+  own folder - its own `sources.lock.yaml`, its own downloads - and a fix
+  asked for in the terminal is written into the part's file, where the
+  clip is. Old files are pruned before a render in each part's folder;
+  not with `--part`, whose render doesn't read the other parts' files.
+- Not yet: `--proxy` and `--split` on a project with parts say so and
+  stop; `import` keeps nested sequences in `x_kdenlive_raw`.
