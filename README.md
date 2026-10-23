@@ -1,6 +1,4 @@
-<img src="https://www.juan-ramirez.es/images/projects/video-as-code/logo.svg" alt="video-as-code logo" width="120"/>
-
-# video-as-code
+# <img src="https://www.juan-ramirez.es/images/projects/video-as-code/logo.svg" alt="" width="48" height="48" align="center"/> video-as-code
 
 Programmatic generator for [kdenlive](https://kdenlive.org) projects from a
 declarative YAML description, meant for versioning videos with a VCS (like

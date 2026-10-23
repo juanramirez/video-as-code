@@ -65,7 +65,7 @@ def _markdown(text: str) -> str:
 
 def _title(text: str, fallback: str) -> str:
     found = re.search(r"(?m)^# (.+)$", text)
-    return re.sub(r"[`*]", "", found.group(1)).strip() if found else fallback
+    return re.sub(r"<[^>]+>|[`*]", "", found.group(1)).strip() if found else fallback
 
 
 def _relink(body: str) -> str:
