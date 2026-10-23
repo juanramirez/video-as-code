@@ -1,4 +1,4 @@
-# <img src="docs/logo.svg" alt="" width="48" height="48" align="center"/> video-as-code
+# <img src="docs/logo.svg" alt="" width="48" height="48" align="absmiddle"/> video-as-code
 
 Programmatic generator for [kdenlive](https://kdenlive.org) projects from a
 declarative YAML description, meant for versioning videos with a VCS (like
