@@ -63,9 +63,21 @@ def _markdown(text: str) -> str:
     return markdown.markdown(text, extensions=["tables", "fenced_code", "toc"], output_format="html")
 
 
+def _copy_images(body: str, md_dir: Path, root: Path) -> None:
+    """Local images a page shows (the README's logo), next to the pages at
+    the same relative path: every page is written flat into `root`."""
+    for src in re.findall(r'<img[^>]*\ssrc="([^"]+)"', body):
+        if re.match(r"[a-z][a-z0-9+.-]*:|/|#", src, re.I) or ".." in Path(src).parts:
+            continue
+        found = md_dir / src
+        if found.is_file():
+            (root / src).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(found, root / src)
+
+
 def _title(text: str, fallback: str) -> str:
     found = re.search(r"(?m)^# (.+)$", text)
-    return re.sub(r"[`*]", "", found.group(1)).strip() if found else fallback
+    return re.sub(r"<[^>]+>|[`*]", "", found.group(1)).strip() if found else fallback
 
 
 def _relink(body: str) -> str:
@@ -137,6 +149,7 @@ def build(
             continue
         text = path.read_text(encoding="utf-8")
         body = _relink(_markdown(text))
+        _copy_images(body, path.parent, root)
         if page == REFERENCE:
             body, keys = key_anchors(body)
         bodies[page] = (_title(text, page), body)
