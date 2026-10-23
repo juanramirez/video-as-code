@@ -33,7 +33,7 @@ def test_pages_and_gallery_linked_both_ways(tmp_path: Path, monkeypatch):
         "# Project YAML reference\n\n| Key | Meaning |\n|---|---|\n| `luma` | A shape. |\n| `notes` | Text. |\n", encoding="utf-8")
     seen = {}
 
-    def fake_gallery(own, cache_root, on_progress, doc_links, docs_home, public, footer=""):
+    def fake_gallery(own, cache_root, on_progress, doc_links, docs_home, public, footer="", site_nav=""):
         seen.update(doc_links=doc_links, docs_home=docs_home, public=public)
         root = cache_root / gallery.GALLERY_DIR
         root.mkdir(parents=True)
@@ -75,7 +75,7 @@ def test_repository_and_license_on_every_page(tmp_path: Path, monkeypatch):
         '[project.urls]\nRepository = "https://github.com/someone/video-as-code"\n', encoding="utf-8")
     seen: dict = {}
 
-    def fake(own, cache_root, on_progress, doc_links, docs_home, public, footer=""):
+    def fake(own, cache_root, on_progress, doc_links, docs_home, public, footer="", site_nav=""):
         seen["footer"] = footer
         root = cache_root / gallery.GALLERY_DIR
         root.mkdir(parents=True)
@@ -91,6 +91,31 @@ def test_repository_and_license_on_every_page(tmp_path: Path, monkeypatch):
     assert seen["footer"] and "LICENSE" in seen["footer"]  # (the gallery gets the same line)
 
 
+def test_the_gallery_gets_the_docs_bar(tmp_path: Path, monkeypatch):
+    source = tmp_path / "src"
+    (source / "docs").mkdir(parents=True)
+    (source / "README.md").write_text("# video-as-code\n", encoding="utf-8")
+    (source / "docs" / "project-yaml.md").write_text("# Project YAML reference\n", encoding="utf-8")
+    seen: dict = {}
+
+    def fake(own, cache_root, on_progress, doc_links, docs_home, public, footer="", site_nav=""):
+        seen["site_nav"] = site_nav
+        root = cache_root / gallery.GALLERY_DIR
+        root.mkdir(parents=True)
+        (root / gallery.DOC_CARDS).write_text("{}", encoding="utf-8")
+        (root / "index.html").write_text("", encoding="utf-8")
+        return root / "index.html"
+
+    monkeypatch.setattr(gallery, "build", fake)
+    page = docs.build(cache_root=tmp_path / "cache", source=source).read_text(encoding="utf-8")
+    assert '<nav class="site"><a href="index.html" aria-current=page>video-as-code</a>' in page
+    assert '<a href="../gallery/index.html">' in page
+    bar = seen["site_nav"]
+    assert '<a href="../docs/index.html">video-as-code</a>' in bar
+    assert '<a href="../docs/project-yaml.html">Project YAML reference</a>' in bar
+    assert '<a href="index.html" aria-current=page>' in bar  # (the gallery itself)
+
+
 def test_without_a_pyproject_no_links(tmp_path: Path):
     assert docs._project(tmp_path) == (None, None) and docs._about(None, None) == ""
 
@@ -101,7 +126,7 @@ def test_without_a_checkout(tmp_path: Path):
 
 
 def _fake_gallery(monkeypatch, seen: dict):
-    def build(own, cache_root, on_progress, doc_links, docs_home, public, footer=""):
+    def build(own, cache_root, on_progress, doc_links, docs_home, public, footer="", site_nav=""):
         seen.update(public=public, cache_root=cache_root)
         root = cache_root / gallery.GALLERY_DIR
         (root / "files").mkdir(parents=True, exist_ok=True)

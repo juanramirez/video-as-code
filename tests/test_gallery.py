@@ -269,3 +269,15 @@ def test_the_gallery_links_each_card_to_its_key(tmp_path: Path):
     assert '<figure id="card-clip-fade"' in page
     assert 'class="to-doc" href="../docs/project-yaml.html#key-fade_in"' in page
     assert 'class="docs" href="../docs/index.html"' in page
+
+
+def test_inside_the_docs_the_gallery_wears_their_bar(tmp_path: Path):
+    entry = gallery.Entry("clip", "fade", "fade_in: 1", "", render=False)
+    pictures = [tmp_path / "a.png", tmp_path / "b.png"]
+    for path in pictures:
+        path.write_bytes(b"png")
+    bar = '<nav class="site"><a href="../docs/index.html">video-as-code</a></nav>'
+    page = gallery._page([(entry, None)], {}, [], pictures, tmp_path, {}, {}, "../docs/index.html", "", bar)
+    assert bar in page and 'class="hide-unchanged in-site"' in page
+    assert 'class="docs"' not in page  # (the bar links the docs already)
+    assert "@view-transition" in page and '<nav class="sections">' in page

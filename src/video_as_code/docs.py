@@ -35,7 +35,7 @@ import shutil
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import gallery
+from . import gallery, site
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .mltdata import default_cache_root
@@ -179,16 +179,18 @@ def build(
     doc_links = {key: f"../{DOCS_DIR}/{REFERENCE}#key-{key}" for key in keys}
     repo, license = _project(source)
     about = _about(repo, license)
+    gallery_path = f"{gallery.GALLERY_DIR}/index.html"
+    pages = [(f"{DOCS_DIR}/{page}", title) for page, (title, _) in bodies.items()] + [(gallery_path, msg("docs.gallery"))]
     gallery_page = gallery.build(own=own, cache_root=cache_root, on_progress=on_progress,
                                  doc_links=doc_links, docs_home=f"../{DOCS_DIR}/index.html", public=public,
-                                 footer=about)
+                                 footer=about, site_nav=site.nav(pages, gallery_path, gallery.GALLERY_DIR, repo))
     cards = json.loads((gallery_page.parent / gallery.DOC_CARDS).read_text(encoding="utf-8"))
-    nav = [(page, title) for page, (title, _) in bodies.items()]
     note = msg("docs.public_note", date=datetime.date.today().isoformat(), melt=gallery._melt_version()) if public else ""
     for page, (title, body) in bodies.items():
         if page == REFERENCE:
             body = _to_gallery(body, cards)
-        (root / page).write_text(_page(title, body, page, nav, note, repo, about), encoding="utf-8")
+        bar = site.nav(pages, f"{DOCS_DIR}/{page}", DOCS_DIR, repo)
+        (root / page).write_text(_page(title, body, bar, note, about), encoding="utf-8")
     return root / "index.html"
 
 
@@ -228,14 +230,7 @@ def publish(
     return out / "index.html"
 
 
-def _page(title: str, body: str, current: str, nav: list[tuple[str, str]], note: str = "",
-          repo: Optional[str] = None, about: str = "") -> str:
-    links = "".join(
-        f'<a href="{page}"{" aria-current=page" if page == current else ""}>{html.escape(name)}</a>' for page, name in nav
-    )
-    links += f'<a href="../{gallery.GALLERY_DIR}/index.html">{html.escape(msg("docs.gallery"))}</a>'
-    if repo:
-        links += f'<a class="repo" href="{html.escape(repo)}">{html.escape(msg("docs.repository"))}</a>'
+def _page(title: str, body: str, bar: str, note: str = "", about: str = "") -> str:
     footer = "<br>".join(([about] if about else []) + ([html.escape(note)] if note else []))
     return f"""<!doctype html>
 <html lang="{msg("gallery.lang")}">
@@ -243,10 +238,10 @@ def _page(title: str, body: str, current: str, nav: list[tuple[str, str]], note:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)} - video-as-code</title>
-<style>{_CSS}</style>
+<style>{site.SITE_CSS}{_CSS}</style>
 </head>
 <body>
-<nav>{links}</nav>
+{bar}
 <main>
 {body}
 </main>
@@ -258,14 +253,9 @@ def _page(title: str, body: str, current: str, nav: list[tuple[str, str]], note:
 
 
 _CSS = """
-:root { color-scheme: light dark; --bg: #fdfdfc; --fg: #1d1f21; --muted: #6b7075; --line: #e2e4e6; --code: #f2f3f4; --accent: #2a6fdb; }
-@media (prefers-color-scheme: dark) { :root { --bg: #16181a; --fg: #e4e6e8; --muted: #9aa0a6; --line: #2c3034; --code: #212427; --accent: #7aa7f0; } }
+:root { --accent: #2a6fdb; }
+@media (prefers-color-scheme: dark) { :root { --accent: #7aa7f0; } }
 body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, sans-serif; }
-nav { position: sticky; top: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 16px; background: var(--bg);
-      border-bottom: 1px solid var(--line); z-index: 1; }
-nav a { color: var(--muted); text-decoration: none; }
-nav a[aria-current], nav a:hover { color: var(--fg); }
-nav a.repo { margin-left: auto; }
 footer a { color: inherit; }
 main { max-width: 960px; margin: 0 auto; padding: 8px 16px 64px; }
 a { color: var(--accent); }
