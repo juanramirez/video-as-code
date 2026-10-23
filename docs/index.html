@@ -28,12 +28,14 @@ footer { max-width: 960px; margin: 0 auto; padding: 16px; color: var(--muted); f
 <body>
 <nav><a href="index.html" aria-current=page>video-as-code</a><a href="making-a-video.html">How to make a video</a><a href="project-yaml.html">Project YAML reference</a><a href="reconstructing.html">How to recover a YAML from an already-rendered video</a><a href="../gallery/index.html">Gallery</a></nav>
 <main>
-<h1 id="video-as-code">video-as-code</h1>
+<h1 id="video-as-code"><img src="docs/logo.svg" alt="" width="48" height="48" align="absmiddle"/> video-as-code</h1>
 <p>Programmatic generator for <a href="https://kdenlive.org">kdenlive</a> projects from a
 declarative YAML description, meant for versioning videos with a VCS (like
 Git): the <code>.yaml</code> is what you check in; the <code>.kdenlive</code> (XML/MLT) is
 regenerated deterministically with <code>video-as-code build</code> and doesn't need to live
 in the repo.</p>
+<p>These docs, with a gallery where each effect and transition plays, are
+also at <a href="https://video-as-code.juan-ramirez.es/">https://video-as-code.juan-ramirez.es/</a>.</p>
 <h2 id="install">Install</h2>
 <pre><code class="language-bash">pip install -e &quot;.[dev]&quot;
 </code></pre>
@@ -508,7 +510,7 @@ the whole gallery again - and made to be shared: the previews play over
 generated pictures, not the wallpapers' photos (each under its own
 licence); OpenShot's 412 wipe shapes (GPL-3.0) and your own LUTs are
 left out; <code>--with</code> isn't allowed. Each page says when and with which
-melt it was built. The folder must be new, empty (but for a <code>.git</code>) or one <code>--public</code>
+melt it was built. The folder must be new, empty (but for a <code>.git</code> or a <code>CNAME</code>) or one <code>--public</code>
 wrote before (its contents are then replaced).</p>
 <p>To serve it with GitHub Pages from a <code>gh-pages</code> branch (~55 MB of
 previews: kept off <code>master</code>, whose history doesn't grow with them),
@@ -521,6 +523,12 @@ cd ../video-as-code-pages &amp;&amp; git add -A &amp;&amp; git commit -m &quot;d
 <p>and once, in the repository's <em>Settings → Pages</em>: deploy from the
 <code>gh-pages</code> branch, its root. The docs are then at
 <code>https://&lt;user&gt;.github.io/video-as-code/</code>.</p>
+<p>On a domain of your own instead (or if <code>&lt;user&gt;.github.io</code> already
+redirects to one that isn't served by GitHub): point it at Pages with a
+DNS record <code>CNAME docs.example.org → &lt;user&gt;.github.io</code> and give it in
+<em>Settings → Pages → Custom domain</em>. GitHub writes it to a <code>CNAME</code> file
+in <code>gh-pages</code>; <code>--public</code> leaves that file alone too, so the domain
+survives each rebuild (<code>git pull</code> in the worktree first, to have it).</p>
 <h3 id="video-as-code-reconstruct-recovering-a-yaml-from-a-rendered-video"><code>video-as-code reconstruct</code>: recovering a YAML from a rendered video</h3>
 <pre><code class="language-bash">video-as-code reconstruct rendered.mp4 assets/ [-o output.yaml]
 </code></pre>
@@ -617,7 +625,7 @@ own licenses, run as they are, not bundled: melt/MLT (LGPL), kdenlive
 realesrgan-ncnn-vulkan (MIT; its models BSD-3-Clause), which <code>fetch</code>
 offers to download from its own releases.</p>
 </main>
-<footer>Built with video-as-code docs --public on 2026-10-22, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<footer>Built with video-as-code docs --public on 2026-10-23, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
 <script>
 // a link here to a row opens nothing more, but shows it: scrolled to, below the bar
 if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }
