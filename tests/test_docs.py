@@ -53,6 +53,19 @@ def test_pages_and_gallery_linked_both_ways(tmp_path: Path, monkeypatch):
     assert 'href="project-yaml.html"' in page.read_text(encoding="utf-8")  # (the nav, and the README's mention)
 
 
+def test_local_images_copied_next_to_the_pages(tmp_path: Path, monkeypatch):
+    source = tmp_path / "src"
+    (source / "docs").mkdir(parents=True)
+    (source / "docs" / "logo.svg").write_text("<svg/>", encoding="utf-8")
+    (source / "README.md").write_text(
+        '# <img src="docs/logo.svg" alt="" width="48"/> video-as-code\n\n'
+        '<img src="https://example.com/remote.png"/>\n', encoding="utf-8")
+    _fake_gallery(monkeypatch, {})
+    page = docs.build(cache_root=tmp_path / "cache", source=source)
+    assert (page.parent / "docs" / "logo.svg").read_text(encoding="utf-8") == "<svg/>"
+    assert "<title>video-as-code - video-as-code</title>" in page.read_text(encoding="utf-8")
+
+
 def test_without_a_checkout(tmp_path: Path):
     with pytest.raises(docs.KdenliveAsCodeError, match="README.md"):
         docs.build(cache_root=tmp_path, source=tmp_path / "nowhere")
