@@ -1,0 +1,1128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project YAML reference - video-as-code</title>
+<style>
+:root { color-scheme: light dark; --bg: #fdfdfc; --fg: #1d1f21; --muted: #6b7075; --line: #e2e4e6; --code: #f2f3f4; --accent: #2a6fdb; }
+@media (prefers-color-scheme: dark) { :root { --bg: #16181a; --fg: #e4e6e8; --muted: #9aa0a6; --line: #2c3034; --code: #212427; --accent: #7aa7f0; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, sans-serif; }
+nav { position: sticky; top: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 16px; background: var(--bg);
+      border-bottom: 1px solid var(--line); z-index: 1; }
+nav a { color: var(--muted); text-decoration: none; }
+nav a[aria-current], nav a:hover { color: var(--fg); }
+main { max-width: 960px; margin: 0 auto; padding: 8px 16px 64px; }
+a { color: var(--accent); }
+code { font: 0.9em ui-monospace, monospace; background: var(--code); padding: 1px 4px; border-radius: 4px; }
+pre { background: var(--code); padding: 12px; border-radius: 6px; overflow-x: auto; }
+pre code { padding: 0; background: none; }
+table { border-collapse: collapse; display: block; overflow-x: auto; margin: 12px 0; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; vertical-align: top; text-align: left; }
+tr:target { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+a.to-gallery { text-decoration: none; font-size: 0.8em; margin-left: 4px; }
+h1, h2, h3 { line-height: 1.25; }
+footer { max-width: 960px; margin: 0 auto; padding: 16px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<nav><a href="index.html">video-as-code</a><a href="making-a-video.html">How to make a video</a><a href="project-yaml.html" aria-current=page>Project YAML reference</a><a href="reconstructing.html">How to recover a YAML from an already-rendered video</a><a href="../gallery/index.html">Gallery</a></nav>
+<main>
+<h1 id="project-yaml-reference">Project YAML reference</h1>
+<p>Every key a project file accepts, what it means and its default. For a
+walk-through instead, see <a href="making-a-video.html"><code>docs/making-a-video.md</code></a>; for working files, see
+<code>examples/simple/</code> and <code>examples/scenes/</code>.</p>
+<p>Times are seconds (decimals allowed) unless said otherwise. Colours are
+<code>[r, g, b, a]</code>, 0-255. A key left out takes its default; an unknown key
+where only known ones make sense (the top level, <code>derive:</code>) is an error,
+so a typo doesn't go unnoticed there.</p>
+<pre><code class="language-yaml">project: {...}       # required: canvas, frame rate, where sources come from
+bin: [...]           # the files (and titles) the video uses
+timeline:
+  tracks: [...]      # low level: every clip placed by hand
+scenes: [...]        # high level: lists of clips with timing worked out
+guides: [...]        # timeline markers
+transitions: [...]   # wipe/affine transitions between two tracks
+presets: {...}       # named sets of keys, used with use: (below)
+presets_file: ...    # a file of presets shared by several projects
+parts: [...]         # instead of the rest: the project in several files (below)
+</code></pre>
+<p><code>timeline:</code> and <code>scenes:</code> can be mixed: scenes compile into extra tracks
+before anything else runs.</p>
+<p>Two more top-level keys are written by the tool itself and only kept, not
+interpreted: <code>x_kdenlive_raw</code> (what <code>import</code> couldn't map, carried back on
+<code>build</code>) and <code>x_reconstruct_unmatched</code> (the stretches <code>reconstruct</code>
+couldn't match, for a person to review).</p>
+<h2 id="project"><code>project:</code></h2>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-id">
+<td><code>id</code></td>
+<td><em>(required)</em></td>
+<td>Short identifier of the project.</td>
+</tr>
+<tr id="key-title">
+<td><code>title</code></td>
+<td><em>(required)</em></td>
+<td>Human-readable title.</td>
+</tr>
+<tr id="key-fps">
+<td><code>fps</code></td>
+<td><em>(required)</em></td>
+<td>Frame rate: <code>25</code>, <code>30</code>, <code>29.97</code>, <code>23.976</code>...</td>
+</tr>
+<tr id="key-width">
+<td><code>width</code>, <code>height</code></td>
+<td><em>(required)</em></td>
+<td>Canvas size in pixels.</td>
+</tr>
+<tr id="key-colorspace">
+<td><code>colorspace</code></td>
+<td><code>709</code></td>
+<td>Colour matrix of the output (<code>709</code> HD, <code>601</code> SD).</td>
+</tr>
+<tr id="key-default_image_duration">
+<td><code>default_image_duration</code></td>
+<td><code>4.0</code></td>
+<td>Length of a still image's producer. A still placed for longer than this is cut short at it: raise it if a still has to stay on screen longer.</td>
+</tr>
+<tr id="key-notes">
+<td><code>notes</code></td>
+<td>-</td>
+<td>Free text, kept in the generated project.</td>
+</tr>
+<tr id="key-sources">
+<td><code>sources</code></td>
+<td>-</td>
+<td>Where clips come from and how the downloaded files are kept (below).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="projectsources"><code>project.sources:</code></h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-album">
+<td><code>album</code></td>
+<td>-</td>
+<td>A Google Photos shared-album link (<code>https://photos.app.goo.gl/...</code>), or a map <code>{name, url}</code>: the album's <code>name</code> (for a tool that creates it, then writes its link as <code>url</code>) and its <code>url</code> once it exists. Needed for any <code>source:</code> clip; <code>fetch</code> needs the link. Keep it out of public repos: anyone with it can see the album. See README's <em><code>video-as-code fetch</code></em> section.</td>
+</tr>
+<tr id="key-reference">
+<td><code>reference</code></td>
+<td>-</td>
+<td>The video this project remakes, for a project that rebuilds an old edit: a link, a list of links (tried in order, as a clip's <code>url:</code>), or a map <code>{url, path}</code> - <code>path</code> being where to keep it (default <code>reference/reference.mp4</code>). <code>fetch</code> downloads it whole (from YouTube: video and sound, as an mp4) if it isn't there yet. Its size and sha256 are locked (<code>reference:</code> in <code>sources.lock.yaml</code>), and a download that isn't that file is reported: YouTube re-encodes now and then, so while shots are cut from it, list an exact copy first (a Google Drive link to the file) and YouTube after it. Only needed to find and match the old video's material, or while the project still cuts shots out of it (<code>derive: {path: reference/...}</code>); a new video has none. Keep unlisted links out of public repos.</td>
+</tr>
+<tr id="key-dir">
+<td><code>dir</code></td>
+<td><code>assets</code></td>
+<td>Folder (relative to the YAML) where <code>fetch</code> puts downloads and <code>derive:</code> its outputs (in <code>&lt;dir&gt;/.derived/</code>).</td>
+</tr>
+<tr id="key-prune_after_days">
+<td><code>prune_after_days</code></td>
+<td><code>7</code></td>
+<td>Before each <code>render</code>, delete files the tool can bring back by itself (album items only <code>derive:</code> needs, stale generated files) that no <code>build</code>/<code>validate</code>/<code>render</code> has used for this many days. <code>0</code> = never. See README's <em><code>video-as-code fetch</code></em> section.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="bin"><code>bin:</code></h2>
+<p>A list of entries, each with an <code>id</code> (how the timeline refers to it) and
+exactly one way to get its file:</p>
+<table>
+<thead>
+<tr>
+<th>Form</th>
+<th>Example</th>
+<th>Where the file comes from</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path:</code></td>
+<td><code>{id: beach, path: media/beach.jpg}</code></td>
+<td>A local file (relative to the YAML, or absolute).</td>
+</tr>
+<tr>
+<td><code>source:</code></td>
+<td><code>{id: slide, source: PXL_20250830_085416309.mp4}</code></td>
+<td>An item of <code>project.sources.album</code>, by its original file name. <code>fetch</code> downloads it as <code>&lt;dir&gt;/&lt;capture date&gt;_&lt;id&gt;&lt;ext&gt;</code>. When several album items share that name, <code>source: {name: IMG-20150308-WA0003.jpg, taken: "2015-03-08 15:23:51"}</code> - the name plus its capture <code>taken</code> time (local, to the second) - says which one; if even the time ties, <code>size: [w, h]</code> (in pixels) too; if even that ties, <code>id:</code> - the album item's id, the <code>media_id</code> in <code>sources.lock.yaml</code> (see README's <em><code>video-as-code fetch</code></em>).</td>
+</tr>
+<tr>
+<td><code>url:</code></td>
+<td><code>{id: music, url: [https://www.youtube.com/watch?v=..., https://drive.google.com/file/d/.../view]}</code></td>
+<td>One link or a list, tried in order until one works: YouTube (audio only, via <code>yt-dlp</code>), Google Drive (shared as "anyone with the link"), or any direct link. Stored as <code>&lt;dir&gt;/&lt;id&gt;&lt;ext&gt;</code>.</td>
+</tr>
+<tr>
+<td><code>derive:</code></td>
+<td><code>{id: jump, derive: {source: VID_1.mp4, trim: [12, 16]}}</code></td>
+<td>Generated with ffmpeg from another file (below).</td>
+</tr>
+<tr>
+<td><code>type: title</code></td>
+<td><code>{id: card, type: title, text: "Hello"}</code></td>
+<td>A text card generated by the tool (below).</td>
+</tr>
+</tbody>
+</table>
+<p>Other keys every entry may have:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-type">
+<td><code>type</code></td>
+<td>from the extension</td>
+<td><code>video</code>, <code>audio</code>, <code>image</code>, <code>animation</code> or <code>title</code>. Only needed to override the guess, or for titles.</td>
+</tr>
+<tr id="key-folder">
+<td><code>folder</code></td>
+<td>-</td>
+<td>Bin folder to show it in when the project is opened in kdenlive.</td>
+</tr>
+<tr id="key-local_name">
+<td><code>local_name</code></td>
+<td>-</td>
+<td>With <code>source:</code>/<code>url:</code> only: the local file name to use instead of the automatic one (same extension as the original).</td>
+</tr>
+</tbody>
+</table>
+<h3 id="derive"><code>derive:</code></h3>
+<p>Exactly one input:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-source">
+<td><code>source</code></td>
+<td>An album item, by original file name - or <code>{name, taken, size, id}</code> like a bin <code>source:</code> (downloaded by <code>fetch</code>; if a plain <code>source:</code> clip uses the same item, its file is shared).</td>
+</tr>
+<tr id="key-path">
+<td><code>path</code></td>
+<td>A local file.</td>
+</tr>
+<tr id="key-clip">
+<td><code>clip</code></td>
+<td>Another bin entry's file, by <code>id</code> (it may itself be derived).</td>
+</tr>
+</tbody>
+</table>
+<p>Then any of these operations, applied in this order:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Example</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-motion">
+<td><code>motion</code></td>
+<td><code>true</code></td>
+<td>Take the short video inside a phone's motion photo (<code>.MP.jpg</code>) instead of the photo; the result is an <code>.mp4</code>.</td>
+</tr>
+<tr id="key-rotate">
+<td><code>rotate</code> <a class="to-gallery" href="../gallery/index.html#card-derive-rotate" title="See it in the gallery">▶</a></td>
+<td><code>180</code></td>
+<td>Turn the picture 90, 180 or 270 degrees clockwise, before anything else (so <code>crop</code> works on the turned picture): for a photo whose EXIF orientation tag is wrong, shown upside down or on its side.</td>
+</tr>
+<tr id="key-trim">
+<td><code>trim</code></td>
+<td><code>[12, 16]</code></td>
+<td>Keep only these input seconds <code>[start, end)</code>.</td>
+</tr>
+<tr id="key-cut">
+<td><code>cut</code></td>
+<td><code>[[18.44, 20.36]]</code></td>
+<td>Remove these input-second ranges from the middle, picture and sound alike.</td>
+</tr>
+<tr id="key-crop">
+<td><code>crop</code> <a class="to-gallery" href="../gallery/index.html#card-clip-crop" title="See it in the gallery">▶</a></td>
+<td><code>{x: 0, y: 156, w: 4080, h: 2760}</code></td>
+<td>Keep this rectangle, in input pixels.</td>
+</tr>
+<tr id="key-scale">
+<td><code>scale</code> <a class="to-gallery" href="../gallery/index.html#card-derive-feather" title="See it in the gallery">▶</a></td>
+<td><code>[1920, 1080]</code></td>
+<td>Resize; <code>-1</code> on one side keeps the aspect ratio. Two sizes of another shape stretch the picture to it (square pixels: it shows at that shape).</td>
+</tr>
+<tr id="key-devignette">
+<td><code>devignette</code></td>
+<td><code>0.81</code></td>
+<td>Undo a vignette baked into the input (a shot taken from an old edit, say): how bright its corners are relative to its centre, between 0 and 1.</td>
+</tr>
+<tr id="key-fit">
+<td><code>fit</code> <a class="to-gallery" href="../gallery/index.html#card-derive-fit-blur" title="See it in the gallery">▶</a></td>
+<td><code>{size: [1440, 960], background: blur}</code></td>
+<td>Make the whole picture fit inside <code>size</code>, centred, and fill the rest: <code>blur</code> (the default) with a blurred copy of the picture enlarged to cover it, <code>black</code> with black. Fits a portrait photo into a landscape frame without cropping it. With <code>blur</code>, <code>lighten: 0.35</code> (0-1) brightens the blurred copy - every channel times 1 + 5 x <code>lighten</code>, so its colours stay (a dark brown turns light brown, not grey) - for a dark picture (a cave, a night shot) whose blurred surround would otherwise look like plain black. As a <strong>card</strong> on its blurred copy (<code>blur</code> only): <code>margin: 60</code> keeps at least that many px of the copy all round the picture, <code>radius: 40</code> rounds its corners, <code>edge: 8</code> softens its edge over that many px, <code>shadow: 0.45</code> (0-1) lays a soft shadow of its shape under it, <code>dim: 0.2</code> (0-1) darkens the copy so the card stands out - e.g. <code>{size: [1920, 1080], background: blur, margin: 60, radius: 40, edge: 8, shadow: 0.45, dim: 0.2}</code>; any picture shape, a portrait one as a tall card. <code>margin</code>, <code>radius</code> and <code>edge</code> are whole pixels, <code>margin</code> less than half the smaller side of <code>size</code>; <code>shadow</code> and <code>dim</code> go from 0 up to (not including) 1; <code>dim</code> and <code>lighten</code> don't go together. On a video, the card's shape and shadow are worked out once, on its first frame.</td>
+</tr>
+<tr id="key-feather">
+<td><code>feather</code></td>
+<td><code>16</code></td>
+<td>Soft edges: the picture fades out over its last that many pixels on every side, to black (and, with <code>fit: blur</code>, the picture itself also melts into its blurred surround).</td>
+</tr>
+<tr id="key-vignette">
+<td><code>vignette</code> <a class="to-gallery" href="../gallery/index.html#card-derive-vignette" title="See it in the gallery">▶</a></td>
+<td><code>0.81</code></td>
+<td>Darken the edges, the reverse of <code>devignette</code>: how bright the corners end up relative to the centre, between 0 and 1.</td>
+</tr>
+<tr>
+<td><code>fps</code></td>
+<td><code>30</code></td>
+<td>Re-time to this frame rate.</td>
+</tr>
+<tr id="key-reverse">
+<td><code>reverse</code></td>
+<td><code>true</code></td>
+<td>Play backwards, picture and sound.</td>
+</tr>
+<tr id="key-volume">
+<td><code>volume</code></td>
+<td><code>1.41</code></td>
+<td>Multiply the sound's level.</td>
+</tr>
+<tr id="key-intra">
+<td><code>intra</code></td>
+<td><code>true</code></td>
+<td>Encode a video with every frame a keyframe: avoids <code>speed:</code> stalling near the end of a file with long keyframe intervals, at the cost of a bigger file.</td>
+</tr>
+<tr id="key-upscale">
+<td><code>upscale</code></td>
+<td><code>4</code></td>
+<td>Enlarge a still or a gif x4 with Real-ESRGAN (slow; <code>fetch</code> offers to install it).</td>
+</tr>
+<tr id="key-openshot">
+<td><code>openshot</code> <a class="to-gallery" href="../gallery/index.html#card-openshot-analogtape" title="See it in the gallery">▶</a></td>
+<td><code>[{effect: Wave, amplitude: 0.6}]</code></td>
+<td>libopenshot's effects, last of all, in order: video ones (<code>Wave</code>, <code>AnalogTape</code>, <code>LensFlare</code>, <code>SphericalProjection</code>, <code>Pixelate</code>, <code>ColorShift</code>, <code>Shift</code>, <code>Bars</code>...) and audio ones (<code>Echo</code>, <code>Robotization</code>, <code>Whisperization</code>, <code>Distortion</code>...). Each a map with its <code>effect</code> and any of its properties: a number, a map of seconds to numbers (keyframes), a colour (<code>[r, g, b]</code> or <code>"#rrggbb"</code>), <code>true</code>/<code>false</code> or text - checked against libopenshot's own catalog. <code>Caption</code> (draws nothing outside OpenShot's editor: use a <code>type: title</code> clip) and <code>Mask</code> (needs a mask picture it can't be given) are refused. Needs libopenshot's Python bindings (<code>python3-openshot</code>, which <code>openshot-qt</code> brings): run with the system's Python (<code>VIDEO_AS_CODE_OPENSHOT_PYTHON</code> for another). Not with <code>upscale</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>A gif stays a gif, a still becomes <code>.png</code>, audio <code>.m4a</code> and video <code>.mp4</code>.
+Outputs are cached in <code>&lt;dir&gt;/.derived/</code> and regenerated only when the spec
+or the input changes.</p>
+<h3 id="lottie-animations-type-animation">Lottie animations (<code>type: animation</code>)</h3>
+<p>A <code>.json</code> Lottie animation (LottieFiles' format) or a <code>.tgs</code> one
+(Telegram's, gzipped) is a bin clip like a video: played by melt's
+<code>glaxnimate</code> module - kdenlive's "Animation" clips - with its own
+transparency, so on a track above it plays over what's below; as long
+as its own frames say (<code>ip</code> to <code>op</code> at <code>fr</code> per second). The
+distributions' melt has the module; one without it is an error that
+says so.</p>
+<h3 id="title-cards-type-title">Title cards (<code>type: title</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-text">
+<td><code>text</code> <a class="to-gallery" href="../gallery/index.html#card-title-title-card" title="See it in the gallery">▶</a></td>
+<td><em>(required)</em></td>
+<td>The text; may span several lines.</td>
+</tr>
+<tr id="key-font">
+<td><code>font</code></td>
+<td><code>Sans</code></td>
+<td>Font family.</td>
+</tr>
+<tr id="key-font_size">
+<td><code>font_size</code></td>
+<td><code>48</code></td>
+<td>Size in pixels.</td>
+</tr>
+<tr id="key-color">
+<td><code>color</code></td>
+<td><code>[255, 255, 255, 255]</code></td>
+<td>Text colour.</td>
+</tr>
+<tr id="key-background">
+<td><code>background</code></td>
+<td><code>[0, 0, 0, 0]</code></td>
+<td>Background colour (transparent by default).</td>
+</tr>
+<tr id="key-font_weight">
+<td><code>font_weight</code></td>
+<td><code>400</code></td>
+<td>Weight, from <code>100</code> to <code>900</code> (<code>400</code> normal, <code>700</code> bold) or a name: <code>thin</code>, <code>light</code>, <code>normal</code>, <code>medium</code>, <code>semibold</code>, <code>bold</code>, <code>black</code> - the font needs a face of about that weight.</td>
+</tr>
+<tr id="key-italic">
+<td><code>italic</code></td>
+<td><code>false</code></td>
+<td>Italic.</td>
+</tr>
+<tr id="key-outline">
+<td><code>outline</code></td>
+<td><code>0</code></td>
+<td>An outline around each letter, this many pixels wide.</td>
+</tr>
+<tr id="key-outline_color">
+<td><code>outline_color</code></td>
+<td><code>[0, 0, 0, 255]</code></td>
+<td>Its colour.</td>
+</tr>
+<tr id="key-shadow">
+<td><code>shadow</code></td>
+<td><code>false</code></td>
+<td>A drop shadow: <code>true</code> (soft, dark, 3 px down and right), or <code>{color: [r, g, b, a], blur: 6, offset: [3, 3]}</code>.</td>
+</tr>
+</tbody>
+</table>
+<p><code>font</code> takes any font installed on the machine that renders (<code>fc-list</code>
+lists them, e.g. <code>"DejaVu Serif"</code>, <code>"Ubuntu"</code>); one it doesn't have is
+replaced by a default one without warning.</p>
+<h2 id="timelinetracks"><code>timeline.tracks:</code></h2>
+<p><code>timeline:</code> holds one key, <code>tracks</code>: a list of tracks. Later tracks are stacked above earlier ones: a clip
+with <code>fade_in</code> on a later track fades in over what plays below it.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td><em>(required)</em></td>
+<td><code>video</code> or <code>audio</code>.</td>
+</tr>
+<tr id="key-name">
+<td><code>name</code></td>
+<td><code>V&lt;n&gt;</code> / <code>A&lt;n&gt;</code></td>
+<td>Track name (<code>transitions:</code> refer to tracks by it).</td>
+</tr>
+<tr id="key-clips">
+<td><code>clips</code></td>
+<td><code>[]</code></td>
+<td>The clips placed on it (below). Clips on one track can't overlap.</td>
+</tr>
+<tr id="key-pan">
+<td><code>pan</code></td>
+<td>-</td>
+<td>Audio tracks only: <code>-1.0</code> (left) to <code>1.0</code> (right).</td>
+</tr>
+<tr id="key-hidden">
+<td><code>hidden</code></td>
+<td><code>false</code></td>
+<td>Hide the track's picture.</td>
+</tr>
+<tr id="key-locked">
+<td><code>locked</code></td>
+<td><code>false</code></td>
+<td>Lock the track (when opened in kdenlive).</td>
+</tr>
+<tr id="key-audio_muted">
+<td><code>audio_muted</code></td>
+<td><code>false</code></td>
+<td>Mute the whole track's sound.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="clips-on-a-track">Clips on a track</h3>
+<p>Each is <code>{clip: &lt;bin id&gt;, start: &lt;seconds&gt;, ...}</code>. <code>clip</code> and <code>start</code> are
+required.</p>
+<p><strong>Which part of the source, and for how long</strong></p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-start">
+<td><code>start</code></td>
+<td>Where on the timeline it starts.</td>
+</tr>
+<tr id="key-in">
+<td><code>in</code></td>
+<td>Where in the clip to start (default <code>0</code>); with <code>speed</code>, in timeline (already sped-up) seconds.</td>
+</tr>
+<tr id="key-out">
+<td><code>out</code></td>
+<td>Where in the clip to stop, same units as <code>in</code>.</td>
+</tr>
+<tr id="key-duration">
+<td><code>duration</code></td>
+<td>How long it lasts on the timeline (instead of <code>out</code>).</td>
+</tr>
+<tr id="key-source_in">
+<td><code>source_in</code>, <code>source_out</code></td>
+<td>Start and end in <em>real source seconds</em>, whatever <code>speed</code> is. Both or neither, and not together with <code>in</code>/<code>out</code>/<code>duration</code>. With <code>speed_ramp</code>, <code>source_in</code> alone sets where the ramp starts reading.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Speed</strong></p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-speed">
+<td><code>speed</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-speed" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>Constant speed factor (<code>2.0</code> = twice as fast, negative = backwards).</td>
+</tr>
+<tr id="key-preserve_pitch">
+<td><code>preserve_pitch</code></td>
+<td><code>false</code></td>
+<td>Keep the sound's pitch when <code>speed</code> changes it.</td>
+</tr>
+<tr id="key-speed_ramp">
+<td><code>speed_ramp</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-speed-ramp" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>Changing speed: <code>[{at: 0, speed: 4}, {at: 0.75, speed: 1}]</code> - each entry starts a constant-speed stretch at <code>at</code> seconds into the clip; the first must be at <code>0</code>. Not together with <code>speed</code> or <code>in</code>; needs <code>out</code> or <code>duration</code>.</td>
+</tr>
+<tr id="key-speed_ramp_image_mode">
+<td><code>speed_ramp_image_mode</code></td>
+<td><code>nearest</code></td>
+<td><code>nearest</code> (repeat frames) or <code>blend</code> (mix neighbouring frames) when slowed down.</td>
+</tr>
+<tr id="key-boomerang">
+<td><code>boomerang</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-boomerang" title="See it in the gallery">▶</a></td>
+<td><code>false</code></td>
+<td>Play the stretch forward and then backward, as two placements (the backward one muted, starting with a hard cut). Needs <code>out</code>, <code>duration</code> or <code>source_in</code>+<code>source_out</code>; not with <code>speed_ramp</code>.</td>
+</tr>
+<tr id="key-boomerang_trim_hold">
+<td><code>boomerang_trim_hold</code></td>
+<td><code>true</code></td>
+<td>With <code>boomerang</code>: if the source holds its last frame (a gif's long last delay), shorten both halves so the turnaround doesn't stall.</td>
+</tr>
+<tr id="key-freeze_at">
+<td><code>freeze_at</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-freeze-at" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>Freeze the picture at this second of the clip (counted from its first visible frame). Alone, the whole clip shows that frame.</td>
+</tr>
+<tr id="key-freeze_before">
+<td><code>freeze_before</code> / <code>freeze_after</code></td>
+<td><code>false</code></td>
+<td>With <code>freeze_at</code>: play normally on one side and freeze only before / after it.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Fades and sound</strong></p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-fade_in">
+<td><code>fade_in</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-fade-in-fade-out" title="See it in the gallery">▶</a>, <code>fade_out</code></td>
+<td>Fade length. On video, from/to transparent (so it crossfades with the track below, or black if there is none); on audio, from/to silence.</td>
+</tr>
+<tr id="key-fade_in_level">
+<td><code>fade_in_level</code>, <code>fade_out_level</code></td>
+<td>Audio: start the fade-in at / end the fade-out at this level (<code>0</code>-<code>1</code>) instead of silence.</td>
+</tr>
+<tr id="key-gain">
+<td><code>gain</code></td>
+<td>Audio level multiplier (<code>2.0</code> = twice as loud).</td>
+</tr>
+<tr id="key-mute">
+<td><code>mute</code></td>
+<td><code>true</code> silences the clip's own sound.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Framing</strong></p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>crop</code></td>
+<td>Margins removed from the picture - <code>{top: 0, bottom: 316}</code>: any of <code>top</code>, <code>right</code>, <code>bottom</code>, <code>left</code>, in pixels of the source file - and the rest scaled to fill the frame. Not together with <code>position</code>/<code>size</code>/<code>position_keyframes</code>.</td>
+</tr>
+<tr id="key-position">
+<td><code>position</code> <a class="to-gallery" href="../gallery/index.html#card-clip-position-size" title="See it in the gallery">▶</a>, <code>size</code></td>
+<td>Picture-in-picture: <code>[x, y]</code> and <code>[w, h]</code> in canvas pixels.</td>
+</tr>
+<tr id="key-position_keyframes">
+<td><code>position_keyframes</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-position-keyframes" title="See it in the gallery">▶</a></td>
+<td>Animated picture-in-picture: <code>[{at: 0, position: [x, y], size: [w, h]}, ...]</code>, first at <code>0</code>. Not together with <code>position</code>/<code>size</code>.</td>
+</tr>
+<tr id="key-ken_burns_from">
+<td><code>ken_burns_from</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-ken-burns-from-to" title="See it in the gallery">▶</a>, <code>ken_burns_to</code></td>
+<td>Pan and zoom from one rectangle to another over the clip: <code>[x%, y%, w%, h%]</code> of the frame. Both or neither.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Effects</strong></p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-color_grade">
+<td><code>color_grade</code> <a class="to-gallery" href="../gallery/index.html#card-clip-color-grade" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>Three-way colour grading: any of <code>lift</code> (shadows), <code>gamma</code> (midtones), <code>gain</code> (highlights), each <code>[r, g, b]</code>. Neutral is lift <code>[0,0,0]</code>, gamma and gain <code>[1,1,1]</code>; e.g. <code>{gamma: [1.2, 1.2, 1.2]}</code> brightens the midtones.</td>
+</tr>
+<tr id="key-color_grade_keyframes">
+<td><code>color_grade_keyframes</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-color-grade-keyframes" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>A second grade on top of <code>color_grade</code>, animated: <code>[{at: 0, lift: [0, 0, 0]}, {at: 1.5, lift: [0.2, 0.18, 0.06]}]</code>, <code>at</code> in seconds into the clip (the first <code>0</code>, each later than the one before), every keyframe with the same groups; eased linearly from one to the next and held after the last. For a swell of light that rises and falls across clips, give each clip its stretch of it.</td>
+</tr>
+<tr id="key-old_film">
+<td><code>old_film</code> <a class="to-gallery" href="../gallery/index.html#card-clip-old-film" title="See it in the gallery">▶</a>, <code>film_dust</code>, <code>film_scratches</code>, <code>film_grain</code></td>
+<td>-</td>
+<td><code>true</code> turns on each "old film" filter (flicker and uneven developing, dust, scratches, grain).</td>
+</tr>
+<tr id="key-film_grain">
+<td><code>film_grain</code> <a class="to-gallery" href="../gallery/index.html#card-clip-film-grain" title="See it in the gallery">▶</a> as a map</td>
+<td><code>{noise: 12}</code></td>
+<td>Instead of <code>true</code>: grain that changes every frame, <code>noise</code> its strength (default <code>40</code>), with <code>contrast</code> and <code>brightness</code> in percent, <code>100</code> (the default) meaning unchanged. <code>true</code> keeps kdenlive's own settings (<code>40</code>/<code>160</code>/<code>70</code>), which also harden and darken the whole picture.</td>
+</tr>
+<tr id="key-film_dust">
+<td><code>film_dust</code> <a class="to-gallery" href="../gallery/index.html#card-clip-film-dust" title="See it in the gallery">▶</a> as a map</td>
+<td><code>{style: dots, size: 4, count: 10}</code></td>
+<td>Instead of <code>true</code>: <code>style: svg</code> (the default) draws MLT's dust pictures, <code>size</code> percent of the clip's width across (default <code>2</code>); <code>dots</code> draws small round specks, darker and lighter, at most <code>size</code> pixels in radius (default <code>4</code>), like the dust on an old print. <code>count</code>: at most that many per frame (default <code>10</code>). One style per project: <code>dots</code> makes <code>render</code> run melt on a copy of its data folder without the dust pictures (opened in kdenlive, the project shows them). <code>pictures</code> (with <code>svg</code>): the pictures to pick from instead of MLT's five - theirs by name (<code>dust1</code>, <code>dust2</code> blots, the latter drawn white; <code>dust3</code>-<code>dust5</code> hairs) or <code>.svg</code> files of the project, a repeated one coming up more often; e.g. <code>[dust3, dust4, dust5, assets/speck.svg]</code>, the speck drawn small inside a larger transparent picture. One set per project, also by swapping the data folder. <code>hold</code>: the same specks for that many frames running (default <code>1</code>, new ones every frame).</td>
+</tr>
+<tr id="key-stabilize">
+<td><code>stabilize</code> <a class="to-gallery" href="../gallery/index.html#card-clip-stabilize" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td><code>true</code> smooths out camera shake (single pass).</td>
+</tr>
+<tr id="key-lut">
+<td><code>lut</code> <a class="to-gallery" href="../gallery/index.html#card-clip-lut" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>A 3D LUT file applied to the picture, after <code>color_grade</code> - <code>.cube</code>, <code>.3dl</code>, <code>.dat</code> or <code>.m3d</code>, relative to the project file: a look, or a camera's log-to-Rec.709 conversion. Or a LUT's name, without extension (<code>lut: teal-orange</code>): looked up in <code>luts/</code> next to the project file, then in <code>~/.local/share/video-as-code/luts/</code> (<code>$XDG_DATA_HOME</code>) - a pack of looks shared by every project.</td>
+</tr>
+<tr id="key-lut_interp">
+<td><code>lut_interp</code></td>
+<td><code>tetrahedral</code></td>
+<td>How the LUT is interpolated between its points: <code>nearest</code>, <code>trilinear</code> or <code>tetrahedral</code>.</td>
+</tr>
+<tr id="key-glsl">
+<td><code>glsl</code> <a class="to-gallery" href="../gallery/index.html#card-clip-glsl-crt" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>A GLSL effect on the picture, run on the GPU: one of this project's shaders by name (<code>crt</code>, <code>chromatic</code>, <code>wave</code>, <code>glitch</code>, <code>kaleidoscope</code>, <code>vhs</code>) or a <code>.glsl</code> file of your own, relative to the project file; <code>{shader: ..., params: {...}}</code> to set its parameters. See <em><code>glsl:</code> shaders</em> below.</td>
+</tr>
+<tr id="key-focus_rect">
+<td><code>focus_rect</code> <a class="to-gallery" href="../gallery/index.html#card-clip-focus-rect" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td><code>[x%, y%, w%, h%]</code> kept sharp while the rest is blurred.</td>
+</tr>
+<tr id="key-focus_blur">
+<td><code>focus_blur</code></td>
+<td><code>4.0</code></td>
+<td>Blur radius for <code>focus_rect</code>, percent of the width (<code>0</code>-<code>50</code>).</td>
+</tr>
+<tr id="key-chroma_key">
+<td><code>chroma_key</code> <a class="to-gallery" href="../gallery/index.html#card-clip-chroma-key" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>Colour to make transparent (<code>"#00ff00"</code>).</td>
+</tr>
+<tr id="key-chroma_key_distance">
+<td><code>chroma_key_distance</code></td>
+<td><code>0.35</code></td>
+<td>How far from that colour still counts (<code>0</code>-<code>1</code>).</td>
+</tr>
+<tr id="key-reveal">
+<td><code>reveal</code></td>
+<td>-</td>
+<td>How the clip appears: <code>iris</code>, <code>flip</code>, <code>glitch</code>, <code>delaygrab</code> or <code>cairogradient</code>.</td>
+</tr>
+<tr id="key-overlay_text">
+<td><code>overlay_text</code> <a class="to-gallery" href="../gallery/index.html#card-clip-overlay-text" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>Text burned onto the clip; may use MLT's keywords (<code>#timecode#</code>, <code>#frame#</code>...).</td>
+</tr>
+<tr id="key-overlay_font">
+<td><code>overlay_font</code></td>
+<td><code>Sans</code></td>
+<td>Its font.</td>
+</tr>
+<tr id="key-overlay_font_size">
+<td><code>overlay_font_size</code></td>
+<td><code>48</code></td>
+<td>Its size.</td>
+</tr>
+<tr id="key-overlay_color">
+<td><code>overlay_color</code></td>
+<td><code>[255, 255, 255, 255]</code></td>
+<td>Its colour.</td>
+</tr>
+<tr id="key-overlay_background">
+<td><code>overlay_background</code></td>
+<td><code>[0, 0, 0, 0]</code></td>
+<td>Its background.</td>
+</tr>
+<tr id="key-melt">
+<td><code>melt</code> <a class="to-gallery" href="../gallery/index.html#card-clip-melt" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>Any other MLT filter, by its service name: a list of <code>&lt;service&gt;: {&lt;property&gt;: &lt;value&gt;}</code> (see <em><code>melt:</code> and <code>melt/&lt;service&gt;</code></em> below).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="scenes"><code>scenes:</code></h2>
+<p>The high-level form: each scene is a list of clips that play one after
+another, with their timing worked out. Scenes follow each other, starting
+at second 0.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-scene">
+<td><code>scene</code></td>
+<td><code>scene&lt;n&gt;</code></td>
+<td>Name.</td>
+</tr>
+<tr>
+<td><code>clips</code></td>
+<td><em>(required)</em></td>
+<td>The clips (below).</td>
+</tr>
+<tr id="key-pacing">
+<td><code>pacing</code></td>
+<td><code>normal</code></td>
+<td>How long each clip lasts when <code>duration</code> isn't given: <code>energetic</code> (stills 1.5 s, videos up to 3 s), <code>normal</code> (3 s / up to 6 s) or <code>slow</code> (5 s / up to 10 s). A video shorter than its cap plays whole.</td>
+</tr>
+<tr>
+<td><code>duration</code></td>
+<td>-</td>
+<td>Total length of the scene, split evenly across its clips.</td>
+</tr>
+<tr id="key-transition">
+<td><code>transition</code> <a class="to-gallery" href="../gallery/index.html#card-transitions-dissolve" title="See it in the gallery">▶</a></td>
+<td><code>none</code></td>
+<td>Between consecutive clips: <code>none</code>, <code>dissolve</code>, <code>wipe</code>, <code>affine</code>, <code>iris</code>, <code>flip</code>, <code>glitch</code>, <code>delaygrab</code> or <code>cairogradient</code> - all but <code>none</code>/<code>dissolve</code> need video - <code>gl</code> (one of gl-transitions', below) or any MLT transition as <code>melt/&lt;service&gt;</code> (below).</td>
+</tr>
+<tr id="key-transition_duration">
+<td><code>transition_duration</code></td>
+<td><code>1.0</code></td>
+<td>Length of each transition.</td>
+</tr>
+<tr id="key-luma">
+<td><code>luma</code> <a class="to-gallery" href="../gallery/index.html#card-transitions-wipe" title="See it in the gallery">▶</a></td>
+<td><code>linear_x</code></td>
+<td>With <code>wipe</code>: its shape - <code>linear_x</code>, <code>linear_y</code>, <code>diagonal</code>, <code>radial</code>, <code>square</code>, <code>clock</code>, <code>spiral</code>, <code>bars_horizontal</code>, <code>bars_vertical</code>, <code>checkerboard</code>, <code>heart</code> or <code>bowtie</code>; or, with openshot-qt installed, one of OpenShot's 412 as <code>openshot/&lt;name&gt;</code> (see the README's <em>OpenShot's transitions</em>).</td>
+</tr>
+<tr id="key-luma_softness">
+<td><code>luma_softness</code></td>
+<td><code>0</code></td>
+<td>With <code>wipe</code>: how soft the edge between the two clips is, from <code>0</code> (hard) to <code>1</code>.</td>
+</tr>
+<tr id="key-luma_reverse">
+<td><code>luma_reverse</code></td>
+<td><code>false</code></td>
+<td>With <code>wipe</code>: the shape's light parts change first instead of its dark ones.</td>
+</tr>
+<tr id="key-style">
+<td><code>style</code> <a class="to-gallery" href="../gallery/index.html#card-transitions-affine-zoom" title="See it in the gallery">▶</a></td>
+<td><code>zoom</code></td>
+<td>With <code>affine</code>: <code>zoom</code> or <code>slide</code>.</td>
+</tr>
+<tr id="key-transition_properties">
+<td><code>transition_properties</code></td>
+<td>-</td>
+<td>With <code>melt/&lt;service&gt;</code>: its properties, <code>{&lt;property&gt;: &lt;value&gt;}</code>.</td>
+</tr>
+<tr id="key-gl">
+<td><code>gl</code> <a class="to-gallery" href="../gallery/index.html#card-gl-advancedmosaic" title="See it in the gallery">▶</a></td>
+<td>-</td>
+<td>With <code>gl</code>: which of gl-transitions' 125 (<code>cube</code>, <code>doorway</code>, <code>ripple</code>...; see <em><code>transition: gl</code></em> below).</td>
+</tr>
+<tr id="key-gl_params">
+<td><code>gl_params</code></td>
+<td>-</td>
+<td>With <code>gl</code>: its parameters, <code>{&lt;name&gt;: &lt;value&gt;}</code>; the rest keep their defaults.</td>
+</tr>
+</tbody>
+</table>
+<p>A scene's clip is a file path (<code>photos/beach.jpg</code>, added to the bin by
+itself), <code>{path: ...}</code>, or <code>{clip: &lt;bin id&gt;}</code>; the two map forms may also
+carry <code>mute</code>, <code>speed</code> (with <code>preserve_pitch</code>), <code>position</code>, <code>size</code>,
+<code>chroma_key</code>, <code>chroma_key_distance</code>, <code>lut</code> (with <code>lut_interp</code>) and <code>melt</code>,
+as on a timeline clip.</p>
+<h2 id="guides"><code>guides:</code></h2>
+<p>Timeline markers: <code>[{at: 12.5, text: "Chorus", category: 0}, ...]</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-at">
+<td><code>at</code></td>
+<td><em>(required)</em></td>
+<td>Where, in seconds.</td>
+</tr>
+<tr>
+<td><code>text</code></td>
+<td><code>Marker</code></td>
+<td>Its label.</td>
+</tr>
+<tr id="key-category">
+<td><code>category</code></td>
+<td><code>0</code></td>
+<td>kdenlive's marker category (its colour).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="transitions"><code>transitions:</code></h2>
+<p>A transition between two tracks over a time window, written directly
+(<code>scenes:</code> produces these by itself; <code>import</code> writes them too):</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>type</code></td>
+<td><em>(required)</em></td>
+<td><code>wipe</code>, <code>affine</code>, <code>gl</code> or <code>melt/&lt;service&gt;</code>.</td>
+</tr>
+<tr id="key-track_a">
+<td><code>track_a</code>, <code>track_b</code></td>
+<td><em>(required)</em></td>
+<td>The two tracks, by <code>name</code>.</td>
+</tr>
+<tr>
+<td><code>start</code>, <code>end</code></td>
+<td><em>(required)</em></td>
+<td>The window, in timeline seconds.</td>
+</tr>
+<tr>
+<td><code>luma</code></td>
+<td><code>linear_x</code></td>
+<td>With <code>wipe</code>: its shape (see <code>scenes:</code>).</td>
+</tr>
+<tr id="key-softness">
+<td><code>softness</code></td>
+<td><code>0</code></td>
+<td>With <code>wipe</code>: as a scene's <code>luma_softness</code>.</td>
+</tr>
+<tr>
+<td><code>reverse</code></td>
+<td><code>false</code></td>
+<td>With <code>wipe</code>: as a scene's <code>luma_reverse</code>.</td>
+</tr>
+<tr>
+<td><code>style</code></td>
+<td><code>zoom</code></td>
+<td>With <code>affine</code>: <code>zoom</code> or <code>slide</code>.</td>
+</tr>
+<tr id="key-properties">
+<td><code>properties</code></td>
+<td>-</td>
+<td>With <code>melt/&lt;service&gt;</code>: its properties, <code>{&lt;property&gt;: &lt;value&gt;}</code>.</td>
+</tr>
+<tr>
+<td><code>gl</code>, <code>gl_params</code></td>
+<td>-</td>
+<td>With <code>gl</code>: as on a scene.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="melt-and-meltservice"><code>melt:</code> and <code>melt/&lt;service&gt;</code></h2>
+<p>For what there's no key of its own for: any filter or transition the
+<code>melt</code> that renders the project has (<code>melt -query filters</code>,
+<code>melt -query transitions</code> list them - frei0r's ~100, ffmpeg's as
+<code>avfilter.*</code>, MLT's own), by its service name.</p>
+<pre><code class="language-yaml">timeline:
+  tracks:
+    - type: video
+      clips:
+        - clip: beach
+          start: 0
+          duration: 4
+          melt:
+            - frei0r.cartoon: {diffspace: 0.4}
+            - avfilter.hue: {av.h: &quot;0=0;100=180&quot;}   # keyframes, MLT's own syntax
+            - frei0r.invert0r                       # no properties
+scenes:
+  - transition: melt/composite
+    transition_properties: {geometry: &quot;0=50%/50%:0%x0%;-1=0/0:100%x100%&quot;}
+    clips: [a.jpg, b.jpg]
+</code></pre>
+<p>Each <code>melt:</code> entry becomes one filter on the clip, after those of the
+clip's own keys, in the order given; a <code>melt/&lt;service&gt;</code> transition goes
+between the scene's two alternating tracks over each overlap (on
+<code>transitions:</code>, between <code>track_a</code> and <code>track_b</code> over <code>start</code>-<code>end</code>),
+with no fade on either clip, as <code>wipe</code> does. Values are written as they
+are: MLT's own units, ranges (frei0r's parameters go from 0 to 1) and
+keyframe syntax. A frei0r parameter may be named by its number or by its
+name (<code>melt -query filter=frei0r.cartoon</code> shows both).</p>
+<p>When there's a <code>melt</code> to ask, an unknown service or property is an error
+(with the closest names) instead of a render that silently does nothing;
+a service melt doesn't describe takes any property. Opened in kdenlive,
+a filter it has no description of renders but may not show in its
+effect stack. <code>import</code> brings any filter over the whole clip and any
+transition between two tracks that the installed melt has, and that it
+doesn't otherwise recognize, back as these entries.</p>
+<h2 id="transition-gl"><code>transition: gl</code></h2>
+<p>The 125 transitions of <a href="https://gl-transitions.com">gl-transitions</a> - a
+cube turning, doors opening, a page curling, a morph, ripples, a burn... -
+each a GLSL shader run on the GPU:</p>
+<pre><code class="language-yaml">scenes:
+  - transition: gl
+    gl: cube
+    gl_params: {persp: 0.5, reflection: 0.2}   # optional
+    clips: [a.jpg, b.jpg]
+</code></pre>
+<p><code>video-as-code gallery</code> shows every one playing, with its name; each
+one's parameters, their types (<code>float</code>, <code>bool</code>, <code>vec2</code>/<code>vec3</code>/<code>vec4</code> as
+lists of numbers, <code>ivec2</code> as whole numbers) and ranges are in
+<code>src/video_as_code/gltransitions_data/catalog.json</code>, and a wrong one is
+an error that says what it takes.</p>
+<p>They need a small plugin built once: <code>video-as-code install-gl-transitions</code>
+(a C compiler and the EGL, GLES and frei0r headers - <code>libegl-dev</code>,
+<code>libgles-dev</code>, <code>frei0r-plugins-dev</code> on Debian/Ubuntu). In the .kdenlive
+they're a <code>frei0r.gltransition</code> transition, which kdenlive renders as
+long as its melt finds the plugin (<code>FREI0R_PATH</code>). A machine with no GPU
+renders them on the CPU (Mesa's llvmpipe), more slowly.</p>
+<h2 id="presets-presets_file-and-use"><code>presets:</code>, <code>presets_file:</code> and <code>use:</code></h2>
+<p>Named sets of keys, written once and used wherever a project file has a
+map - a scene, a clip (on a track or in a scene), a bin entry, a
+<code>transitions:</code> entry:</p>
+<pre><code class="language-yaml">presets:
+  page: {transition: gl, gl: BookFlip, transition_duration: 0.8}
+  warm: {lut: looks/warm.cube, film_grain: {noise: 12}}
+  warm-page: {use: [page, warm]}          # a preset may use others
+
+scenes:
+  - use: page
+    clips: [a.jpg, {path: b.jpg, use: warm}]
+  - use: page
+    transition_duration: 1.5               # written here: wins over the preset's
+    clips: [c.jpg, d.jpg]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Where</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-presets">
+<td><code>presets</code></td>
+<td>top level</td>
+<td>A map of names to maps of keys.</td>
+</tr>
+<tr id="key-use">
+<td><code>use</code></td>
+<td>any map</td>
+<td>A preset's name, or a list of them: their keys go in first, in that order, and the keys written next to <code>use:</code> last, so those win. A value replaces the preset's whole (a map isn't merged into the preset's map).</td>
+</tr>
+<tr id="key-presets_file">
+<td><code>presets_file</code></td>
+<td>top level</td>
+<td>A YAML file, relative to the project file, with one key, <code>presets:</code>; its presets come first, and the project's own <code>presets:</code> of the same name replace them - for presets shared by several projects.</td>
+</tr>
+</tbody>
+</table>
+<p><code>use:</code> is expanded before anything else reads the file, so it works
+with every key. A name that isn't a preset, or presets that use each
+other in a circle, is an error that says where. Relative paths inside a
+preset (a <code>lut:</code>, a <code>path:</code>) are relative to the project file that uses
+it, like the rest of that file's: a presets file shared by projects in
+other folders takes absolute paths.</p>
+<pre><code class="language-yaml"># presets.yaml, next to several projects' files
+presets:
+  page: {transition: gl, gl: BookFlip}
+  title-style: {font: &quot;DejaVu Serif&quot;, font_weight: bold, shadow: true}
+</code></pre>
+<pre><code class="language-yaml"># a project
+project: {...}
+presets_file: presets.yaml
+bin:
+  - {id: card, type: title, text: &quot;Day one&quot;, use: title-style}
+</code></pre>
+<h2 id="parts-a-project-in-several-files"><code>parts:</code> - a project in several files</h2>
+<p>The main file has <code>project:</code> and, instead of <code>bin:</code>/<code>scenes:</code>/<code>timeline:</code>,
+a list of parts, each a file of its own; a part may list parts in turn:</p>
+<pre><code class="language-yaml"># trip.yaml
+project: {id: trip, title: Trip, fps: 25, width: 1920, height: 1080}
+presets_file: presets.yaml
+parts:
+  - intro.yaml
+  - beach.yaml
+  - {file: mountains/all.yaml, transition: gl, gl: cube, transition_duration: 1.2}
+</code></pre>
+<pre><code class="language-yaml"># beach.yaml - a part: no project:, the rest as in any project file
+bin:
+  - {id: wave, path: media/wave.mp4}
+scenes:
+  - use: page
+    clips: [{clip: wave}, media/sand.jpg]
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Where</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-parts">
+<td><code>parts</code></td>
+<td>the main file, or a part</td>
+<td>The parts, played one after the other: a file name (relative to the file listing it), or <code>{file: ..., ...}</code> with the keys of the transition into that part. A file with <code>parts:</code> has no <code>bin:</code>, <code>scenes:</code>, <code>timeline:</code>, <code>transitions:</code> or <code>guides:</code> of its own.</td>
+</tr>
+<tr id="key-file">
+<td><code>file</code></td>
+<td>a <code>parts:</code> entry</td>
+<td>The part's file.</td>
+</tr>
+<tr>
+<td><code>transition</code> and its keys</td>
+<td>a <code>parts:</code> entry</td>
+<td>From the part before into this one: <code>dissolve</code>, <code>wipe</code> (with <code>luma</code>, <code>luma_softness</code>, <code>luma_reverse</code>), <code>affine</code> (<code>style</code>), <code>iris</code>, <code>flip</code>, <code>gl</code> (<code>gl</code>, <code>gl_params</code>) or <code>melt/&lt;service&gt;</code> (<code>transition_properties</code>), over <code>transition_duration</code> (default 1). The parts overlap by it; none, a cut. glitch, delaygrab and cairogradient (bursts on a clip) don't go between parts.</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Each part is a sequence of its own in the <code>.kdenlive</code> - kdenlive's
+  nested sequences, named after the part's file - placed in the one that
+  lists it; the main file's is the timeline kdenlive opens.</li>
+<li>A part has no <code>project:</code>: it takes the main file's. Its relative paths
+  are its own folder's, so a part can be moved with its media.</li>
+<li>A part's bin ids are its own: two parts may both have a clip <code>a</code>.</li>
+<li>Presets: the main file's (and its <code>presets_file:</code>) are in force in
+  every part; a part's own add to them for itself and the parts it lists.</li>
+<li>A part that lists itself, through any number of others, is an error
+  that shows the chain.</li>
+<li><code>--part &lt;path&gt;</code> (on <code>build</code>, <code>render</code>, <code>validate</code>) takes one part
+  alone: its file's path from the main file's folder, without <code>.yaml</code>
+  (<code>--part mountains/all</code>); the output is named after both
+  (<code>trip-mountains-all.mp4</code>).</li>
+<li><code>fetch</code> (and <code>--fetch</code>) goes through the parts one by one, each in its
+  own folder - its own <code>sources.lock.yaml</code>, its own downloads - and a fix
+  asked for in the terminal is written into the part's file, where the
+  clip is. Old files are pruned before a render in each part's folder;
+  not with <code>--part</code>, whose render doesn't read the other parts' files.</li>
+<li><code>--proxy</code> makes each part's light copies in that part's own <code>.proxies/</code>;
+  <code>--split</code> cuts segments on the whole timeline, a part's clips counted
+  where the part plays.</li>
+<li><code>import</code> of a <code>.kdenlive</code> whose timeline is parts in turn (the shape a
+  build gives it: sequences placed whole, each once, one after the other
+  or overlapping by a transition it knows) writes the main file with
+  <code>parts:</code> and a file per part, named after its sequence and next to the
+  main one, its paths absolute. Nested sequences in any other shape stay
+  in <code>x_kdenlive_raw</code>.</li>
+</ul>
+<h2 id="glsl-shaders"><code>glsl:</code> shaders</h2>
+<p><code>glsl:</code> on a clip runs a GLSL ES 3.00 shader over its picture on the GPU,
+through a small plugin built once with <code>video-as-code install-gl-transitions</code>
+(the one <code>transition: gl</code> uses has this sibling).</p>
+<table>
+<thead>
+<tr>
+<th>Shader</th>
+<th>Parameters (default, range)</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr id="key-crt">
+<td><code>crt</code></td>
+<td><code>curvature</code> (0.15, 0-0.6), <code>scanlines</code> (0.35, 0-1), <code>vignette</code> (0.4, 0-1)</td>
+<td>An old CRT screen: a curved picture, scanlines, darker corners.</td>
+</tr>
+<tr id="key-chromatic">
+<td><code>chromatic</code></td>
+<td><code>amount</code> (0.012, 0-0.1)</td>
+<td>Red and blue pulled apart toward the edges.</td>
+</tr>
+<tr id="key-wave">
+<td><code>wave</code></td>
+<td><code>amplitude</code> (0.012, 0-0.1), <code>frequency</code> (14, 1-80), <code>speed</code> (2, 0-10)</td>
+<td>The picture ripples, as through moving water.</td>
+</tr>
+<tr id="key-glitch">
+<td><code>glitch</code></td>
+<td><code>intensity</code> (0.5, 0-1), <code>rate</code> (6, 0.5-30 per second)</td>
+<td>Bands jump sideways and split their colours, now and then.</td>
+</tr>
+<tr id="key-kaleidoscope">
+<td><code>kaleidoscope</code></td>
+<td><code>segments</code> (6, 2-24), <code>turn</code> (0.1, -2-2 turns per second)</td>
+<td>Mirrored segments around the centre, turning.</td>
+</tr>
+<tr id="key-vhs">
+<td><code>vhs</code></td>
+<td><code>strength</code> (0.6, 0-1)</td>
+<td>A worn tape: colour bleeding, a rolling bright band, noise, jitter.</td>
+</tr>
+</tbody>
+</table>
+<p>A shader of your own is a <code>.glsl</code> file with <code>vec4 effect(vec2 uv)</code>: it
+reads the picture with <code>getColor(uv)</code> (uv from 0 to 1, origin bottom
+left) and has <code>time</code> (seconds into the clip), <code>progress</code> (0 to 1 over
+it), <code>ratio</code> (width / height) and <code>resolution</code> (in pixels); its own
+<code>uniform</code>s get the values in <code>params</code> (numbers, <code>true</code>/<code>false</code>, lists of
+2-4 numbers for <code>vec2</code>-<code>vec4</code>) - one not given is 0.</p>
+<pre><code class="language-glsl">// warm.glsl
+uniform float amount;
+vec4 effect(vec2 uv) {
+  vec4 c = getColor(uv);
+  return vec4(c.r + amount, c.g, c.b - amount, 1.0);
+}
+</code></pre>
+<pre><code class="language-yaml">- {clip: beach, start: 0, duration: 4, glsl: {shader: looks/warm.glsl, params: {amount: 0.1}}}
+</code></pre>
+</main>
+<footer>Built with video-as-code docs --public on 2026-10-22, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<script>
+// a link here to a row opens nothing more, but shows it: scrolled to, below the bar
+if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }
+</script>
+</body>
+</html>

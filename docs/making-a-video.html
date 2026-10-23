@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to make a video - video-as-code</title>
+<style>
+:root { color-scheme: light dark; --bg: #fdfdfc; --fg: #1d1f21; --muted: #6b7075; --line: #e2e4e6; --code: #f2f3f4; --accent: #2a6fdb; }
+@media (prefers-color-scheme: dark) { :root { --bg: #16181a; --fg: #e4e6e8; --muted: #9aa0a6; --line: #2c3034; --code: #212427; --accent: #7aa7f0; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, sans-serif; }
+nav { position: sticky; top: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 16px; background: var(--bg);
+      border-bottom: 1px solid var(--line); z-index: 1; }
+nav a { color: var(--muted); text-decoration: none; }
+nav a[aria-current], nav a:hover { color: var(--fg); }
+main { max-width: 960px; margin: 0 auto; padding: 8px 16px 64px; }
+a { color: var(--accent); }
+code { font: 0.9em ui-monospace, monospace; background: var(--code); padding: 1px 4px; border-radius: 4px; }
+pre { background: var(--code); padding: 12px; border-radius: 6px; overflow-x: auto; }
+pre code { padding: 0; background: none; }
+table { border-collapse: collapse; display: block; overflow-x: auto; margin: 12px 0; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; vertical-align: top; text-align: left; }
+tr:target { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+a.to-gallery { text-decoration: none; font-size: 0.8em; margin-left: 4px; }
+h1, h2, h3 { line-height: 1.25; }
+footer { max-width: 960px; margin: 0 auto; padding: 16px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<nav><a href="index.html">video-as-code</a><a href="making-a-video.html" aria-current=page>How to make a video</a><a href="project-yaml.html">Project YAML reference</a><a href="reconstructing.html">How to recover a YAML from an already-rendered video</a><a href="../gallery/index.html">Gallery</a></nav>
+<main>
+<h1 id="how-to-make-a-video">How to make a video</h1>
+<p>The workflow: write a YAML file, build a <code>.kdenlive</code> from it, then either
+open that in kdenlive or render it straight to video. Repeat as you tweak
+the YAML - that's the whole point of versioning a video as a YAML file
+instead of a binary project.</p>
+<h2 id="1-write-the-yaml">1. Write the YAML</h2>
+<p>Two forms, pick whichever fits what you're doing:</p>
+<ul>
+<li><strong><code>timeline.tracks:</code></strong> (low-level): you place each clip explicitly with
+  <code>start:</code>/<code>duration:</code>/<code>fade_in:</code>/etc. Full control over every field this
+  tool supports. See <code>examples/simple/project.yaml</code>.</li>
+<li><strong><code>scenes:</code></strong> (high-level): a scene is just a list of clips that play
+  one after another, with timing computed for you (<code>pacing</code>, or an
+  explicit <code>duration</code> split across the clips), plus transitions
+  (<code>dissolve</code>/<code>wipe</code>/<code>affine</code>/<code>iris</code>/<code>flip</code>/<code>glitch</code>/<code>delaygrab</code>/
+  <code>cairogradient</code>). See <code>examples/scenes/project.yaml</code>.</li>
+</ul>
+<p>Every key either form accepts is in <a href="project-yaml.html"><code>docs/project-yaml.md</code></a>.</p>
+<p>Copy whichever example is closer to what you need and start editing -
+that's faster than writing one from scratch. Both forms can be mixed in
+the same project (a <code>scenes:</code> block compiles down into <code>timeline.tracks:</code>
+before anything else runs).</p>
+<p>If the material lives in a Google Photos album, bin clips can name album
+items by their original file name (<code>source:</code>) instead of a local
+<code>path:</code>, and trims/crops/reversals of them can be described with
+<code>derive:</code> instead of kept as hand-made files; what isn't in the album
+(the music, say) can name links to download it from (<code>url:</code>). Then,
+before validating:</p>
+<pre><code class="language-bash">video-as-code fetch project.yaml
+</code></pre>
+<p>Downloads the album items that aren't on disk yet (as <code>&lt;capture
+date&gt;_&lt;id&gt;&lt;ext&gt;</code>) and the <code>url:</code> clips, and generates the <code>derive:</code> clips. Only needed when
+something new comes from the album; <code>build</code>/<code>render --fetch</code> do the same
+first. See <a href="index.html"><code>README.md</code></a>'s <em><code>video-as-code fetch</code></em> section.</p>
+<h2 id="2-validate">2. Validate</h2>
+<pre><code class="language-bash">video-as-code validate project.yaml
+</code></pre>
+<p>Checks the YAML's shape, that every referenced asset exists on disk, that
+<code>in</code>/<code>out</code>/<code>duration</code> are consistent with each source file's real
+duration, and that clips don't overlap within a track - without writing
+anything. Catches typos before you burn time on a build/render cycle.</p>
+<h2 id="3-build">3. Build</h2>
+<pre><code class="language-bash">video-as-code build project.yaml -o project.kdenlive
+</code></pre>
+<p>Generates the <code>.kdenlive</code> project file. Open it in kdenlive to inspect,
+edit further by hand, or render from the GUI.</p>
+<p>The <code>.kdenlive</code> is a build artifact, not something to commit - it's
+regenerated deterministically from the YAML every time (see the
+<code>.gitignore</code> this repo ships with).</p>
+<h2 id="4-render-straight-to-video-optional">4. Render straight to video (optional)</h2>
+<pre><code class="language-bash">video-as-code render project.yaml -o output.mp4
+</code></pre>
+<p>Needs <code>melt</code> (the MLT engine kdenlive itself renders with) on <code>PATH</code>.
+Equivalent to <code>build</code> followed by <code>melt project.kdenlive -consumer
+avformat:output.mp4</code>, minus the intermediate file - use <code>-k</code>/
+<code>--keep-kdenlive</code> if you want to keep it anyway.</p>
+<h2 id="5-iterate">5. Iterate</h2>
+<p>Change the YAML, re-run <code>validate</code>/<code>build</code>/<code>render</code>. Since the YAML is
+what you check into version control, <code>git diff</code> on it is a real, readable
+diff of what changed in the edit - trims, timing, added clips - the same
+way it would be for code.</p>
+<h2 id="reference">Reference</h2>
+<ul>
+<li>Full command reference and field list: <a href="index.html"><code>README.md</code></a>.</li>
+<li>What's implemented and how each mechanism was verified:
+  <code>ROADMAP.md</code>.</li>
+<li>Already have a <code>.kdenlive</code> and want the YAML back instead?
+  <code>video-as-code import project.kdenlive -o project.yaml</code> - see
+  <a href="index.html"><code>README.md</code></a>'s <em>Usage</em> section. Have a rendered video with no project
+  file at all instead? See <a href="reconstructing.html"><code>docs/reconstructing.md</code></a>.</li>
+</ul>
+</main>
+<footer>Built with video-as-code docs --public on 2026-10-22, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<script>
+// a link here to a row opens nothing more, but shows it: scrolled to, below the bar
+if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }
+</script>
+</body>
+</html>

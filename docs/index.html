@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>video-as-code - video-as-code</title>
+<style>
+:root { color-scheme: light dark; --bg: #fdfdfc; --fg: #1d1f21; --muted: #6b7075; --line: #e2e4e6; --code: #f2f3f4; --accent: #2a6fdb; }
+@media (prefers-color-scheme: dark) { :root { --bg: #16181a; --fg: #e4e6e8; --muted: #9aa0a6; --line: #2c3034; --code: #212427; --accent: #7aa7f0; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, sans-serif; }
+nav { position: sticky; top: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 16px; background: var(--bg);
+      border-bottom: 1px solid var(--line); z-index: 1; }
+nav a { color: var(--muted); text-decoration: none; }
+nav a[aria-current], nav a:hover { color: var(--fg); }
+main { max-width: 960px; margin: 0 auto; padding: 8px 16px 64px; }
+a { color: var(--accent); }
+code { font: 0.9em ui-monospace, monospace; background: var(--code); padding: 1px 4px; border-radius: 4px; }
+pre { background: var(--code); padding: 12px; border-radius: 6px; overflow-x: auto; }
+pre code { padding: 0; background: none; }
+table { border-collapse: collapse; display: block; overflow-x: auto; margin: 12px 0; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; vertical-align: top; text-align: left; }
+tr:target { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+a.to-gallery { text-decoration: none; font-size: 0.8em; margin-left: 4px; }
+h1, h2, h3 { line-height: 1.25; }
+footer { max-width: 960px; margin: 0 auto; padding: 16px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<nav><a href="index.html" aria-current=page>video-as-code</a><a href="making-a-video.html">How to make a video</a><a href="project-yaml.html">Project YAML reference</a><a href="reconstructing.html">How to recover a YAML from an already-rendered video</a><a href="../gallery/index.html">Gallery</a></nav>
+<main>
+<h1 id="video-as-code">video-as-code</h1>
+<p>Programmatic generator for <a href="https://kdenlive.org">kdenlive</a> projects from a
+declarative YAML description, meant for versioning videos with a VCS (like
+Git): the <code>.yaml</code> is what you check in; the <code>.kdenlive</code> (XML/MLT) is
+regenerated deterministically with <code>video-as-code build</code> and doesn't need to live
+in the repo.</p>
+<h2 id="install">Install</h2>
+<pre><code class="language-bash">pip install -e &quot;.[dev]&quot;
+</code></pre>
+<p><code>video-as-code reconstruct</code> (see below) needs the optional <code>reconstruct</code> extra
+(<code>numpy</code>, <code>Pillow</code>) on top of that:</p>
+<pre><code class="language-bash">pip install -e &quot;.[dev,reconstruct]&quot;
+</code></pre>
+<p><code>video-as-code docs</code> needs the optional <code>docs</code> extra (Python-Markdown):
+<code>pip install -e ".[docs]"</code>.</p>
+<p>The rest of <code>video-as-code</code> (<code>build</code>/<code>validate</code>/<code>import</code>) only ever needs PyYAML —
+<code>reconstruct.py</code> is imported lazily, so skipping this extra doesn't affect
+anything else.</p>
+<h2 id="usage">Usage</h2>
+<pre><code class="language-bash">video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
+video-as-code validate project.yaml                     # validate without building
+video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -&gt; YAML
+video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # build + render straight to video via melt
+video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
+video-as-code transitions                               # every wipe shape a luma: can name
+video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
+video-as-code docs [--with photo.jpg] [--public DIR]    # this documentation as a local web, the gallery in it
+video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
+</code></pre>
+<p><code>build</code> and <code>render</code> also take <code>--fetch</code>, to run <code>fetch</code> first, and
+<code>--proxy WxH</code> (e.g. <code>--proxy 480x270</code>) for a preview from light copies -
+see below.</p>
+<p><code>video-as-code render</code> needs <code>melt</code> (the MLT engine kdenlive itself renders with) on
+PATH — it's not bundled with <code>video-as-code</code>. It's equivalent to running
+<code>video-as-code build</code> and then <code>melt output.kdenlive -consumer avformat:output.mp4</code>
+yourself, minus the intermediate <code>.kdenlive</code> file (built to a temp
+directory and discarded); <code>-o</code>'s folder is created if it doesn't exist. <code>VIDEO_AS_CODE_MELT</code> points at another <code>melt</code>
+- e.g. an MLT built from source, newer than the distribution's (set
+<code>MLT_REPOSITORY</code> for its plugins, as melt itself expects).</p>
+<p><code>render --split</code> is for machines without the RAM to render the whole
+project in one melt run (melt loads every clip up front and keeps every
+decoded photo until it exits). The picture is rendered in segments, each
+from a copy of the project trimmed to the clips it touches, and joined
+without re-encoding; the sound is rendered in one pass over the whole
+length (in segments, a time-stretched song would click at every seam) and
+muxed in. Segments are as long as an estimate of their memory allows -
+long where few clips play, short where crossfades pile up - within
+<code>--max-mem</code> MB each (default: 60% of the memory available when it
+starts), and each melt runs in a memory-capped <code>systemd-run --user
+--scope</code> when available, so a wrong estimate kills that melt, not the
+session. Every segment's render is cached in <code>.render_cache/</code> next to the
+YAML, keyed by its trimmed project and the files it reads: after an edit
+only the segments it touches are rendered again.</p>
+<p><code>video-as-code import</code> recognizes everything this generator knows how to produce
+(video/audio tracks, trimmed clips, fade to/from black, volume fades,
+per-clip mute, audio pan, speed changes (forward or reverse), title
+clips, guides/markers, track names/hidden/locked/audio-muted state, bin
+folders, project notes, cross-track <code>wipe</code>/<code>affine</code> transitions (into a
+low-level <code>transitions:</code> key), <code>iris</code>/<code>flip</code>/<code>glitch</code>/<code>delaygrab</code>/
+<code>cairogradient</code> reveal/burst filters, chroma-key, burned-in text
+overlays, Ken Burns pan+zoom, focus-pull rects, <code>qtblend</code>
+picture-in-picture compositing (static or animated via
+<code>position_keyframes:</code>), edge crop, freeze-frame, the "old film"
+filter pack, lift/gamma/gain color grading, and video stabilization).
+Anything it doesn't recognize isn't discarded: it's kept as-is under
+<code>x_kdenlive_raw:</code> in the output YAML so you can decide by hand what to
+do with it. Speed ramps (<code>speed_ramp:</code>) are a known exception — a
+dense per-frame keyframe map can't be cleanly inverted back to its
+original breakpoints, so those fall to <code>x_kdenlive_raw:</code> too,
+deliberately.</p>
+<p>See <code>examples/simple/</code> for a minimal working project (tiny generated
+assets, one audio + one video track, fades, trims, a speed change, mute,
+and a title clip): <code>video-as-code build examples/simple/project.yaml</code>. See
+<code>examples/scenes/</code> for the high-level <code>scenes:</code> compiler (a cut, a
+<code>dissolve</code>, and a <code>wipe</code>, all from the same two tiny images):
+<code>video-as-code build examples/scenes/project.yaml</code>.</p>
+<p>See <a href="making-a-video.html"><code>docs/making-a-video.md</code></a> for a short step-by-step howto of this
+whole flow, and <a href="project-yaml.html"><code>docs/project-yaml.md</code></a> for every key a project file
+accepts.</p>
+<h3 id="-proxy-light-previews-of-only-the-parts-used"><code>--proxy</code>: light previews of only the parts used</h3>
+<p>Full-resolution phone videos (HEVC, 1080p and up) are what makes <code>melt</code>
+run out of memory on a laptop - it builds every clip's producer at load -
+and slow even when it doesn't. With <code>--proxy 480x270</code>, <code>build</code>/<code>render</code>
+read each video from a light H.264 copy of <strong>only the source ranges the
+timeline uses</strong> (ranges less than 5 s apart share a copy, far-apart uses
+of one long video get one copy each, each with a 1 s margin), with the
+placements' source times shifted to match. The copies are cached in
+<code>.proxies/</code> next to the YAML (add it to <code>.gitignore</code>), so later previews
+skip straight to rendering.</p>
+<ul>
+<li><code>crop:</code> margins are scaled to the copy's size; colours stay as the
+  original's (a colour-tagged video keeps its tags; an untagged HD one
+  has its colour matrix converted, since MLT guesses it by height).</li>
+<li>Stills, gifs and audio files are used as they are; so is a video
+  played backwards (negative <code>speed:</code>).</li>
+<li>With flat <code>speed:</code>, where a clip starts in its copy is rounded to a
+  frame of the warped clip - up to <code>speed / fps / 2</code> source seconds off.
+  That's invisible in a preview, and why this is for previews: render
+  the final video without <code>--proxy</code>.</li>
+<li>Every copy starts near the part that's used, so the freeze MLT's
+  timewarp producer has with a large <code>source_in</code> plus <code>speed:</code> doesn't
+  happen in a proxied render.</li>
+</ul>
+<p>The project's own <code>width</code>/<code>height</code> don't change: for a lighter preview,
+render a copy of the YAML with a smaller canvas too.</p>
+<h3 id="video-as-code-fetch-assets-from-a-google-photos-shared-album"><code>video-as-code fetch</code>: assets from a Google Photos shared album</h3>
+<p>If the material for a video lives in a Google Photos album, share it by
+link and point the project at it; bin clips can then name an album item
+by its <strong>original file name</strong> instead of a local <code>path:</code>:</p>
+<pre><code class="language-yaml">project:
+  # ...
+  sources:
+    album: https://photos.app.goo.gl/...   # the album's share link
+    dir: assets                            # where to download (default: assets)
+bin:
+  - id: slide          # the readable name the timeline uses, as always
+    source: PXL_20250830_085416309.mp4
+</code></pre>
+<p><code>video-as-code fetch</code> downloads what's missing into <code>dir</code>, at original
+quality, as <code>&lt;capture date&gt;_&lt;id&gt;&lt;ext&gt;</code> (<code>20250830_slide.mp4</code> above; set
+<code>local_name:</code> on the clip for a different one), and records each item in
+<code>sources.lock.yaml</code> next to the YAML (album item id, size, sha256,
+capture time - machine-written, meant to be committed, never edited by
+hand) so later fetches go straight to it. Renaming a clip's <code>id</code> renames
+its local file on the next <code>fetch</code> instead of downloading it again. <code>build</code>/<code>render</code>
+never download on their own: a <code>source:</code> clip that isn't on disk yet is a
+validation error pointing at <code>fetch</code> (or <code>--fetch</code>). Add <code>.fetch_cache/</code>
+(file names already looked up in the album) to your <code>.gitignore</code>.</p>
+<p>A file name doesn't always pick one album item: cameras restart their
+numbering, and WhatsApp names pictures after the day they arrived
+(<code>IMG-20150308-WA0003.jpg</code> can be several different photos from several
+phones). With a plain name, <code>fetch</code> takes the item taken closest to the
+time in its name - which may be the wrong one. Add its capture time to
+say which:</p>
+<pre><code class="language-yaml">  - id: beach
+    source: {name: IMG-20150308-WA0003.jpg, taken: &quot;2015-03-08 15:23:51&quot;}
+</code></pre>
+<p><code>taken</code> is the capture time as Google Photos has it, local to where it
+was taken, to the second (the same value <code>sources.lock.yaml</code> records).
+If even that ties - a race photographer's site can hand out different
+pictures under the same name and time - add <code>size: [w, h]</code>, the item's
+size in pixels (one of the two is enough when it alone tells them apart).
+And if even the size ties - two different pictures saved again on the
+same day can share name, time and size - add <code>id:</code>, the album item's own
+id (the <code>media_id</code> that <code>sources.lock.yaml</code> records for it, <code>AF1Qip...</code>):</p>
+<pre><code class="language-yaml">  - id: cake
+    source: {name: 2023-04-28.jpg, id: AF1QipExampleExampleExampleExampleExample}
+</code></pre>
+<p>It names exactly one item, so it's enough on its own; <code>fetch</code> still checks
+that the item's name (and <code>taken</code>/<code>size</code>, if given) match, and reports it as
+not found otherwise. The id only lasts while the item stays in the album:
+removed and added again, it gets a new one - which is why name, time and
+size remain the usual way.
+That's what keeps such a project buildable from its YAML alone: without
+it, the only way to point at the right one would be a local copy of the
+file, which a fresh checkout doesn't have. In the lock and on disk the
+item is then known as <code>&lt;name&gt;@&lt;taken&gt;#&lt;w&gt;x&lt;h&gt;!&lt;id&gt;</code> (each part only if
+given), so two same-named items never overwrite each other.</p>
+<p>The album can also be given by <strong>name</strong>, before it exists:</p>
+<pre><code class="language-yaml">  sources:
+    album:
+      name: &quot;vid · summer · 2014&quot;                 # what to call it
+      url: https://photos.app.goo.gl/...       # its share link, once it has one
+</code></pre>
+<p>That's for a tool that builds the album itself - finding the clips in a
+photo library, putting them in a new album with that name and sharing it
+- and then writes the link in as <code>url:</code> (<code>albums.write_album_url</code>, a text
+edit that keeps the YAML's comments and layout). Until it has a <code>url:</code>,
+<code>fetch</code> says the album doesn't exist yet instead of downloading. Keep the
+album afterwards: <code>fetch</code> needs it whenever a file is missing - on another
+machine, or after pruning (below) - and an album takes no extra space,
+since its items are the library's own.</p>
+<p>A project that remakes an old video can name that video too, so <code>fetch</code>
+brings it along (it's what the remake is compared with, and what shots
+still missing from the album are cut out of meanwhile):</p>
+<pre><code class="language-yaml">  sources:
+    reference:
+      url: https://youtu.be/...                 # e.g. an unlisted upload
+      path: reference/Old edit.mp4              # default: reference/reference.mp4
+</code></pre>
+<p>It's downloaded whole - from YouTube, video and sound merged into an mp4 -
+once; delete the file to download it again. <code>build</code>/<code>render</code> don't need it
+unless a clip cuts from it. <code>url:</code> can be a list, tried in order; YouTube
+re-encodes its videos now and then, so while shots are cut from it, put an
+exact copy first (e.g. a Google Drive link to the file the project was
+made with) and YouTube after it. Its size and sha256 go in the lock's
+<code>reference:</code> section, and <code>fetch</code> says so when a download isn't that file.</p>
+<p>What isn't in the album - typically the music - can come from links
+instead, tried in order until one works:</p>
+<pre><code class="language-yaml">  - id: music
+    url:
+      - https://www.youtube.com/watch?v=...          # YouTube: the audio only
+      - https://drive.google.com/file/d/.../view     # fallback: the same file on Drive
+</code></pre>
+<p><code>fetch</code> stores it as <code>&lt;id&gt;&lt;ext&gt;</code> (<code>music.m4a</code>; <code>local_name:</code> works here
+too) and records which link it came from, with its size and sha256, in
+the lock's <code>links:</code> section. From YouTube it takes the m4a audio stream
+as served, through the external <code>yt-dlp</code> - which breaks every time
+YouTube changes, so keep it current (a distro's package usually isn't;
+<code>VIDEO_AS_CODE_YT_DLP</code> sets the command to run, e.g.
+<code>"python3 ~/bin/yt-dlp --js-runtimes node"</code>). That fragility is what the
+fallback is for: upload the very file YouTube gave you to Drive, shared
+as "anyone with the link", so both links yield the same audio. Timings
+cut to the music depend on it: YouTube's other audio streams can start
+tens of milliseconds off.</p>
+<p>When something can't be fetched - a name the album doesn't have, a
+download that broke, a clip none of whose links work - <code>fetch</code> still
+gets everything else, and then, in a terminal, asks about each problem:
+retry it, give a link to download it from instead, name the album item
+it really is, use a file from this machine (only there: elsewhere it'll
+still be missing) or skip it. A link or a new name is written straight
+into the YAML (a text edit that keeps comments and layout), and <code>fetch</code>
+runs again for what's still missing. Outside a terminal it just fails,
+listing everything that went wrong.</p>
+<p>Two things to keep in mind: anyone with the share link can see the whole
+album, so keep projects that contain one in a private repository; and
+this reads the album's public web page rather than an official API (the
+Google Photos APIs no longer allow re-downloading a user's media
+unattended), so a change on Google's side can break it until
+<code>gphotos.py</code> is updated.</p>
+<h4 id="derive-clips-generated-from-another-file"><code>derive:</code>: clips generated from another file</h4>
+<p>A cut, a reversed gif or a louder copy doesn't need to be stored: describe
+it and it's generated with ffmpeg.</p>
+<pre><code class="language-yaml">bin:
+  - id: jump
+    derive:
+      source: PXL_20250830_085416309.mp4   # or path: a local file, or clip: another bin id
+      trim: [12, 16]                        # source seconds
+      fps: 30
+  - id: jump_back
+    derive: {clip: jump, reverse: true}
+</code></pre>
+<p>Operations, applied in this order: <code>trim: [start, end]</code> and <code>cut:
+[[start, end], ...]</code> (ranges removed from the middle, picture and sound
+alike - both in the input's own seconds), <code>crop: {x, y,
+w, h}</code> (source pixels), <code>scale: [w, h]</code> (<code>-1</code> on one side keeps the aspect
+ratio), <code>devignette:</code> (undoes a vignette baked into the input, such as a
+shot taken from an old edit: how bright its corners are relative to its
+centre, e.g. <code>0.81</code>), <code>fps:</code>, <code>reverse: true</code> (picture and sound) and <code>volume:</code> (audio
+gain factor) and, last, <code>upscale: 4</code>. A gif stays a gif, a still image
+becomes a <code>.png</code>, audio an <code>.m4a</code> and video an <code>.mp4</code> (h264 + aac, keeping
+the sound if there is any).</p>
+<p><code>motion: true</code> takes the short video a phone's motion photo (Google's
+<code>.MP.jpg</code>) carries inside it instead of the photo, so the result is an
+<code>.mp4</code>; the other operations then apply to that video.</p>
+<p><code>intra: true</code> encodes a video result with every frame a keyframe. MLT's
+<code>speed:</code> (timewarp) can stall for a moment, or fail, near the end of a
+file with long keyframe intervals; an all-intra file avoids that, at the
+cost of a bigger file. It only affects video outputs.</p>
+<p><code>upscale: 4</code> enlarges a still or a gif x4 with Real-ESRGAN, an AI upscaler
+that invents plausible detail rather than stretching pixels - for small
+album items (Google Photos' own animations are ~800x600) that would look
+blurry full screen. It runs <code>realesrgan-ncnn-vulkan</code> on any Vulkan
+device, an integrated GPU included, but slowly there - a minute or two
+per frame - so it's limited to stills and gifs (a gif's repeated frames
+are upscaled once, and its per-frame delays are kept). <code>fetch</code> offers to
+download it when a project needs it (or run <code>video-as-code
+install-upscaler</code>: a pinned release, checked against its sha256, into
+<code>~/.local/share/video-as-code/realesrgan/</code>); <code>VIDEO_AS_CODE_REALESRGAN</code>
+points at another copy. Gifs need Pillow (<code>pip install
+'video-as-code[upscale]'</code>).</p>
+<p>The result is cached under <code>&lt;dir&gt;/.derived/</code> with the spec's hash in its
+name: <code>build</code>/<code>render</code>/<code>validate</code> generate it once, offline, whenever the
+input is on disk (and again only if the spec or the input itself
+changes), and <code>fetch</code> downloads album inputs and generates right away. An
+album item used only as a <code>derive:</code> input is still downloaded, under its
+own name; one that a plain <code>source:</code> clip also uses is the same file,
+downloaded once. The cache can always be deleted and rebuilt, so
+<code>&lt;dir&gt;/.derived/</code> belongs in your <code>.gitignore</code> too.</p>
+<p><code>fetch --prune</code> then deletes the album items used only as <code>derive:</code>
+inputs once everything made from them is generated - often big originals
+of which a few seconds are used. The output's record of its input's
+sha256, matching the lock's, is enough for <code>build</code>/<code>render</code>/<code>validate</code> to
+keep using it, and <code>fetch</code> downloads the input again only if a <code>derive:</code>
+made from it changes (or its output is deleted).</p>
+<p>Every <code>render</code> also does that by itself, for files no render has needed
+in a while:</p>
+<pre><code class="language-yaml">project:
+  sources:
+    album: https://photos.app.goo.gl/...
+    prune_after_days: 7   # the default; 0 = never
+</code></pre>
+<p>Before rendering, it deletes what the tool can always bring back and
+nothing this render reads: album items used only as <code>derive:</code> inputs
+(once their outputs stand on their own, as above), album items nothing
+uses any more, and generated files in <code>.derived/</code> and <code>.proxies/</code> - each
+only if no <code>build</code>/<code>validate</code>/<code>render</code> has used it for that many days
+(they keep a record in <code>.fetch_cache/last_used.json</code>). A file seen for
+the first time just starts counting, and a file only on this machine
+(one the lock doesn't know) is never touched. YAML files sharing a
+sources folder (a project and its preview) share that record. <code>render
+--no-prune</code> skips it once.</p>
+<h3 id="openshots-transitions-luma-openshotname">OpenShot's transitions: <code>luma: openshot/&lt;name&gt;</code></h3>
+<p>A <code>wipe</code> can also take any of the 412 transitions of
+<a href="https://www.openshot.org">OpenShot</a>, on top of this project's own 12
+shapes - <code>melt</code> itself ships none. They're grayscale masks, as MLT's
+<code>luma</code> transition uses them, so they render in the same single melt
+pass and open in kdenlive as an ordinary wipe:</p>
+<pre><code class="language-yaml">scenes:
+  - transition: wipe
+    luma: openshot/twirl_12
+    luma_softness: 0.2     # softer edge, 0..1
+    luma_reverse: true     # light parts first
+    clips: [...]
+</code></pre>
+<p>They're not bundled (they're GPL-3.0+): they're read from openshot-qt
+(<code>sudo apt install openshot-qt</code>), or from the folder
+<code>VIDEO_AS_CODE_OPENSHOT_TRANSITIONS</code> points at, and each one used is
+converted to PGM once, under <code>~/.cache/video-as-code/lumas-openshot/</code>.
+<code>video-as-code transitions</code> lists every name, and <code>video-as-code
+gallery</code> shows each one playing (see below). Like OpenShot, MLT
+stretches each map to the frame - about half of them are 4:3.</p>
+<p>What they add, by family (<code>&lt;family&gt;_&lt;n&gt;</code>, how many):
+<code>twirl_*</code> (39), <code>distortion_*</code> (24), <code>luminous_boxes_*</code> (22),
+<code>ray_light_*</code> (20), <code>deform_*</code> (18), <code>cross_*</code> (17), <code>board_*</code> (14),
+<code>barr_ripple_*</code> (12), <code>wandering_*</code> (12), <code>boxes_*</code> (11), <code>future_*</code> (11),
+<code>luminous_spiral_*</code> (11), <code>flower_*</code> (10), <code>fish-eyes_*</code> (9),
+<code>fractal_*</code> (8), <code>postime_*</code> (8), <code>fogg_*</code> (7), <code>stretched_*</code> (5),
+<code>hourglass_*</code>, <code>luminous_frame_*</code>, <code>mosaic_*</code>, <code>mozaic_*</code>, <code>ripple_*</code>,
+<code>sunlight_*</code>, <code>whirpool_*</code>, <code>wipe_diagonal_*</code> (4 each), <code>hatched_*</code>,
+<code>triangle_*</code> (3 each), and two each of <code>big_barr_shaking_*</code>, <code>checked_*</code>,
+<code>clouds_*</code>, <code>frame_*</code>, <code>middle_barr_ripple_*</code>, <code>ray_light_left_*</code>,
+<code>ray_light_right_*</code>, <code>right_mozaic_*</code>, <code>sphere_*</code>, <code>spiral_*</code>,
+<code>spiral_abstract_*</code>, <code>spiral_big_*</code>, <code>spiral_small_*</code>, <code>stain_*</code>,
+<code>star_*</code> and <code>strange_barr_*</code>. Then 84 single ones: arrows
+(<code>left_arrow</code>, <code>middle_top_arrow</code>, <code>ripple_luminous_low_arrow</code>...),
+bars and blinds (<code>big_barr</code>, <code>crossed_barr</code>, <code>blinds_sliding</code>,
+<code>vertical_blinds_in_to_out</code>...), lozenges, mosaics, <code>clock_left_to_right</code>,
+<code>wave_left_up</code> and its three siblings, <code>bubbles</code>, <code>puzzle</code>, <code>mountains</code>,
+<code>spots</code>, <code>sun_shaking</code>, <code>dissolve</code>, <code>openshot_logo</code>... The 7 in
+OpenShot's <code>common/</code> (<code>fade</code>, <code>circle_in_to_out</code>/<code>circle_out_to_in</code>,
+<code>wipe_left_to_right</code> and the other three wipes) are what <code>dissolve</code>,
+<code>radial</code>, <code>linear_x</code> and <code>linear_y</code> already do; <code>openshot/fade</code> is all
+one shade, which MLT plays as a cut - use <code>transition: dissolve</code>.</p>
+<h3 id="melt-and-meltservice-any-mlt-filter-or-transition"><code>melt:</code> and <code>melt/&lt;service&gt;</code>: any MLT filter or transition</h3>
+<p>For what there's no key of its own for: a clip's <code>melt:</code> takes any
+filter the <code>melt</code> that renders it has, by service name - frei0r's ~100,
+ffmpeg's as <code>avfilter.*</code>, MLT's own - and <code>transition: melt/&lt;service&gt;</code>
+any of its transitions:</p>
+<pre><code class="language-yaml">- clip: beach
+  start: 0
+  duration: 4
+  melt:
+    - frei0r.cartoon: {diffspace: 0.4}
+    - avfilter.hue: {av.h: &quot;0=0;100=180&quot;}
+</code></pre>
+<p>Values are written as they are, in MLT's own units and keyframe syntax.
+An unknown service or property is an error, with the closest names, so
+a typo doesn't render as nothing; <code>import</code> brings filters and
+transitions it doesn't otherwise recognize back as these entries,
+instead of <code>x_kdenlive_raw</code>, when the installed melt has them. See
+<a href="project-yaml.html"><code>docs/project-yaml.md</code></a>.</p>
+<h3 id="transition-gl-gl-transitions-125-shaders"><code>transition: gl</code>: gl-transitions' 125 shaders</h3>
+<p><a href="https://gl-transitions.com">gl-transitions</a>' collection - cube, doorway,
+page curl, morph, ripple, burn... - as scene transitions:
+<code>transition: gl</code> with <code>gl: cube</code> (and, optionally, <code>gl_params: {...}</code>).
+MLT doesn't run GLSL itself, so <code>video-as-code install-gl-transitions</code>
+builds, once, a small frei0r plugin that does (EGL and GLES 3, no
+window): melt then renders them in the same pass as everything else.
+The shaders are bundled (MIT, two BSD; see
+<code>src/video_as_code/gltransitions_data/LICENSE</code>). See
+<a href="project-yaml.html"><code>docs/project-yaml.md</code></a>.</p>
+<h3 id="presets-presets-use-and-presets_file">Presets: <code>presets:</code>, <code>use:</code> and <code>presets_file:</code></h3>
+<p>A set of keys used again and again - a transition with its duration, a
+look - can be named once and used by name, anywhere the file has a map:</p>
+<pre><code class="language-yaml">presets:
+  page: {transition: gl, gl: BookFlip, transition_duration: 0.8}
+scenes:
+  - use: page
+    clips: [a.jpg, b.jpg]
+</code></pre>
+<p><code>use:</code> takes a list too; keys written next to it win over the preset's;
+a preset may use others. <code>presets_file: presets.yaml</code> brings in another
+file's <code>presets:</code>, to share them between projects. See
+<a href="project-yaml.html"><code>docs/project-yaml.md</code></a>.</p>
+<h3 id="a-project-in-several-files-parts">A project in several files: <code>parts:</code></h3>
+<p>A long video can be split into files - a main one with <code>project:</code> and a
+list of parts, each with its own <code>bin:</code>/<code>scenes:</code>/<code>timeline:</code>, and parts
+may list parts:</p>
+<pre><code class="language-yaml"># trip.yaml
+project: {id: trip, title: Trip, fps: 25, width: 1920, height: 1080}
+parts:
+  - intro.yaml
+  - {file: mountains/all.yaml, transition: dissolve, transition_duration: 1}
+</code></pre>
+<p>Each part is a nested sequence in kdenlive; its paths are relative to
+its own file, its bin ids are its own, and the main file's presets reach
+it. <code>video-as-code render trip.yaml --part mountains/all</code> renders one
+part alone; <code>fetch</code>, <code>--proxy</code> and <code>--split</code> work on each part, and
+<code>import</code> brings a project of parts back as files. See
+<a href="project-yaml.html"><code>docs/project-yaml.md</code></a>.</p>
+<h3 id="lottie-animations">Lottie animations</h3>
+<p>A Lottie animation (<code>.json</code>, or Telegram's <code>.tgs</code>) goes in the bin like
+any clip and plays, with its transparency, over the tracks below -
+animated titles, stickers, overlays from LottieFiles. melt's
+<code>glaxnimate</code> module plays it (the distributions' melt has it).</p>
+<h3 id="glsl-glsl-effects-on-a-clip"><code>glsl:</code>: GLSL effects on a clip</h3>
+<p><code>glsl: crt</code> (or <code>chromatic</code>, <code>wave</code>, <code>glitch</code>, <code>kaleidoscope</code>, <code>vhs</code>, or
+a <code>.glsl</code> file of your own with <code>vec4 effect(vec2 uv)</code>) runs a shader
+over a clip's picture on the GPU, with <code>time</code> and <code>progress</code> to animate
+it - through the plugin <code>video-as-code install-gl-transitions</code> builds.
+See <a href="project-yaml.html"><code>docs/project-yaml.md</code></a>.</p>
+<h3 id="libopenshots-effects-derive-openshot">libopenshot's effects: <code>derive: {openshot: [...]}</code></h3>
+<p>OpenShot's effects - Wave, AnalogTape, LensFlare, SphericalProjection,
+Pixelate... and its audio ones (Echo, Robotization...) - applied to a
+clip when it's generated, by libopenshot itself:</p>
+<pre><code class="language-yaml">- id: wavy
+  derive:
+    path: media/sea.mp4
+    openshot: [{effect: Wave, amplitude: 0.6, wavelength: {0: 0.06, 3: 0.2}}, {effect: AnalogTape}]
+</code></pre>
+<p>It needs <code>python3-openshot</code> (which <code>openshot-qt</code> brings); it runs in a
+process of its own, with the system's Python. Two of its effects are
+refused, saying why: <code>Caption</code> draws nothing outside OpenShot's own
+editor (a title clip does that), and <code>Mask</code> needs a mask picture it
+can't be given here. See <a href="project-yaml.html"><code>docs/project-yaml.md</code></a>; <code>video-as-code gallery</code>
+shows each one, over the sample video or sound.</p>
+<h3 id="video-as-code-gallery-every-transition-and-effect-in-the-browser"><code>video-as-code gallery</code>: every transition and effect, in the browser</h3>
+<p>Opens a page with everything a project YAML can ask for - the
+transitions between clips, the wipe shapes, the clip effects, the
+<code>derive:</code> operations and titles - each with the YAML that asks for it
+(click to copy) and a preview of what it does. The previews are real
+renders: each is a tiny project rendered by <code>video-as-code render</code>
+itself, with the same <code>melt</code>, so what the page shows is what a render
+gives, and one that no longer renders shows its error instead. They
+play over photos of Ubuntu's own wallpapers when they're installed
+(<code>/usr/share/backgrounds</code>, read there, not bundled), else over generated
+pictures; <code>--with photo.jpg</code> (or a video) puts your own under them.
+Two tabs keep transitions (between clips) and effects (on one) apart;
+sections start folded, the links at the top open and jump to each one,
+and a search opens those it finds something in.</p>
+<p>Besides this project's own keys, the page has every filter and
+transition the installed <code>melt</code> has (<code>melt:</code> and <code>melt/&lt;service&gt;</code>), at
+their defaults: video ones over the pictures, audio filters over a
+sample sound (a plucked arpeggio, to listen to), each with melt's own
+description, and marked when at its defaults it changes nothing - an
+option hides those. One that does is shown with other values instead
+(each ranged parameter toward one end, then the other, up to five
+tries), and one that can't render here says why in a line - melt
+crashing on it, ffmpeg unable to set it up - with the whole error
+folded under it. Filters that only measure (levels, loudness,
+silences) are listed apart, without a preview. melt is asked about its services once per version
+(<code>melt-catalog.json</code> in the cache), and their previews depend on melt
+and the samples only, so a change to this project doesn't render them
+again.</p>
+<p>The first run renders ~40 previews and makes the wipe shapes'
+thumbnails (a minute or two); everything is cached in
+<code>~/.cache/video-as-code/gallery/</code>, so it then opens at once, and after
+an update of the tool or of <code>melt</code> only what changed is rendered
+again. <code>--no-open</code> only writes the page and prints where it is.</p>
+<h3 id="video-as-code-docs-this-documentation-as-a-local-web-with-the-gallery"><code>video-as-code docs</code>: this documentation as a local web, with the gallery</h3>
+<pre><code class="language-bash">video-as-code docs [--with photo.jpg] [--no-open]
+</code></pre>
+<p>Builds this README and the guides in <code>docs/</code> (making a video, the
+project YAML reference, reconstructing) as HTML pages, with the
+gallery as one more of them, and opens them in the browser. The two are
+linked both ways: each key of the reference that has cards in the
+gallery (<code>transition</code>, <code>luma</code>, <code>lut</code>, <code>glsl</code>, <code>melt</code>, <code>title_style</code>,
+derive:'s <code>openshot</code>...) has a ▶ to its first card, and each card names
+its key, linked to its row in the reference.</p>
+<p>It's built on your machine, not published: the gallery's previews are
+renders with your <code>melt</code>, your plugins and your wallpapers, and the
+pages come from the Markdown of this checkout (a <code>pip install</code> without
+the source has no docs to build). Pages go to
+<code>~/.cache/video-as-code/docs/</code>, next to the gallery's
+<code>~/.cache/video-as-code/gallery/</code>; the gallery is rendered and cached as
+<code>video-as-code gallery</code> does. <code>--with</code> and <code>--no-open</code> as there. Needs
+the <code>docs</code> extra (see <em>Install</em>). This README stays as it is - the
+project's front page on GitHub - and is the docs' first page.</p>
+<h4 id="publishing-them-public-and-github-pages">Publishing them: <code>--public</code> and GitHub Pages</h4>
+<pre><code class="language-bash">video-as-code docs --public site/
+</code></pre>
+<p>writes, instead, a copy to publish in <code>site/</code>: the pages, the gallery
+and only the previews it shows, an <code>index.html</code> that goes to the docs
+and a <code>.nojekyll</code> (for Pages to serve the files as they are). It's
+built apart, in <code>~/.cache/video-as-code/public/</code> - its first run renders
+the whole gallery again - and made to be shared: the previews play over
+generated pictures, not the wallpapers' photos (each under its own
+licence); OpenShot's 412 wipe shapes (GPL-3.0) and your own LUTs are
+left out; <code>--with</code> isn't allowed. Each page says when and with which
+melt it was built. The folder must be new, empty (but for a <code>.git</code>) or one <code>--public</code>
+wrote before (its contents are then replaced).</p>
+<p>To serve it with GitHub Pages from a <code>gh-pages</code> branch (~55 MB of
+previews: kept off <code>master</code>, whose history doesn't grow with them),
+write it straight into a worktree of that branch - <code>--public</code> leaves
+its <code>.git</code> alone:</p>
+<pre><code class="language-bash">git worktree add --orphan -b gh-pages ../video-as-code-pages   # once; later: git worktree add ../video-as-code-pages gh-pages
+video-as-code docs --public ../video-as-code-pages --no-open
+cd ../video-as-code-pages &amp;&amp; git add -A &amp;&amp; git commit -m &quot;docs: rebuilt&quot; &amp;&amp; git push origin gh-pages
+</code></pre>
+<p>and once, in the repository's <em>Settings → Pages</em>: deploy from the
+<code>gh-pages</code> branch, its root. The docs are then at
+<code>https://&lt;user&gt;.github.io/video-as-code/</code>.</p>
+<h3 id="video-as-code-reconstruct-recovering-a-yaml-from-a-rendered-video"><code>video-as-code reconstruct</code>: recovering a YAML from a rendered video</h3>
+<pre><code class="language-bash">video-as-code reconstruct rendered.mp4 assets/ [-o output.yaml]
+</code></pre>
+<p>Unlike <code>video-as-code import</code>, this doesn't start from a <code>.kdenlive</code> project — it
+starts from an already-<strong>rendered</strong> video (a flat <code>.mp4</code>, no edit
+metadata) plus a folder of the source assets that presumably went into
+it, and tries to recover which asset appears where, trimmed how, and with
+what fades, by comparing pixel/audio content rather than parsing
+structured XML. There is no guaranteed correct answer here (see
+<code>ROADMAP.md</code> for how the matching works and its known limitations) —
+segments it isn't confident about are never silently guessed; they're
+kept under <code>x_reconstruct_unmatched:</code> in the output YAML for you to
+review by hand, the same way <code>video-as-code import</code> handles <code>x_kdenlive_raw:</code>.</p>
+<p>Treat its output as a rough first draft to check against the real
+project, not a finished YAML.</p>
+<p>See <a href="reconstructing.html"><code>docs/reconstructing.md</code></a> for a short step-by-step howto of this
+whole flow.</p>
+<h3 id="language">Language</h3>
+<p>All user-facing text (validation errors, CLI output, import warnings) goes
+through a small message catalog (<code>i18n.py</code>), keyed by token and looked up at
+call time. English is the source of truth and the fallback for any locale
+or key that isn't translated. Set <code>VIDEO_AS_CODE_LANG=es</code> to get the Spanish
+catalog:</p>
+<pre><code class="language-bash">VIDEO_AS_CODE_LANG=es video-as-code validate project.yaml
+</code></pre>
+<p>We deliberately don't read the system <code>LANG</code>/<code>LC_ALL</code>: locale selection is
+opt-in and explicit, so behavior doesn't silently change across machines
+and test runs stay deterministic. Code comments, docstrings, and this
+README are always in English regardless of <code>VIDEO_AS_CODE_LANG</code> — that setting only
+affects what a <code>video-as-code</code> <em>user</em> sees at runtime.</p>
+<h2 id="current-status">Current status</h2>
+<p>Verified by the test suite (<code>pytest</code>):</p>
+<ul>
+<li><strong>YAML schema and validation</strong> (<code>schema.py</code>): checks shape, types, that
+  referenced assets exist on disk, that each clip's <code>in</code>/<code>out</code>/<code>duration</code>
+  are consistent with the source file's real duration (via <code>ffprobe</code>,
+  <code>probe.py</code>), and that clips don't accidentally overlap within a track.
+  Collects all errors before raising, instead of stopping at the first one.</li>
+<li><strong><code>.kdenlive</code> generation</strong> (<code>xmlgen.py</code>): replicates the structure that
+  kdenlive 24-26.x produces on save (per-track tractors, dual playlist for
+  kdenlive's "mix" feature, project bin, fade to/from black on video,
+  volume fades on audio, per-clip mute, audio pan/balance, speed changes
+  (timewarp, forward or reverse, and multi-segment speed ramps via
+  <code>timeremap</code>), a <code>boomerang:</code> shorthand that auto-expands a clip into a
+  forward-then-reverse repeat (halving a held last frame at the turnaround,
+  <code>boomerang_trim_hold:</code>), source-seconds trimming (<code>source_in:</code>/<code>source_out:</code>),
+  dissolve/luma-wipe/affine (zoom, slide)/iris/flip/glitch/delaygrab/
+  cairogradient transitions, chroma-key compositing, burned-in text
+  overlays, Ken Burns pan+zoom, focus-pull (blur outside a rect),
+  static or animated picture-in-picture (<code>qtblend</code>), edge crop,
+  freeze-frame/hold, an "old film" filter pack (jitter/flicker/burn,
+  dust, scratches, grain), heart/bowtie procedural wipe shapes,
+  OpenShot's 412 transitions as wipe shapes (<code>lumas.py</code>),
+  lift/gamma/gain color grading, video stabilization (<code>deshake</code>),
+  title clips (<code>titles.py</code>, multi-line text), guides/markers, bin
+  folders, track name/hidden/locked/audio-muted state, project notes,
+  default <code>qtblend</code> filter). Deterministic output
+  (IDs derived via <code>ids.py</code>, no hashes/thumbnails, which kdenlive
+  recomputes on open anyway).</li>
+<li><strong>Reverse importer</strong> (<code>reverse.py</code>): <code>.kdenlive</code> -&gt; YAML, with a clean
+  split between what's recognized and what isn't (<code>x_kdenlive_raw</code>).</li>
+<li><strong><code>video-as-code reconstruct</code></strong> (<code>reconstruct.py</code>, optional <code>reconstruct</code> extra):
+  rendered video + assets folder -&gt; YAML, by content-based matching
+  instead of XML parsing. See the <em>Usage</em> section above and <code>ROADMAP.md</code>
+  for how it works and its known limitations.</li>
+<li><strong>CLI</strong> (<code>cli.py</code>): <code>build</code> / <code>validate</code> / <code>import</code> / <code>render</code> / <code>reconstruct</code> / <code>transitions</code> / <code>gallery</code>.</li>
+<li><strong>Seconds&lt;-&gt;frames conversion</strong> (<code>timecode.py</code>): common NTSC framerates
+  (23.976, 29.97...) as an exact fraction; deterministic round-half-up on
+  exact ties (see note below).</li>
+<li><strong>i18n message catalog</strong> (<code>i18n.py</code>): every user-facing string is a
+  token, with <code>en</code> and <code>es</code> catalogs and English as fallback (see
+  <em>Language</em> above).</li>
+</ul>
+<h3 id="note-on-time-rounding">Note on time rounding</h3>
+<p>MLT/kdenlive always works in whole frames, never in floating-point seconds.
+A value like <code>start: 0.5</code> at 25fps is 12.5 frames, which isn't exactly
+representable: it has to be rounded. We use round-half-up
+(<code>math.floor(x + 0.5)</code>) instead of Python's native <code>round()</code>
+(round-half-to-even), because half-to-even is unpredictable in this domain
+— it depends on the frame number's parity, not actual closeness, so 0.5s
+could come back as either 0.48s or 0.52s after a round trip with no
+intuitive pattern for whoever wrote the YAML. With round-half-up, exact
+ties always round up: the precision loss is unavoidable (12.5 isn't a whole
+number), but at least it's consistent and predictable. The 1-frame
+tolerance in the round-trip tests (<code>tests/test_reverse.py</code>) accounts for
+this limitation — it's not a test that was loosened carelessly.</p>
+<h2 id="whats-next">What's next</h2>
+<p>See <code>BACKLOG.md</code> for the unordered pool of known gaps and ideas, and
+<code>ROADMAP.md</code> for what's shipped and what's scheduled for the next version.</p>
+<h2 id="license">License</h2>
+<p>MIT - see <code>LICENSE</code>. The tools it drives are separate programs with their
+own licenses, run as they are, not bundled: melt/MLT (LGPL), kdenlive
+(GPL), ffmpeg (LGPL/GPL), yt-dlp (Unlicense) and Real-ESRGAN's
+realesrgan-ncnn-vulkan (MIT; its models BSD-3-Clause), which <code>fetch</code>
+offers to download from its own releases.</p>
+</main>
+<footer>Built with video-as-code docs --public on 2026-10-22, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<script>
+// a link here to a row opens nothing more, but shows it: scrolled to, below the bar
+if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }
+</script>
+</body>
+</html>

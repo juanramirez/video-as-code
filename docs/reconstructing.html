@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to recover a YAML from an already-rendered video - video-as-code</title>
+<style>
+:root { color-scheme: light dark; --bg: #fdfdfc; --fg: #1d1f21; --muted: #6b7075; --line: #e2e4e6; --code: #f2f3f4; --accent: #2a6fdb; }
+@media (prefers-color-scheme: dark) { :root { --bg: #16181a; --fg: #e4e6e8; --muted: #9aa0a6; --line: #2c3034; --code: #212427; --accent: #7aa7f0; } }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, sans-serif; }
+nav { position: sticky; top: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 10px 16px; background: var(--bg);
+      border-bottom: 1px solid var(--line); z-index: 1; }
+nav a { color: var(--muted); text-decoration: none; }
+nav a[aria-current], nav a:hover { color: var(--fg); }
+main { max-width: 960px; margin: 0 auto; padding: 8px 16px 64px; }
+a { color: var(--accent); }
+code { font: 0.9em ui-monospace, monospace; background: var(--code); padding: 1px 4px; border-radius: 4px; }
+pre { background: var(--code); padding: 12px; border-radius: 6px; overflow-x: auto; }
+pre code { padding: 0; background: none; }
+table { border-collapse: collapse; display: block; overflow-x: auto; margin: 12px 0; }
+th, td { border: 1px solid var(--line); padding: 6px 10px; vertical-align: top; text-align: left; }
+tr:target { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+a.to-gallery { text-decoration: none; font-size: 0.8em; margin-left: 4px; }
+h1, h2, h3 { line-height: 1.25; }
+footer { max-width: 960px; margin: 0 auto; padding: 16px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<nav><a href="index.html">video-as-code</a><a href="making-a-video.html">How to make a video</a><a href="project-yaml.html">Project YAML reference</a><a href="reconstructing.html" aria-current=page>How to recover a YAML from an already-rendered video</a><a href="../gallery/index.html">Gallery</a></nav>
+<main>
+<h1 id="how-to-recover-a-yaml-from-an-already-rendered-video">How to recover a YAML from an already-rendered video</h1>
+<p>For when you have a flat, already-rendered video (a <code>.mp4</code>, no edit
+metadata) and the source assets that probably went into it, but no
+project file at all - not even a <code>.kdenlive</code>. <code>video-as-code
+reconstruct</code> recovers an approximate YAML by comparing pixel/audio
+content, not by parsing structure (there's no structure to parse).</p>
+<p>If you <em>do</em> have a <code>.kdenlive</code> project file, use <code>video-as-code
+import</code> instead (see <a href="index.html"><code>README.md</code></a>) - it's exact, since it's reading real
+edit data rather than guessing from pixels.</p>
+<h2 id="1-install-the-reconstruct-extra">1. Install the <code>reconstruct</code> extra</h2>
+<pre><code class="language-bash">pip install -e &quot;.[dev,reconstruct]&quot;
+</code></pre>
+<p>Needs <code>numpy</code>/<code>Pillow</code> on top of the base install, plus <code>ffmpeg</code>/
+<code>ffprobe</code> on <code>PATH</code>.</p>
+<h2 id="2-gather-the-candidate-source-assets">2. Gather the candidate source assets</h2>
+<p>Put every file that might appear in the render into one folder - photos,
+clips, audio tracks. Extra, unused files in there are fine (they're
+just candidates); the matcher figures out which ones actually appear.</p>
+<h2 id="3-run-it">3. Run it</h2>
+<pre><code class="language-bash">video-as-code reconstruct rendered.mp4 assets/ -o output.yaml
+</code></pre>
+<p>This is a real, multi-minute pipeline on non-trivial footage (several
+full-video decodes) - it prints progress per stage as it runs (probing,
+scanning the asset bank, extracting signatures, matching each detected
+segment) so it doesn't look hung.</p>
+<h2 id="4-read-the-output">4. Read the output</h2>
+<ul>
+<li>Confidently matched clips land in <code>output.yaml</code>'s <code>timeline.tracks:</code>
+  like any other project - trims, fades, and speed changes recovered
+  where detected.</li>
+<li>Anything the matcher <em>isn't</em> confident about is never silently
+  guessed: it's collected under <code>x_reconstruct_unmatched:</code> instead, each
+  entry with a <code>where</code> (timestamp range), a <code>best_guess</code>, and a
+  <code>confidence_pct</code> (0-100, higher is better - see <code>ROADMAP.md</code> for what
+  it means). The same detail is printed as a warning while it runs.</li>
+</ul>
+<h2 id="5-review-and-fix-up-by-hand">5. Review and fix up by hand</h2>
+<p>Treat <code>output.yaml</code> as a rough first draft, not a finished project:</p>
+<ul>
+<li>Check every <code>x_reconstruct_unmatched</code> entry against the real video at
+  that timestamp - add the missing <code>clip:</code>/<code>start:</code>/<code>duration:</code> by hand
+  once you know what actually belongs there.</li>
+<li>Known blind spot: matching compares against each asset's <em>plain</em>
+  content, so a segment that's mid-fade in the render can score too low
+  to match confidently, or get split into extra spurious segments - see
+  <code>ROADMAP.md</code> for the details.</li>
+</ul>
+<h2 id="6-verify">6. Verify</h2>
+<pre><code class="language-bash">video-as-code render output.yaml -o check.mp4
+</code></pre>
+<p>Build and render the recovered YAML, then compare <code>check.mp4</code> against
+the original <code>rendered.mp4</code> - confirms the YAML actually reproduces what
+you think it does before you rely on it. From here on it's a normal
+YAML project - see <a href="making-a-video.html"><code>docs/making-a-video.md</code></a>.</p>
+</main>
+<footer>Built with video-as-code docs --public on 2026-10-22, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<script>
+// a link here to a row opens nothing more, but shows it: scrolled to, below the bar
+if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }
+</script>
+</body>
+</html>
