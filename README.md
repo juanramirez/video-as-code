@@ -6,6 +6,9 @@ Git): the `.yaml` is what you check in; the `.kdenlive` (XML/MLT) is
 regenerated deterministically with `video-as-code build` and doesn't need to live
 in the repo.
 
+These docs, with a gallery where each effect and transition plays, are
+also at <https://video-as-code.juan-ramirez.es/>.
+
 ## Install
 
 ```bash
