@@ -583,7 +583,7 @@ the whole gallery again - and made to be shared: the previews play over
 generated pictures, not the wallpapers' photos (each under its own
 licence); OpenShot's 412 wipe shapes (GPL-3.0) and your own LUTs are
 left out; `--with` isn't allowed. Each page says when and with which
-melt it was built. The folder must be new, empty (but for a `.git`) or one `--public`
+melt it was built. The folder must be new, empty (but for a `.git` or a `CNAME`) or one `--public`
 wrote before (its contents are then replaced).
 
 To serve it with GitHub Pages from a `gh-pages` branch (~55 MB of
@@ -600,6 +600,13 @@ cd ../video-as-code-pages && git add -A && git commit -m "docs: rebuilt" && git 
 and once, in the repository's *Settings → Pages*: deploy from the
 `gh-pages` branch, its root. The docs are then at
 `https://<user>.github.io/video-as-code/`.
+
+On a domain of your own instead (or if `<user>.github.io` already
+redirects to one that isn't served by GitHub): point it at Pages with a
+DNS record `CNAME docs.example.org → <user>.github.io` and give it in
+*Settings → Pages → Custom domain*. GitHub writes it to a `CNAME` file
+in `gh-pages`; `--public` leaves that file alone too, so the domain
+survives each rebuild (`git pull` in the worktree first, to have it).
 
 ### `video-as-code reconstruct`: recovering a YAML from a rendered video
 

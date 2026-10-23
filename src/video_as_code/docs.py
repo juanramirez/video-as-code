@@ -153,6 +153,9 @@ def build(
     return root / "index.html"
 
 
+KEPT = {".git", "CNAME"}
+
+
 def publish(
     out: Path,
     cache_root: Optional[Path] = None,
@@ -162,8 +165,9 @@ def publish(
     """The docs, to publish, in `out`: docs/ and gallery/ (its page and the
     previews it shows), index.html going to docs/, .nojekyll. A folder
     not empty must be one this wrote before (SITE_MARK): its contents are
-    replaced - but for a .git (a worktree of the branch Pages serves)."""
-    theirs = [p for p in out.iterdir() if p.name != ".git"] if out.exists() else []
+    replaced - but for a .git (a worktree of the branch Pages serves) and
+    a CNAME (the custom domain Pages serves it on)."""
+    theirs = [p for p in out.iterdir() if p.name not in KEPT] if out.exists() else []
     if theirs and not (out / SITE_MARK).exists():
         raise KdenliveAsCodeError(msg("docs.public_not_empty", path=out))
     base = (cache_root or default_cache_root()) / PUBLIC_DIR

@@ -87,15 +87,18 @@ def test_public_a_folder_to_publish(tmp_path: Path, monkeypatch):
     readme = (out / "docs" / "index.html").read_text(encoding="utf-8")
     assert "<footer>" in readme and "melt 7.36.1" in readme
     (out / ".git").write_text("gitdir: elsewhere", encoding="utf-8")  # (a worktree of gh-pages)
+    (out / "CNAME").write_text("docs.example.org\n", encoding="utf-8")  # (its custom domain)
     (out / "docs" / "old.html").write_text("", encoding="utf-8")
     docs.publish(out, cache_root=tmp_path / "cache")  # (again: its own folder, replaced)
     assert (out / ".git").exists() and not (out / "docs" / "old.html").exists()
+    assert (out / "CNAME").read_text(encoding="utf-8") == "docs.example.org\n"
 
 
 def test_public_into_a_new_worktree(tmp_path: Path, monkeypatch):
     _fake_gallery(monkeypatch, {})
     (tmp_path / "pages").mkdir()
     (tmp_path / "pages" / ".git").write_text("gitdir: elsewhere", encoding="utf-8")
+    (tmp_path / "pages" / "CNAME").write_text("docs.example.org\n", encoding="utf-8")
     docs.publish(tmp_path / "pages", cache_root=tmp_path / "cache")
     assert (tmp_path / "pages" / "docs" / "index.html").exists()
 
