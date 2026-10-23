@@ -9,6 +9,10 @@ dependencies = [
     "PyYAML>=6.0",
 ]
 
+[project.urls]
+Repository = "https://github.com/juanramirez/video-as-code"
+Documentation = "https://video-as-code.juan-ramirez.es/"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0",
