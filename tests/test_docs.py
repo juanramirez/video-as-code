@@ -108,7 +108,7 @@ def test_the_gallery_gets_the_docs_bar(tmp_path: Path, monkeypatch):
 
     monkeypatch.setattr(gallery, "build", fake)
     page = docs.build(cache_root=tmp_path / "cache", source=source).read_text(encoding="utf-8")
-    assert '<nav class="site"><a href="index.html" aria-current=page>video-as-code</a>' in page
+    assert '<nav class="site"><span class="pages"><a href="index.html" aria-current=page>video-as-code</a>' in page
     assert '<a href="../gallery/index.html">' in page
     bar = seen["site_nav"]
     assert '<a href="../docs/index.html">video-as-code</a>' in bar
