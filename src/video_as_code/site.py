@@ -22,7 +22,11 @@ nav.site .pages { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 18px; }
 nav.site a { color: var(--muted); text-decoration: none; }
 nav.site a[aria-current], nav.site a:hover { color: var(--fg); }
 nav.site .pages > a:first-child { color: var(--fg); font-weight: 600; }  /* the home: the site's name */
-nav.site a.repo { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+nav.site .out { display: flex; align-items: center; gap: 4px 18px; }
+/* once the pages wrap, the two on the right go one over the other */
+@media (max-width: 999px) { nav.site .out { flex-direction: column; align-items: flex-end; } }
+nav.site a.repo { display: inline-flex; align-items: center; gap: 6px; }
+nav.site .out a { white-space: nowrap; }
 nav.site a.repo svg { width: 1em; height: 1em; fill: currentColor; }
 nav.site .more { display: contents; }
 nav.site button.menu { display: none; }
@@ -56,9 +60,11 @@ GITHUB_MARK = (
 )
 
 
-def nav(pages: list[tuple[str, str]], current: str, here: str, repo: Optional[str] = None) -> str:
+def nav(pages: list[tuple[str, str]], current: str, here: str, repo: Optional[str] = None,
+        author: Optional[tuple[str, str]] = None) -> str:
     """The bar: `pages` as (path from the site's root, name), `current`
-    one of those paths, `here` the folder the page is in."""
+    one of those paths, `here` the folder the page is in; on the right,
+    the `author` ((name, URL): their site) and the `repo`."""
     def href(path: str) -> str:
         folder, _, name = path.rpartition("/")
         return name if folder == here else f"../{path}"
@@ -72,5 +78,11 @@ def nav(pages: list[tuple[str, str]], current: str, here: str, repo: Optional[st
             'onclick="this.setAttribute(\'aria-expanded\', this.closest(\'nav\').classList.toggle(\'open\'))">'
             '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg></button>')
     links = "".join(links[:1]) + (f'{menu}<span class="more">{"".join(links[1:])}</span>' if len(links) > 1 else "")
-    repo_link = f'<a class="repo" href="{html.escape(repo)}">{GITHUB_MARK}GitHub</a>' if repo else ""
-    return f'<nav class="site"><span class="pages">{links}</span>{repo_link}</nav>'
+    out = []
+    if author:
+        name, url = author
+        out.append(f'<a class="author" href="{html.escape(url)}">{html.escape(msg("docs.author", name=name))}</a>')
+    if repo:
+        out.append(f'<a class="repo" href="{html.escape(repo)}">{GITHUB_MARK}GitHub</a>')
+    right = f'<span class="out">{"".join(out)}</span>' if out else ""
+    return f'<nav class="site"><span class="pages">{links}</span>{right}</nav>'

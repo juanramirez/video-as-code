@@ -281,3 +281,5 @@ def test_inside_the_docs_the_gallery_wears_their_bar(tmp_path: Path):
     assert bar in page and 'class="hide-unchanged in-site"' in page
     assert 'class="docs"' not in page  # (the bar links the docs already)
     assert "@view-transition" in page and '<nav class="sections">' in page
+    themed = gallery._page([(entry, None)], {}, [], pictures, tmp_path, {}, {}, "../docs/index.html", "", bar, ":root{--bg:sepia}")
+    assert themed.index("<style>:root{--bg:sepia}</style>") > themed.index("@view-transition")  # (over theirs)
