@@ -51,6 +51,7 @@ PAGES = {
     "reconstructing.html": "docs/reconstructing.md",
 }
 REFERENCE = "project-yaml.html"
+SHORT = {"reconstructing.html": "How to recover a YAML"}  # (in the bar, where the title is too long)
 PUBLIC_DIR = "public"  # under the cache root: the published copy's own cache
 SITE_MARK = ".video-as-code-site"  # in a folder --public wrote, so it may write it again  # (the page with the keys the gallery's cards link to)
 
@@ -180,7 +181,7 @@ def build(
     repo, license = _project(source)
     about = _about(repo, license)
     gallery_path = f"{gallery.GALLERY_DIR}/index.html"
-    pages = [(f"{DOCS_DIR}/{page}", title) for page, (title, _) in bodies.items()] + [(gallery_path, msg("docs.gallery"))]
+    pages = [(f"{DOCS_DIR}/{page}", SHORT.get(page, title)) for page, (title, _) in bodies.items()] + [(gallery_path, msg("docs.gallery"))]
     gallery_page = gallery.build(own=own, cache_root=cache_root, on_progress=on_progress,
                                  doc_links=doc_links, docs_home=f"../{DOCS_DIR}/index.html", public=public,
                                  footer=about, site_nav=site.nav(pages, gallery_path, gallery.GALLERY_DIR, repo))
