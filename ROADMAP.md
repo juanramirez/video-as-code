@@ -1385,3 +1385,36 @@ whole video can be built from a fresh checkout anywhere.
   pages and the previews shown copied, with an `index.html` to the docs,
   a `.nojekyll`, and on each page when and with which melt it was built.
   Replaces only a folder it wrote itself.
+- **`build --format openshot`** — **implemented** (2026-10-24, `osp.py`,
+  `tests/test_osp.py`): the timeline as an OpenShot project - files,
+  tracks as layers, trims, fades as opacity/volume, dissolves, wipes as
+  OpenShot's Mask transition (direction, `reverse` and `softness`
+  matched), guides as markers; a derive: of `openshot:` effects alone as
+  native, editable effects. What has no counterpart is left out, each
+  thing named. Written by libopenshot itself (openshot_render.py
+  `--project`) and checked by playing it with libopenshot's Timeline
+  against melt's render: same wipe direction both ways, the dissolve's
+  half-way mix, fades on their frames, the Wave effect within encoding
+  noise of the generated file.
+- **The project YAML's JSON Schema: `video-as-code schema`** —
+  **implemented** (2026-10-24, `yamlschema.py`, `tests/test_yamlschema.py`):
+  an editor with yaml-language-server (VS Code's YAML extension)
+  completes keys and values, shows each key's meaning and underlines a
+  typo or a wrong value as it's typed. Written key by key after the
+  parsers, with the meanings taken from `docs/project-yaml.md`'s tables
+  and the bundled catalogs (wipe shapes, gl-transitions and their
+  parameters, GLSL shaders and theirs); shipped as
+  `project.schema.json` and published with the docs, at the URL its
+  `$id` says. The tests keep it in step: the shipped file up to date,
+  every key the parsers read in it, every key described, and every
+  project file the docs and the gallery show valid by it.
+- **`video-as-code watch`** — **implemented** (2026-10-24, `watch.py`,
+  `tests/test_watch.py`): a light preview (`--proxy`, 480x270 by default)
+  rendered again on every save of the project's YAML files and played
+  from a second before the first frame that changed. Rendered as
+  `render --split` renders, in segments cached by what they play, but
+  short ones (8 s at most: `splitrender.render(max_frames=)`), so an edit
+  re-renders only the few seconds it touches; where the picture changed
+  in them, found by the frames' md5s against the last render's. A save
+  that doesn't validate keeps the last preview. mpv, vlc or ffplay, or
+  `VIDEO_AS_CODE_PLAYER`.

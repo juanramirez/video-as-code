@@ -1,9 +1,9 @@
 # How to make a video
 
-The workflow: write a YAML file, build a `.kdenlive` from it, then either
-open that in kdenlive or render it straight to video. Repeat as you tweak
-the YAML - that's the whole point of versioning a video as a YAML file
-instead of a binary project.
+The workflow: write a YAML file and render it straight to video. Repeat
+as you tweak the YAML - that's the whole point of versioning a video as a
+YAML file instead of a binary project. If you'd rather finish it by hand,
+build a `.kdenlive` from it and open that in kdenlive.
 
 ## 1. Write the YAML
 
@@ -52,7 +52,18 @@ Checks the YAML's shape, that every referenced asset exists on disk, that
 duration, and that clips don't overlap within a track - without writing
 anything. Catches typos before you burn time on a build/render cycle.
 
-## 3. Build
+## 3. Render
+
+```bash
+video-as-code render project.yaml -o output.mp4
+```
+
+Needs `melt` (the MLT engine kdenlive itself renders with) on `PATH`.
+Equivalent to `build` followed by `melt project.kdenlive -consumer
+avformat:output.mp4`, minus the intermediate file - use `-k`/
+`--keep-kdenlive` if you want to keep it anyway.
+
+## 4. Open it in kdenlive (optional)
 
 ```bash
 video-as-code build project.yaml -o project.kdenlive
@@ -65,20 +76,36 @@ The `.kdenlive` is a build artifact, not something to commit - it's
 regenerated deterministically from the YAML every time (see the
 `.gitignore` this repo ships with).
 
-## 4. Render straight to video (optional)
+For OpenShot instead: `video-as-code build project.yaml --format openshot`
+gives a `.osp` - see `README.md`'s *An OpenShot project*.
 
-```bash
-video-as-code render project.yaml -o output.mp4
-```
+### What you see in kdenlive
 
-Needs `melt` (the MLT engine kdenlive itself renders with) on `PATH`.
-Equivalent to `build` followed by `melt project.kdenlive -consumer
-avformat:output.mp4`, minus the intermediate file - use `-k`/
-`--keep-kdenlive` if you want to keep it anyway.
+Most of a project opens in kdenlive as if it had been made there: clips,
+tracks, fades, transitions, its own effects. A few things go beyond what
+kdenlive itself offers, and show differently:
+
+- **`derive:` clips - libopenshot's effects (`openshot:`) among them -
+  are files.** They're generated before the build, into
+  `<dir>/.derived/`, and the `.kdenlive` points at those files: a Wave or
+  an AnalogTape comes in already applied to the clip's picture, not as an
+  effect in its effect stack. It plays without OpenShot installed, but it
+  can't be tweaked or removed there - change the YAML and build again.
+  Moving the `.kdenlive` to another machine means taking `.derived/` with
+  it.
+- **`transition: gl` and `glsl:`** need the plugin
+  `video-as-code install-gl-transitions` builds: kdenlive renders them as
+  long as its melt finds it (`FREI0R_PATH`).
+- **`melt:` filters kdenlive has no description of** render, but may not
+  show in its effect stack.
+- **`film_dust` with `style: dots`**: `render` draws round specks, but
+  kdenlive shows MLT's dust pictures instead.
 
 ## 5. Iterate
 
-Change the YAML, re-run `validate`/`build`/`render`. Since the YAML is
+Change the YAML, re-run `validate`/`build`/`render` - or leave
+`video-as-code watch project.yaml` running: each save renders a light
+preview again (only what changed) and plays it from there. Since the YAML is
 what you check into version control, `git diff` on it is a real, readable
 diff of what changed in the edit - trims, timing, added clips - the same
 way it would be for code.

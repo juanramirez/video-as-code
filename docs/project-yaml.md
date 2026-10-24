@@ -9,6 +9,13 @@ Times are seconds (decimals allowed) unless said otherwise. Colours are
 where only known ones make sense (the top level, `derive:`) is an error,
 so a typo doesn't go unnoticed there.
 
+An editor can check all this as you type, with the project file's JSON
+Schema - see README's *Writing the YAML in an editor*:
+
+```yaml
+# yaml-language-server: $schema=https://video-as-code.juan-ramirez.es/project.schema.json
+```
+
 ```yaml
 project: {...}       # required: canvas, frame rate, where sources come from
 bin: [...]           # the files (and titles) the video uses

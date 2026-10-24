@@ -13,6 +13,7 @@ dist/
 # Build artifacts: regenerated deterministically with `video-as-code build`.
 # Don't version these unless you want to freeze a specific copy.
 *.kdenlive
+*.osp
 !examples/**/*.kdenlive.expected
 .titles/
 
