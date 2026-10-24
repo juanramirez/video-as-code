@@ -880,6 +880,7 @@ def build(
     public: bool = False,
     footer: str = "",
     site_nav: str = "",
+    theme: str = "",
 ) -> Path:
     """Writes the page (rendering what isn't cached yet); returns its path.
     Part of the docs (docs.py): `doc_links` maps the reference's keys to
@@ -891,7 +892,7 @@ def build(
     user's own LUTs. `footer`: HTML for the page's foot (the docs' line
     on the code and its license); `site_nav`: the docs' bar, for the
     page to look like one of theirs (site.py) - its own link to the docs
-    left out then."""
+    left out then; `theme`, their CSS over all that (docs/theme.css)."""
     if probe.find_melt() is None:
         raise KdenliveAsCodeError(msg("cli.render_missing_melt"))
     root = (cache_root or default_cache_root()) / GALLERY_DIR
@@ -1040,7 +1041,7 @@ def build(
     page = root / "index.html"
     shown = [(e, out) for e, out in previews if e not in baselines.values()]
     shown += [(e, None) for e in catalog if not e.render]
-    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged, doc_links or {}, docs_home, footer, site_nav), encoding="utf-8")
+    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged, doc_links or {}, docs_home, footer, site_nav, theme), encoding="utf-8")
     first: dict[str, str] = {}
     for section in SECTIONS:  # (in the page's order)
         if section == "lumas" and luma_cards and "luma" in (doc_links or {}):
@@ -1079,6 +1080,7 @@ def _page(
     docs_home: Optional[str] = None,
     footer: str = "",
     site_nav: str = "",
+    theme: str = "",
 ) -> str:
     def rel(path: Path) -> str:
         return html.escape(path.relative_to(root).as_posix())
@@ -1192,6 +1194,7 @@ def _page(
                  if docs_home and not site_nav else "")
         .replace("{site_css}", SITE_CSS if site_nav else "")
         .replace("{site_nav}", site_nav)
+        .replace("{theme}", f"<style>{theme}</style>" if theme else "")
         .replace("{in_site}", " in-site" if site_nav else "")
         .replace("{footer}", f"<footer>{footer}</footer>" if footer else "")
         .replace("{sections}", "\n".join(sections))
@@ -1277,6 +1280,7 @@ body.in-site .bar { top: var(--site-h, 49px); }
 body.in-site section, body.in-site figure { scroll-margin-top: calc(64px + var(--site-h, 49px)); }
 {site_css}
 </style>
+{theme}
 </head>
 <body class="hide-unchanged{in_site}">
 {site_nav}
