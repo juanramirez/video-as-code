@@ -24,7 +24,7 @@ nav.site a[aria-current], nav.site a:hover { color: var(--fg); }
 nav.site .pages > a:first-child { color: var(--fg); font-weight: 600; }  /* the home: the site's name */
 nav.site .out { display: flex; align-items: center; gap: 4px 18px; }
 /* once the pages wrap, the two on the right go one over the other */
-@media (max-width: 1200px) { nav.site .out { flex-direction: column; align-items: flex-end; } }
+@media (max-width: 999px) { nav.site .out { flex-direction: column; align-items: flex-end; } }
 nav.site a.repo { display: inline-flex; align-items: center; gap: 6px; }
 nav.site .out a { white-space: nowrap; }
 nav.site a.repo svg { width: 1em; height: 1em; fill: currentColor; }

@@ -716,6 +716,19 @@ this limitation — it's not a test that was loosened carelessly.
 See `BACKLOG.md` for the unordered pool of known gaps and ideas, and
 `ROADMAP.md` for what's shipped and what's scheduled for the next version.
 
+## Credits
+
+- **Juan Ramírez** ([juan-ramirez.es](https://juan-ramirez.es/)): the
+  idea, where it goes and what it should do, and trying it all on his
+  own videos.
+- **Claude** (Anthropic), through
+  [Claude Code](https://claude.com/claude-code): a large part of the
+  code, the tests and these docs, pair-programming with Juan - most of
+  the project's commits are co-authored by it.
+- Bundled from others: [gl-transitions](https://gl-transitions.com)'
+  shaders (see `src/video_as_code/gltransitions_data/LICENSE`) and
+  GitHub's mark in the docs' bar ([Octicons](https://primer.style/octicons/), MIT).
+
 ## License
 
 MIT - see `LICENSE`. The tools it drives are separate programs with their
