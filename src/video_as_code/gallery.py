@@ -523,14 +523,25 @@ def _tweaks(entry: Entry, tries: int = 5) -> list[dict]:
     return (far + near)[:tries]
 
 
+# a transition's own progress (frei0r's sleid0r wipes, slides and pushes:
+# `position`), which melt doesn't move by itself: at any one value the
+# transition stands still at that point - so first, from 0 to 1 over it
+PROGRESS = ("position", "progress")
+OVER_THE_TRANSITION = "0=0;-1=1"
+
+
 def _tweak_pairs(entry: Entry) -> list[tuple[dict, Optional[dict]]]:
-    """(far end, near end or None) for each parameter that has them."""
+    """(far end, near end or None) for each parameter that has them - a
+    transition's progress (PROGRESS), animated, before all."""
     out = []
     for param in (dict(p) for p in entry.params):
         if "DEPRECATED" in param["name"]:
             continue
         kind, default = param.get("type"), param.get("default")
         low, high = param.get("minimum"), param.get("maximum")
+        if entry.section == "melt_transitions" and param["name"] in PROGRESS and (low, high) == (0, 1):
+            out.insert(0, ({param["name"]: OVER_THE_TRANSITION}, None))
+            continue
         if kind == "boolean":
             value = not bool(default not in (None, 0, "0", False))
         elif kind in ("float", "integer", "double") and isinstance(low, (int, float)) and isinstance(high, (int, float)) and high > low:
@@ -964,6 +975,11 @@ def build(
         tweaks: dict[str, Optional[dict]] = json.loads(tweaks_file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         tweaks = {}
+    for e, out in previews:  # (found before progress went first: looked for again)
+        first = _tweaks(e)[:1] if e.melt_catalog else []
+        if first and OVER_THE_TRANSITION in first[0].values() and out.name in tweaks \
+                and (tweaks[out.name] or {}).get("values") != first[0]:
+            del tweaks[out.name]
     pending = [
         (e, out) for e, out in previews
         if e.melt_catalog and unchanged.get(out.name) and out.name not in tweaks
