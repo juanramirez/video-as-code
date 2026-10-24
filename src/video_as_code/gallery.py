@@ -1197,8 +1197,21 @@ def _page(
         .replace("{theme}", f"<style>{theme}</style>" if theme else "")
         .replace("{in_site}", " in-site" if site_nav else "")
         .replace("{footer}", f"<footer>{footer}</footer>" if footer else "")
+        .replace("{try}", _TRY.format(
+            title=html.escape(msg("gallery.try_title")), hint=html.escape(msg("gallery.try_hint")),
+            rendered=html.escape(msg("gallery.try_rendered")), w=THUMB_SIZE[0], h=THUMB_SIZE[1]))
+        .replace("{try_card}", json.dumps(msg("gallery.try_card")))
         .replace("{sections}", "\n".join(sections))
     )
+
+
+# a transition to try, in one box: the panel's frame (the script fills it
+# from the cards themselves - see "try it" in _PAGE)
+_TRY = """<aside class="try" data-tab="transitions"><h2>{title}</h2><p>{hint}</p>
+<div class="try-body"><div class="try-preview"><canvas width="{w}" height="{h}"></canvas>
+<video muted loop playsinline hidden></video><p class="note" hidden>{rendered}</p><pre><code></code></pre></div>
+<div class="try-controls"><label><code>transition</code> <select name="transition"></select></label><div class="params"></div></div>
+</div></aside>"""
 
 
 _PAGE = """<!doctype html>
@@ -1259,6 +1272,22 @@ audio { width: 100%; }
 pre { margin: 0; padding: 6px 8px; background: var(--code); border-radius: 4px; overflow-x: auto; cursor: copy;
       font: 12px/1.4 ui-monospace, monospace; }
 figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+aside.try { margin: 8px 0 24px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+aside.try h2 { margin: 0 0 4px; }
+aside.try > p { margin: 0 0 12px; color: var(--muted); }
+.try-body { display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+@media (max-width: 720px) { .try-body { grid-template-columns: minmax(0, 1fr); } }
+.try-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.try-preview .note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.try-controls, .try-controls .params { display: flex; flex-direction: column; gap: 12px; }
+.try-controls label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.try-controls select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg);
+                       color: var(--fg); max-width: 100%; }
+.try-controls input[type="range"] { width: 180px; accent-color: var(--accent); }
+.try-controls output { font: 12px ui-monospace, monospace; color: var(--muted); }
+button.try-card { margin-left: 6px; padding: 0 8px; font: 12px/1.6 inherit; border: 1px solid var(--line); border-radius: 999px;
+                  background: none; color: var(--muted); cursor: pointer; }
+button.try-card:hover { color: var(--fg); border-color: var(--muted); }
 .failed { aspect-ratio: 16 / 9; overflow: auto; color: var(--bad); font-size: 12px; }
 .failed pre { cursor: auto; white-space: pre-wrap; }
 .failed strong { display: block; margin-bottom: 6px; }
@@ -1295,11 +1324,12 @@ body.in-site section, body.in-site figure { scroll-margin-top: calc(64px + var(-
 <label class="hide"><input type="checkbox" checked> {hide_unchanged}</label>
 </div>
 <nav class="sections">{nav}</nav>
+{try}
 {sections}
 {footer}
 <div class="toast" role="status"></div>
 <script>
-const COPY = {copy}, COPIED = {copied};
+const COPY = {copy}, COPIED = {copied}, TRY_CARD = {try_card};
 // inside the docs: the thin bar sticks under theirs, however tall it wraps
 const siteNav = document.querySelector("nav.site");
 if (siteNav) {
@@ -1379,7 +1409,7 @@ Promise.all([pixels(lumaSection.dataset.from), pixels(lumaSection.dataset.to)]).
 });
 // click a snippet to copy it
 const toast = document.querySelector(".toast");
-for (const pre of document.querySelectorAll("figure > pre")) {
+for (const pre of document.querySelectorAll("figure > pre, .try-preview pre")) {
   pre.title = COPY;
   pre.addEventListener("click", () => {
     navigator.clipboard.writeText(pre.textContent).then(() => {
@@ -1390,7 +1420,7 @@ for (const pre of document.querySelectorAll("figure > pre")) {
 // the two tabs; the last one shown is remembered
 function showTab(tab) {
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
-  for (const el of document.querySelectorAll("nav.sections a[data-tab], section[data-tab]")) el.classList.toggle("off", el.dataset.tab !== tab);
+  for (const el of document.querySelectorAll("nav.sections a[data-tab], section[data-tab], aside[data-tab]")) el.classList.toggle("off", el.dataset.tab !== tab);
   try { localStorage.setItem("gallery-tab", tab); } catch (e) {}
 }
 for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => showTab(b.dataset.tab));
@@ -1442,6 +1472,136 @@ if (card) {
     updateCounts();
   }
   card.scrollIntoView({block: "center"});
+}
+// try it: a transition picked in one box, its keys shown and played -
+// live, by the page, where it can (dissolve; wipe, with the shapes the
+// cards below play), else the card rendered with them; and the snippet
+// what's shown. A card's "Try" brings it there.
+const tryBox = document.querySelector("aside.try");
+if (tryBox && lumaSection) {
+  const LIVE = ["dissolve", "wipe"];
+  const keysOf = (text) => Object.fromEntries(text.split("\\n").map((line) => line.match(/^(\\w+):\\s*(.*)$/))
+    .filter(Boolean).map((m) => [m[1], m[2].replace(/^"(.*)"$/, "$1")]));
+  const kind = (t) => t.startsWith("melt/") ? "melt/…" : t;
+  const lumaCards = [...lumaSection.querySelectorAll("figure.luma")].map((fig) =>
+    ({ fig, name: keysOf(fig.querySelector("code").textContent).luma, src: fig.querySelector("canvas").dataset.src }));
+  const renders = [...document.querySelectorAll('section[data-tab="transitions"] figure')]
+    .filter((fig) => fig.querySelector("video"))
+    .map((fig) => {
+      const snippet = fig.querySelector("pre code").textContent, keys = keysOf(snippet);
+      return { fig, snippet, keys, name: fig.querySelector("figcaption").firstChild.textContent.trim(), kind: kind(keys.transition || "") };
+    });
+  const kinds = [...new Set(LIVE.concat(renders.map((r) => r.kind)))];
+  const pick = tryBox.querySelector('select[name="transition"]'), params = tryBox.querySelector(".params");
+  const canvas = tryBox.querySelector("canvas"), video = tryBox.querySelector("video");
+  const note = tryBox.querySelector(".note"), code = tryBox.querySelector("pre code");
+  pick.innerHTML = kinds.map((k) => `<option>${k}</option>`).join("");
+  const state = { transition: "wipe", luma: lumaCards.length ? lumaCards[0].name : "", softness: 0, reverse: false, render: null };
+  const maps = new Map();  // a shape's grey levels, by name
+  let from, to, map = null;
+  const ctx = canvas.getContext("2d"), out = ctx.createImageData(W, H);
+  async function shape(name) {
+    if (!maps.has(name)) {
+      const data = await pixels(lumaCards.find((c) => c.name === name).src), levels = new Float32Array(W * H);
+      for (let i = 0; i < levels.length; i++) levels[i] = data[i * 4] / 255;
+      maps.set(name, levels);
+    }
+    return maps.get(name);
+  }
+  function field(label, input) { return `<label><code>${label}</code> ${input}</label>`; }
+  function options(values, current) {
+    return values.map((v) => `<option${v === current ? " selected" : ""}>${v.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</option>`).join("");
+  }
+  function show() {
+    const live = LIVE.includes(state.transition);
+    pick.value = state.transition;
+    canvas.hidden = !live; video.hidden = note.hidden = live;
+    if (state.transition === "wipe") {
+      params.innerHTML =
+        field("luma", `<select name="luma">${options(lumaCards.map((c) => c.name), state.luma)}</select>`) +
+        field("luma_softness", `<input type="range" name="softness" min="0" max="1" step="0.05" value="${state.softness}"> <output>${state.softness}</output>`) +
+        `<label><input type="checkbox" name="reverse"${state.reverse ? " checked" : ""}> <code>luma_reverse</code></label>`;
+      code.textContent = `transition: wipe\\nluma: ${state.luma}` + (state.softness ? `\\nluma_softness: ${state.softness}` : "") +
+        (state.reverse ? "\\nluma_reverse: true" : "");
+      map = null; shape(state.luma).then((levels) => { map = levels; if (still) paint(0.5); });
+    } else if (state.transition === "dissolve") {
+      params.innerHTML = ""; code.textContent = "transition: dissolve"; if (still) paint(0.5);
+    } else {
+      const these = renders.filter((r) => r.kind === state.transition);
+      const render = these.includes(state.render) ? state.render : these[0];
+      state.render = render;
+      const differs = ["transition", ...Object.keys(these[0].keys)].find((k) => new Set(these.map((r) => r.keys[k])).size > 1) || "";
+      params.innerHTML = these.length > 1 ? field(differs, `<select name="render">${options(these.map((r) => r.name), render.name)}</select>`) : "";
+      code.textContent = render.snippet;
+      const src = render.fig.querySelector("video").getAttribute("src");
+      if (video.getAttribute("src") !== src) { video.src = src; }
+      video.play().catch(() => {});
+    }
+    if (live) video.pause();
+  }
+  function paint(pos) {
+    if (!from || !to) return;
+    const wipe = state.transition === "wipe";
+    if (wipe && !map) return;
+    const soft = Math.max(SOFT, state.softness), smooth = state.softness > 0, p = pos * (1 + soft), d = out.data;
+    for (let i = 0; i < W * H; i++) {
+      let m = pos;
+      if (wipe) {
+        m = Math.min(1, Math.max(0, (p - (state.reverse ? 1 - map[i] : map[i])) / soft));
+        if (smooth) m = m * m * (3 - 2 * m);
+      }
+      const j = i * 4;
+      d[j] = from[j] + (to[j] - from[j]) * m; d[j + 1] = from[j + 1] + (to[j + 1] - from[j + 1]) * m;
+      d[j + 2] = from[j + 2] + (to[j + 2] - from[j + 2]) * m; d[j + 3] = 255;
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+  pick.addEventListener("change", () => { state.transition = pick.value; show(); });
+  params.addEventListener("input", (e) => {
+    const el = e.target;
+    if (el.name === "luma") state.luma = el.value;
+    else if (el.name === "softness") state.softness = Number(el.value);
+    else if (el.name === "reverse") state.reverse = el.checked;
+    else if (el.name === "render") state.render = renders.find((r) => r.kind === state.transition && r.name === el.value);
+    if (el.name === "softness") {  // (dragging: only the number and the snippet change, not the controls)
+      el.nextElementSibling.textContent = state.softness;
+      code.textContent = code.textContent.replace(/\\nluma_softness: .*|$/, state.softness ? `\\nluma_softness: ${state.softness}` : "")
+        .replace(/(\\nluma_reverse: true)(\\nluma_softness: .*)$/, "$2$1");
+      if (still) paint(0.5);
+    } else show();
+  });
+  // a card's "Try": it, in the box
+  function load(fig) {
+    const keys = keysOf(fig.querySelector("pre code").textContent), lumaCard = lumaCards.find((c) => c.fig === fig);
+    if (lumaCard) Object.assign(state, { transition: "wipe", luma: lumaCard.name, softness: 0, reverse: false });
+    else if (keys.transition === "dissolve") state.transition = "dissolve";
+    else if (keys.transition === "wipe" && lumaCards.some((c) => c.name === keys.luma)) {
+      Object.assign(state, { transition: "wipe", luma: keys.luma, softness: Number(keys.luma_softness || 0),
+                             reverse: keys.luma_reverse === "true" });
+    } else {
+      const render = renders.find((r) => r.fig === fig);
+      Object.assign(state, { transition: render.kind, render });
+    }
+    show();
+    tryBox.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  for (const fig of [...lumaCards.map((c) => c.fig), ...renders.map((r) => r.fig)]) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "try-card"; button.textContent = TRY_CARD;
+    button.addEventListener("click", () => load(fig));
+    (fig.querySelector("figcaption") || fig).append(button);
+  }
+  let visible = false;
+  new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(canvas.parentElement);
+  Promise.all([pixels(lumaSection.dataset.from), pixels(lumaSection.dataset.to)]).then(([a, b]) => {
+    from = a; to = b; paint(0.5);
+    const frame = (t) => {
+      if (visible && !still && !canvas.hidden) paint(position(t));
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+  show();
 }
 </script>
 </body>
