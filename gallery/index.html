@@ -56,6 +56,25 @@ audio { width: 100%; }
 pre { margin: 0; padding: 6px 8px; background: var(--code); border-radius: 4px; overflow-x: auto; cursor: copy;
       font: 12px/1.4 ui-monospace, monospace; }
 figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+aside.try { margin: 8px 0 24px; padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--card); }
+aside.try h2 { margin: 0 0 4px; }
+aside.try > p { margin: 0 0 12px; color: var(--muted); }
+.try-body { display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+@media (max-width: 720px) { .try-body { grid-template-columns: minmax(0, 1fr); } }
+.try-preview [hidden] { display: none; }  /* (over "video, canvas { display: block }") */
+.try-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.try-preview .note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.try-preview audio { width: 100%; }
+.try-controls p { margin: 0; color: var(--muted); }
+.try-controls, .try-controls .params { display: flex; flex-direction: column; gap: 12px; }
+.try-controls label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.try-controls select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg);
+                       color: var(--fg); max-width: 100%; }
+.try-controls input[type="range"] { width: 180px; accent-color: var(--accent); }
+.try-controls output { font: 12px ui-monospace, monospace; color: var(--muted); }
+button.try-card { margin-left: 6px; padding: 0 8px; font: 12px/1.6 inherit; border: 1px solid var(--line); border-radius: 999px;
+                  background: none; color: var(--muted); cursor: pointer; }
+button.try-card:hover { color: var(--fg); border-color: var(--muted); }
 .failed { aspect-ratio: 16 / 9; overflow: auto; color: var(--bad); font-size: 12px; }
 .failed pre { cursor: auto; white-space: pre-wrap; }
 .failed strong { display: block; margin-bottom: 6px; }
@@ -73,6 +92,7 @@ figure:target { outline: 3px solid var(--accent, #2a6fdb); }
 body.in-site { padding-top: 0; }
 body.in-site > nav.site { margin: 0 -16px 24px; }
 body.in-site .bar { top: var(--site-h, 49px); }
+@media (max-width: 640px) { body.in-site .bar { top: 0; } body.in-site section, body.in-site figure { scroll-margin-top: 64px; } }
 body.in-site section, body.in-site figure { scroll-margin-top: calc(64px + var(--site-h, 49px)); }
 
 :root { color-scheme: light dark; --bg: #fdfdfc; --fg: #1d1f21; --muted: #6b7075; --line: #e2e4e6; --code: #f2f3f4; }
@@ -88,14 +108,62 @@ nav.site { position: sticky; top: 0; z-index: 2; display: flex; align-items: cen
 nav.site .pages { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 18px; }
 nav.site a { color: var(--muted); text-decoration: none; }
 nav.site a[aria-current], nav.site a:hover { color: var(--fg); }
-nav.site a:first-child { color: var(--fg); font-weight: 600; }  /* the home: the site's name */
-nav.site a.repo { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+nav.site .pages > a:first-child { color: var(--fg); font-weight: 600; }  /* the home: the site's name */
+nav.site .out { display: flex; align-items: center; gap: 4px 18px; }
+/* once the pages wrap, the two on the right go one over the other */
+@media (max-width: 999px) { nav.site .out { flex-direction: column; align-items: flex-end; } }
+nav.site a.repo { display: inline-flex; align-items: center; gap: 6px; }
+nav.site .out a { white-space: nowrap; }
 nav.site a.repo svg { width: 1em; height: 1em; fill: currentColor; }
+nav.site .more { display: contents; }
+nav.site button.menu { display: none; }
+/* on a phone the pages fold behind a chevron by the site's name, and
+   open in a menu floating over the page; the bar scrolls away with it */
+@media (max-width: 640px) {
+  nav.site { position: relative; gap: 12px; padding: 8px 16px; }
+  nav.site .pages { align-items: center; gap: 4px; }
+  nav.site .more { display: none; position: absolute; top: calc(100% - 4px); left: 8px; z-index: 3; flex-direction: column;
+                   min-width: 220px; max-width: calc(100% - 16px); padding: 6px 0; background: var(--bg);
+                   border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
+  nav.site.open .more { display: flex; }
+  nav.site .more a { padding: 8px 16px; }
+  nav.site button.menu { display: inline-flex; padding: 6px; margin: -6px 0; border: 0; background: none; color: var(--fg);
+                         cursor: pointer; }
+  nav.site button.menu svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;
+                             transition: transform .15s; }
+  nav.site.open button.menu svg { transform: rotate(180deg); }
+}
 
+</style>
+<style>/* The docs' look, over their own (docs.py): that of juan-ramirez.es, the
+   author's site - its paper and ink, its rust accent, Source Serif 4 for
+   the headings and IBM Plex Sans for the text. Without this file the docs
+   keep their neutral look. */
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap");
+:root { --bg: #f7f4ee; --fg: #1b1f23; --muted: #5b5f65; --line: #e2dccf; --code: #efe9de; --card: #fbf9f5;
+        --accent: #b14623; --on-accent: #ffffff; }
+/* the site has no dark mode: this one is the same paper, at night */
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1c1a16; --fg: #ece6da; --muted: #a59e91; --line: #36322b; --code: #26231e; --card: #23201b;
+          --accent: #e0835e; --on-accent: #1c1a16; }
+}
+body, nav.site, .tabs button, input { font-family: "IBM Plex Sans", Helvetica, Arial, sans-serif; }
+h1, h2, h3, nav.site .pages > a:first-child { font-family: "Source Serif 4", Georgia, serif; }
+nav.site .pages > a:first-child { font-size: 1.1em; }
+/* the bar, as the site's header: ink, with white on it - the page you're
+   on in white, underlined in the accent, the rest dimmed */
+nav.site { --bg: #1b1f23; --line: #1b1f23; --fg: #ffffff; --muted: rgb(255 255 255 / 0.6);
+           background: var(--bg); color: var(--fg); border-bottom-color: var(--line); box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); }
+nav.site a[aria-current] { font-weight: 600; text-decoration: underline; text-decoration-color: #b14623;
+                           text-decoration-thickness: 2px; text-underline-offset: 6px; }
+nav.site .pages > a:first-child { text-decoration: none; }
+@media (prefers-color-scheme: dark) { nav.site { --line: #34322c; } nav.site a[aria-current] { text-decoration-color: #e0835e; } }
+/* the gallery's links to the reference, in the accent too */
+a.to-doc { color: var(--accent); }
 </style>
 </head>
 <body class="hide-unchanged in-site">
-<nav class="site"><span class="pages"><a href="../docs/index.html">video-as-code</a><a href="../docs/making-a-video.html">How to make a video</a><a href="../docs/project-yaml.html">Project YAML reference</a><a href="../docs/reconstructing.html">How to recover a YAML from an already-rendered video</a><a href="index.html" aria-current=page>Gallery</a></span><a class="repo" href="https://github.com/juanramirez/video-as-code"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>GitHub</a></nav>
+<nav class="site"><span class="pages"><a href="../docs/index.html">video-as-code</a><button class="menu" type="button" aria-label="Sections" aria-expanded="false" onclick="this.setAttribute('aria-expanded', this.closest('nav').classList.toggle('open'))"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg></button><span class="more"><a href="../docs/making-a-video.html">How to make a video</a><a href="../docs/project-yaml.html">Project YAML reference</a><a href="../docs/reconstructing.html">How to recover a YAML</a><a href="index.html" aria-current=page>Gallery</a></span></span><span class="out"><a class="author" href="https://juan-ramirez.es/">by Juan Ramírez</a><a class="repo" href="https://github.com/juanramirez/video-as-code"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>GitHub</a></span></nav>
 <header>
 
 <h1>video-as-code: transitions and effects</h1>
@@ -107,6 +175,16 @@ nav.site a.repo svg { width: 1em; height: 1em; fill: currentColor; }
 <label class="hide"><input type="checkbox" checked> Hide those that change nothing or can&#x27;t run here</label>
 </div>
 <nav class="sections"><a href="#transitions" data-tab="transitions">Transitions between clips (scenes:)</a><a href="#lumas" data-tab="transitions">Wipe shapes (luma:)</a><a href="#gl" data-tab="transitions">gl-transitions (transition: gl)</a><a href="#melt_transitions" data-tab="transitions">All of melt&#x27;s transitions (melt/)</a><a href="#clip" data-tab="effects">On the whole clip</a><a href="#clip_time" data-tab="effects">Over time</a><a href="#derive" data-tab="effects">Generated clips (derive:)</a><a href="#openshot" data-tab="effects">libopenshot effects (derive: openshot)</a><a href="#title" data-tab="effects">Titles</a><a href="#melt_filters" data-tab="effects">All of melt&#x27;s video filters (melt:)</a><a href="#melt_analysis" data-tab="effects">Analysis and debugging (melt:)</a><a href="#melt_audio" data-tab="effects">melt&#x27;s audio filters (melt:)</a></nav>
+<aside class="try" data-tab="transitions"><h2>Try a transition</h2><p>Pick one and its keys: the snippet is what plays. Or press Try on a card below to bring it here.</p>
+<div class="try-body"><div class="try-preview"><canvas width="320" height="180"></canvas>
+<video muted loop playsinline hidden></video><p class="note" hidden>Rendered by melt with these keys: they can&#x27;t be changed here.</p><pre><code></code></pre></div>
+<div class="try-controls"><label><code>transition</code> <select name="transition"></select></label><div class="params"></div></div>
+</div></aside><aside class="try" data-tab="effects" data-sample="files/clip-unfiltered-video-49da47337f6e789e.mp4"><h2>Try an effect</h2><p>Pick a group and an effect to see it big, with its snippet. Or press Try on a card below to bring it here. All rendered by melt: their values can&#x27;t be changed here.</p>
+<div class="try-body"><div class="try-preview"><video muted loop playsinline hidden></video><audio controls hidden></audio>
+<p class="note" hidden>Played here by the page, from the sample as it is: try other values.</p><pre><code></code></pre></div>
+<div class="try-controls"><label>Group <select name="group"></select></label><label>Effect <select name="effect"></select></label>
+<div class="params"></div><p class="said"></p><p class="doc"></p></div>
+</div></aside>
 <section id="transitions" data-section="transitions" data-tab="transitions"><details><summary><h2>Transitions between clips (scenes:)</h2><span class="count">10</span></summary><p>On a scenes: entry, between each clip and the next; transition_duration sets how long. iris, flip, glitch, delaygrab and cairogradient also work on a single clip, as reveal:. melt/&lt;service&gt; takes any transition the installed melt has (melt -query transitions).</p><div class="grid"><figure id="card-transitions-dissolve"><video src="files/transitions-dissolve-34efe79991709e91.mp4" muted loop playsinline preload="none"></video><figcaption>dissolve <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="Cross-fade: the first clip fades out as the second fades in.">Cross-fade: the first clip fades out as the second fades in.</p><pre><code>transition: dissolve</code></pre></figure>
 <figure id="card-transitions-wipe"><video src="files/transitions-wipe-0a5b4bf0647439ef.mp4" muted loop playsinline preload="none"></video><figcaption>wipe <a class="to-doc" href="../docs/project-yaml.html#key-luma" title="luma: in the project YAML reference">luma:</a></figcaption><p class="about" title="The second clip is revealed following a grey shape (luma:), darkest parts first.">The second clip is revealed following a grey shape (luma:), darkest parts first.</p><pre><code>transition: wipe
 luma: radial</code></pre></figure>
@@ -426,38 +504,38 @@ transition_properties: {&quot;x scale&quot;: 0.75}</code></pre></figure>
 <figure id="card-melt-transitions-frei0r-overlay"><video src="files/melt-transitions-frei0r-overlay-851022ab87f15f24.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.overlay <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="overlay - Perform an RGB[A] overlay operation between the pixel sources, using the generalised algorithm: D = A * (B + (2 * B) * (255 - A))">overlay - Perform an RGB[A] overlay operation between the pixel sources, using the generalised algorithm: D = A * (B + (2 * B) * (255 - A))</p><pre><code>transition: melt/frei0r.overlay</code></pre></figure>
 <figure id="card-melt-transitions-frei0r-saturation"><video src="files/melt-transitions-frei0r-saturation-a8fcf6605bf23533.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.saturation <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="saturation - Perform a conversion to saturation only of the source input1 using the saturation level of input2.">saturation - Perform a conversion to saturation only of the source input1 using the saturation level of input2.</p><pre><code>transition: melt/frei0r.saturation</code></pre></figure>
 <figure id="card-melt-transitions-frei0r-screen"><video src="files/melt-transitions-frei0r-screen-2dafcb8ef6fa60c4.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.screen <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="screen - Perform an RGB[A] screen operation between the pixel sources, using the generalised algorithm: D = 255 - (255 - A) * (255 - B)">screen - Perform an RGB[A] screen operation between the pixel sources, using the generalised algorithm: D = 255 - (255 - A) * (255 - B)</p><pre><code>transition: melt/frei0r.screen</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-push-down"><video src="files/melt-transitions-frei0r-sleid0r-push-down-be91326c4f97ebbd.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_push-down<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - push-down - Push from top to bottom">At its defaults it changes nothing; shown with position: 0.75. - push-down - Push from top to bottom</p><pre><code>transition: melt/frei0r.sleid0r_push-down
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-push-left"><video src="files/melt-transitions-frei0r-sleid0r-push-left-f8e8d8d6195bcc0e.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_push-left<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - push-left - Push from right to left">At its defaults it changes nothing; shown with position: 0.75. - push-left - Push from right to left</p><pre><code>transition: melt/frei0r.sleid0r_push-left
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-push-right"><video src="files/melt-transitions-frei0r-sleid0r-push-right-74715c67e4bf1f3f.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_push-right<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - push-right - Push from left to right">At its defaults it changes nothing; shown with position: 0.75. - push-right - Push from left to right</p><pre><code>transition: melt/frei0r.sleid0r_push-right
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-push-up"><video src="files/melt-transitions-frei0r-sleid0r-push-up-537fc17a292cf259.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_push-up<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - push-up - Push from bottom to top">At its defaults it changes nothing; shown with position: 0.75. - push-up - Push from bottom to top</p><pre><code>transition: melt/frei0r.sleid0r_push-up
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-slide-down"><video src="files/melt-transitions-frei0r-sleid0r-slide-down-0bb40c467e618d14.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_slide-down<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - slide-down - Slide from top to bottom">At its defaults it changes nothing; shown with position: 0.75. - slide-down - Slide from top to bottom</p><pre><code>transition: melt/frei0r.sleid0r_slide-down
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-slide-left"><video src="files/melt-transitions-frei0r-sleid0r-slide-left-c3b35db56efc2264.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_slide-left<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - slide-left - Slide from right to left">At its defaults it changes nothing; shown with position: 0.75. - slide-left - Slide from right to left</p><pre><code>transition: melt/frei0r.sleid0r_slide-left
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-slide-right"><video src="files/melt-transitions-frei0r-sleid0r-slide-right-0f47eb5eaa51af2d.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_slide-right<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - slide-right - Slide from left to right">At its defaults it changes nothing; shown with position: 0.75. - slide-right - Slide from left to right</p><pre><code>transition: melt/frei0r.sleid0r_slide-right
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-slide-up"><video src="files/melt-transitions-frei0r-sleid0r-slide-up-55af253c6c0bd7e8.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_slide-up<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - slide-up - Slide from bottom to top">At its defaults it changes nothing; shown with position: 0.75. - slide-up - Slide from bottom to top</p><pre><code>transition: melt/frei0r.sleid0r_slide-up
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-wipe-barn-door-h"><video src="files/melt-transitions-frei0r-sleid0r-wipe-barn-door-h-48ee4ae86645c519.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-barn-door-h<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - wipe-barn-door-h - Horizontal barn door wipe">At its defaults it changes nothing; shown with position: 0.75. - wipe-barn-door-h - Horizontal barn door wipe</p><pre><code>transition: melt/frei0r.sleid0r_wipe-barn-door-h
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-wipe-barn-door-v"><video src="files/melt-transitions-frei0r-sleid0r-wipe-barn-door-v-734332cd596e776f.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-barn-door-v<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - wipe-barn-door-v - Vertical barn door wipe">At its defaults it changes nothing; shown with position: 0.75. - wipe-barn-door-v - Vertical barn door wipe</p><pre><code>transition: melt/frei0r.sleid0r_wipe-barn-door-v
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-wipe-circle"><video src="files/melt-transitions-frei0r-sleid0r-wipe-circle-8deeacd050595959.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-circle<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - wipe-circle - Circle wipe">At its defaults it changes nothing; shown with position: 0.75. - wipe-circle - Circle wipe</p><pre><code>transition: melt/frei0r.sleid0r_wipe-circle
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-wipe-down"><video src="files/melt-transitions-frei0r-sleid0r-wipe-down-6b0ec842759f2580.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-down<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - wipe-down - Wipe from top to bottom">At its defaults it changes nothing; shown with position: 0.75. - wipe-down - Wipe from top to bottom</p><pre><code>transition: melt/frei0r.sleid0r_wipe-down
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-wipe-left"><video src="files/melt-transitions-frei0r-sleid0r-wipe-left-9d14aadeeebcc120.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-left<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - wipe-left - Wipe from right to left">At its defaults it changes nothing; shown with position: 0.75. - wipe-left - Wipe from right to left</p><pre><code>transition: melt/frei0r.sleid0r_wipe-left
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-wipe-rect"><video src="files/melt-transitions-frei0r-sleid0r-wipe-rect-35c2dd0a932ffdeb.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-rect<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - wipe-rect - Rectangular wipe">At its defaults it changes nothing; shown with position: 0.75. - wipe-rect - Rectangular wipe</p><pre><code>transition: melt/frei0r.sleid0r_wipe-rect
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-wipe-right"><video src="files/melt-transitions-frei0r-sleid0r-wipe-right-e83f31e2f18bbea8.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-right<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - wipe-right - Wipe from left to right">At its defaults it changes nothing; shown with position: 0.75. - wipe-right - Wipe from left to right</p><pre><code>transition: melt/frei0r.sleid0r_wipe-right
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
-<figure id="card-melt-transitions-frei0r-sleid0r-wipe-up"><video src="files/melt-transitions-frei0r-sleid0r-wipe-up-01e156f6a8eb4c68.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-up<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: 0.75. - wipe-up - Wipe from bottom to top">At its defaults it changes nothing; shown with position: 0.75. - wipe-up - Wipe from bottom to top</p><pre><code>transition: melt/frei0r.sleid0r_wipe-up
-transition_properties: {&quot;position&quot;: 0.75}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-push-down"><video src="files/melt-transitions-frei0r-sleid0r-push-down-d20ce028f44fe083.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_push-down<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - push-down - Push from top to bottom">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - push-down - Push from top to bottom</p><pre><code>transition: melt/frei0r.sleid0r_push-down
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-push-left"><video src="files/melt-transitions-frei0r-sleid0r-push-left-0d228b9b646cc164.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_push-left<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - push-left - Push from right to left">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - push-left - Push from right to left</p><pre><code>transition: melt/frei0r.sleid0r_push-left
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-push-right"><video src="files/melt-transitions-frei0r-sleid0r-push-right-52102d29dd9cbfd5.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_push-right<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - push-right - Push from left to right">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - push-right - Push from left to right</p><pre><code>transition: melt/frei0r.sleid0r_push-right
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-push-up"><video src="files/melt-transitions-frei0r-sleid0r-push-up-0aeae4e5f2f6b69c.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_push-up<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - push-up - Push from bottom to top">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - push-up - Push from bottom to top</p><pre><code>transition: melt/frei0r.sleid0r_push-up
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-slide-down"><video src="files/melt-transitions-frei0r-sleid0r-slide-down-9ec73a762681a17e.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_slide-down<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - slide-down - Slide from top to bottom">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - slide-down - Slide from top to bottom</p><pre><code>transition: melt/frei0r.sleid0r_slide-down
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-slide-left"><video src="files/melt-transitions-frei0r-sleid0r-slide-left-72afbbad384df1a0.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_slide-left<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - slide-left - Slide from right to left">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - slide-left - Slide from right to left</p><pre><code>transition: melt/frei0r.sleid0r_slide-left
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-slide-right"><video src="files/melt-transitions-frei0r-sleid0r-slide-right-bd30533a1634669c.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_slide-right<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - slide-right - Slide from left to right">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - slide-right - Slide from left to right</p><pre><code>transition: melt/frei0r.sleid0r_slide-right
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-slide-up"><video src="files/melt-transitions-frei0r-sleid0r-slide-up-bae0255e22b8b0c2.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_slide-up<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - slide-up - Slide from bottom to top">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - slide-up - Slide from bottom to top</p><pre><code>transition: melt/frei0r.sleid0r_slide-up
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-wipe-barn-door-h"><video src="files/melt-transitions-frei0r-sleid0r-wipe-barn-door-h-c198cf2a95c61488.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-barn-door-h<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-barn-door-h - Horizontal barn door wipe">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-barn-door-h - Horizontal barn door wipe</p><pre><code>transition: melt/frei0r.sleid0r_wipe-barn-door-h
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-wipe-barn-door-v"><video src="files/melt-transitions-frei0r-sleid0r-wipe-barn-door-v-8467ae3e4e4d2f74.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-barn-door-v<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-barn-door-v - Vertical barn door wipe">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-barn-door-v - Vertical barn door wipe</p><pre><code>transition: melt/frei0r.sleid0r_wipe-barn-door-v
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-wipe-circle"><video src="files/melt-transitions-frei0r-sleid0r-wipe-circle-50afa276b825a6ab.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-circle<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-circle - Circle wipe">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-circle - Circle wipe</p><pre><code>transition: melt/frei0r.sleid0r_wipe-circle
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-wipe-down"><video src="files/melt-transitions-frei0r-sleid0r-wipe-down-48e1bd93adfb981d.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-down<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-down - Wipe from top to bottom">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-down - Wipe from top to bottom</p><pre><code>transition: melt/frei0r.sleid0r_wipe-down
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-wipe-left"><video src="files/melt-transitions-frei0r-sleid0r-wipe-left-5930fefd139eee70.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-left<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-left - Wipe from right to left">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-left - Wipe from right to left</p><pre><code>transition: melt/frei0r.sleid0r_wipe-left
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-wipe-rect"><video src="files/melt-transitions-frei0r-sleid0r-wipe-rect-6450221156f6bbfd.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-rect<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-rect - Rectangular wipe">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-rect - Rectangular wipe</p><pre><code>transition: melt/frei0r.sleid0r_wipe-rect
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-wipe-right"><video src="files/melt-transitions-frei0r-sleid0r-wipe-right-4a063b48f400ff14.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-right<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-right - Wipe from left to right">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-right - Wipe from left to right</p><pre><code>transition: melt/frei0r.sleid0r_wipe-right
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
+<figure id="card-melt-transitions-frei0r-sleid0r-wipe-up"><video src="files/melt-transitions-frei0r-sleid0r-wipe-up-78007314ffacc13e.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.sleid0r_wipe-up<span class="badge tweaked">not at its defaults</span> <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-up - Wipe from bottom to top">At its defaults it changes nothing; shown with position: &quot;0=0;-1=1&quot;. - wipe-up - Wipe from bottom to top</p><pre><code>transition: melt/frei0r.sleid0r_wipe-up
+transition_properties: {&quot;position&quot;: &quot;0=0;-1=1&quot;}</code></pre></figure>
 <figure id="card-melt-transitions-frei0r-softlight"><video src="files/melt-transitions-frei0r-softlight-391c054ded442968.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.softlight <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="softlight - Perform an RGB[A] softlight operation between the pixel sources.">softlight - Perform an RGB[A] softlight operation between the pixel sources.</p><pre><code>transition: melt/frei0r.softlight</code></pre></figure>
 <figure id="card-melt-transitions-frei0r-subtract"><video src="files/melt-transitions-frei0r-subtract-98502509fcc647bc.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.subtract <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="subtract - Perform an RGB[A] subtract operation of the pixel source input2 from input1.">subtract - Perform an RGB[A] subtract operation of the pixel source input2 from input1.</p><pre><code>transition: melt/frei0r.subtract</code></pre></figure>
 <figure id="card-melt-transitions-frei0r-uvmap"><video src="files/melt-transitions-frei0r-uvmap-c78a704ff4f9bf50.mp4" muted loop playsinline preload="none"></video><figcaption>frei0r.uvmap <a class="to-doc" href="../docs/project-yaml.html#key-transition" title="transition: in the project YAML reference">transition:</a></figcaption><p class="about" title="UV Map - Uses Input 1 as UV Map to distort Input 2">UV Map - Uses Input 1 as UV Map to distort Input 2</p><pre><code>transition: melt/frei0r.uvmap</code></pre></figure>
@@ -487,7 +565,7 @@ focus_blur: 6</code></pre></figure>
 <figure id="card-clip-chroma-key"><video src="files/clip-chroma-key-0e5e6babf0308c05.mp4" muted loop playsinline preload="none"></video><figcaption>chroma_key <a class="to-doc" href="../docs/project-yaml.html#key-chroma_key" title="chroma_key: in the project YAML reference">chroma_key:</a></figcaption><p class="about" title="Makes a colour transparent (a green screen), showing the track below.">Makes a colour transparent (a green screen), showing the track below.</p><pre><code>chroma_key: &quot;#00ff00&quot;</code></pre></figure>
 <figure id="card-clip-overlay-text"><video src="files/clip-overlay-text-be2747b48b748047.mp4" muted loop playsinline preload="none"></video><figcaption>overlay_text <a class="to-doc" href="../docs/project-yaml.html#key-overlay_text" title="overlay_text: in the project YAML reference">overlay_text:</a></figcaption><p class="about" title="Text burned onto the clip; may show the timecode, the frame...">Text burned onto the clip; may show the timecode, the frame...</p><pre><code>overlay_text: &quot;#timecode#&quot;
 overlay_font_size: 24</code></pre></figure>
-<figure id="card-clip-lut"><video src="files/clip-lut-5a1e0fd249f1c96c.mp4" muted loop playsinline preload="none"></video><figcaption>lut <a class="to-doc" href="../docs/project-yaml.html#key-lut" title="lut: in the project YAML reference">lut:</a></figcaption><p class="about" title="Applies a colour look from a 3D LUT file (.cube...).">Applies a colour look from a 3D LUT file (.cube...).</p><pre><code>lut: looks/teal-orange.cube</code></pre></figure>
+<figure id="card-clip-lut"><video src="files/clip-lut-f241648f258e2b57.mp4" muted loop playsinline preload="none"></video><figcaption>lut <a class="to-doc" href="../docs/project-yaml.html#key-lut" title="lut: in the project YAML reference">lut:</a></figcaption><p class="about" title="Applies a colour look from a 3D LUT file (.cube...).">Applies a colour look from a 3D LUT file (.cube...).</p><pre><code>lut: looks/teal-orange.cube</code></pre></figure>
 <figure id="card-clip-melt"><video src="files/clip-melt-57dec77d0afb325b.mp4" muted loop playsinline preload="none"></video><figcaption>melt <a class="to-doc" href="../docs/project-yaml.html#key-melt" title="melt: in the project YAML reference">melt:</a></figcaption><p class="about" title="Any of melt&#x27;s filters, by name, with its properties as given.">Any of melt&#x27;s filters, by name, with its properties as given.</p><pre><code>melt:
   - frei0r.cartoon: {diffspace: 0.4}
   - avfilter.hue: {av.h: &quot;0=0;74=180&quot;}</code></pre></figure>
@@ -543,7 +621,7 @@ ken_burns_to: [40, 30, 40, 40]</code></pre></figure>
 <figure id="card-openshot-chromakey"><video src="files/openshot-chromakey-d20dc7a5b6a98e68.mp4" muted loop playsinline preload="none"></video><figcaption>ChromaKey <a class="to-doc" href="../docs/project-yaml.html#key-openshot" title="openshot: in the project YAML reference">openshot:</a></figcaption><p class="about" title="Replaces the color (or chroma) of the frame with transparency (i.e. keys out the color).">Replaces the color (or chroma) of the frame with transparency (i.e. keys out the color).</p><pre><code>derive:
   openshot:
     - {effect: ChromaKey, color: &quot;#00ff00&quot;}</code></pre></figure>
-<figure id="card-openshot-colormap"><video src="files/openshot-colormap-e21b7b9b4cb1ad62.mp4" muted loop playsinline preload="none"></video><figcaption>ColorMap <a class="to-doc" href="../docs/project-yaml.html#key-openshot" title="openshot: in the project YAML reference">openshot:</a></figcaption><p class="about" title="Adjust colors using 3D LUT lookup tables (.cube format)">Adjust colors using 3D LUT lookup tables (.cube format)</p><pre><code>derive:
+<figure id="card-openshot-colormap"><video src="files/openshot-colormap-806663c2c117e96d.mp4" muted loop playsinline preload="none"></video><figcaption>ColorMap <a class="to-doc" href="../docs/project-yaml.html#key-openshot" title="openshot: in the project YAML reference">openshot:</a></figcaption><p class="about" title="Adjust colors using 3D LUT lookup tables (.cube format)">Adjust colors using 3D LUT lookup tables (.cube format)</p><pre><code>derive:
   openshot:
     - {effect: ColorMap, lut_path: looks/teal-orange.cube}</code></pre></figure>
 <figure id="card-openshot-colorshift"><video src="files/openshot-colorshift-44437fd4da9b9179.mp4" muted loop playsinline preload="none"></video><figcaption>ColorShift <a class="to-doc" href="../docs/project-yaml.html#key-openshot" title="openshot: in the project YAML reference">openshot:</a></figcaption><p class="about" title="Shift the colors of an image up, down, left, and right (with infinite wrapping).">Shift the colors of an image up, down, left, and right (with infinite wrapping).</p><pre><code>derive:
@@ -621,7 +699,7 @@ font: &quot;DejaVu Serif&quot;
 font_size: 44
 font_weight: bold
 shadow: true</code></pre></figure>
-<figure id="card-title-lottie-animation"><video src="files/title-lottie-animation-142d1843f8b956fd.mp4" muted loop playsinline preload="none"></video><figcaption>Lottie animation</figcaption><p class="about" title="A Lottie animation (LottieFiles&#x27;, or Telegram&#x27;s .tgs) in the bin like any clip: it plays with its transparency over the tracks below.">A Lottie animation (LottieFiles&#x27;, or Telegram&#x27;s .tgs) in the bin like any clip: it plays with its transparency over the tracks below.</p><pre><code>bin:
+<figure id="card-title-lottie-animation"><video src="files/title-lottie-animation-44b39a62b47a0aff.mp4" muted loop playsinline preload="none"></video><figcaption>Lottie animation</figcaption><p class="about" title="A Lottie animation (LottieFiles&#x27;, or Telegram&#x27;s .tgs) in the bin like any clip: it plays with its transparency over the tracks below.">A Lottie animation (LottieFiles&#x27;, or Telegram&#x27;s .tgs) in the bin like any clip: it plays with its transparency over the tracks below.</p><pre><code>bin:
   - {id: ball, path: ball.json}   # .json or .tgs</code></pre></figure>
 <figure id="card-title-title-card-outline"><video src="files/title-title-card-outline-eb7fcaaa40157203.mp4" muted loop playsinline preload="none"></video><figcaption>title card, outline <a class="to-doc" href="../docs/project-yaml.html#key-text" title="text: in the project YAML reference">text:</a></figcaption><p class="about" title="A title in italics (italic:), with an outline round each letter (outline:, outline_color:).">A title in italics (italic:), with an outline round each letter (outline:, outline_color:).</p><pre><code>type: title
 text: &quot;Hello&quot;
@@ -1885,7 +1963,7 @@ melt: effects_i_dsp.c:189: update_fft_cache: Assertion `fft_len &gt;= 0&#x27; fa
 <footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a></footer>
 <div class="toast" role="status"></div>
 <script>
-const COPY = "Click to copy", COPIED = "Copied";
+const COPY = "Click to copy", COPIED = "Copied", TRY_CARD = "Try";
 // inside the docs: the thin bar sticks under theirs, however tall it wraps
 const siteNav = document.querySelector("nav.site");
 if (siteNav) {
@@ -1965,7 +2043,7 @@ Promise.all([pixels(lumaSection.dataset.from), pixels(lumaSection.dataset.to)]).
 });
 // click a snippet to copy it
 const toast = document.querySelector(".toast");
-for (const pre of document.querySelectorAll("figure > pre")) {
+for (const pre of document.querySelectorAll("figure > pre, .try-preview pre")) {
   pre.title = COPY;
   pre.addEventListener("click", () => {
     navigator.clipboard.writeText(pre.textContent).then(() => {
@@ -1976,7 +2054,7 @@ for (const pre of document.querySelectorAll("figure > pre")) {
 // the two tabs; the last one shown is remembered
 function showTab(tab) {
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
-  for (const el of document.querySelectorAll("nav.sections a[data-tab], section[data-tab]")) el.classList.toggle("off", el.dataset.tab !== tab);
+  for (const el of document.querySelectorAll("nav.sections a[data-tab], section[data-tab], aside[data-tab]")) el.classList.toggle("off", el.dataset.tab !== tab);
   try { localStorage.setItem("gallery-tab", tab); } catch (e) {}
 }
 for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => showTab(b.dataset.tab));
@@ -2028,6 +2106,209 @@ if (card) {
     updateCounts();
   }
   card.scrollIntoView({block: "center"});
+}
+// try it: a transition picked in one box, its keys shown and played -
+// live, by the page, where it can (dissolve; wipe, with the shapes the
+// cards below play), else the card rendered with them; and the snippet
+// what's shown. A card's "Try" brings it there.
+const tryBox = document.querySelector('aside.try[data-tab="transitions"]');
+if (tryBox && lumaSection) {
+  const LIVE = ["dissolve", "wipe"];
+  const keysOf = (text) => Object.fromEntries(text.split("\n").map((line) => line.match(/^(\w+):\s*(.*)$/))
+    .filter(Boolean).map((m) => [m[1], m[2].replace(/^"(.*)"$/, "$1")]));
+  const kind = (t) => t.startsWith("melt/") ? "melt/…" : t;
+  const lumaCards = [...lumaSection.querySelectorAll("figure.luma")].map((fig) =>
+    ({ fig, name: keysOf(fig.querySelector("code").textContent).luma, src: fig.querySelector("canvas").dataset.src }));
+  const renders = [...document.querySelectorAll('section[data-tab="transitions"] figure')]
+    .filter((fig) => fig.querySelector("video"))
+    .map((fig) => {
+      const snippet = fig.querySelector("pre code").textContent, keys = keysOf(snippet);
+      return { fig, snippet, keys, name: fig.querySelector("figcaption").firstChild.textContent.trim(), kind: kind(keys.transition || "") };
+    });
+  const kinds = [...new Set(LIVE.concat(renders.map((r) => r.kind)))];
+  const pick = tryBox.querySelector('select[name="transition"]'), params = tryBox.querySelector(".params");
+  const canvas = tryBox.querySelector("canvas"), video = tryBox.querySelector("video");
+  const note = tryBox.querySelector(".note"), code = tryBox.querySelector("pre code");
+  pick.innerHTML = kinds.map((k) => `<option>${k}</option>`).join("");
+  const state = { transition: "wipe", luma: lumaCards.length ? lumaCards[0].name : "", softness: 0, reverse: false, render: null };
+  const maps = new Map();  // a shape's grey levels, by name
+  let from, to, map = null;
+  const ctx = canvas.getContext("2d"), out = ctx.createImageData(W, H);
+  async function shape(name) {
+    if (!maps.has(name)) {
+      const data = await pixels(lumaCards.find((c) => c.name === name).src), levels = new Float32Array(W * H);
+      for (let i = 0; i < levels.length; i++) levels[i] = data[i * 4] / 255;
+      maps.set(name, levels);
+    }
+    return maps.get(name);
+  }
+  function field(label, input) { return `<label><code>${label}</code> ${input}</label>`; }
+  function options(values, current) {
+    return values.map((v) => `<option${v === current ? " selected" : ""}>${v.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</option>`).join("");
+  }
+  function show() {
+    const live = LIVE.includes(state.transition);
+    pick.value = state.transition;
+    canvas.hidden = !live; video.hidden = note.hidden = live;
+    if (state.transition === "wipe") {
+      params.innerHTML =
+        field("luma", `<select name="luma">${options(lumaCards.map((c) => c.name), state.luma)}</select>`) +
+        field("luma_softness", `<input type="range" name="softness" min="0" max="1" step="0.05" value="${state.softness}"> <output>${state.softness}</output>`) +
+        `<label><input type="checkbox" name="reverse"${state.reverse ? " checked" : ""}> <code>luma_reverse</code></label>`;
+      code.textContent = `transition: wipe\nluma: ${state.luma}` + (state.softness ? `\nluma_softness: ${state.softness}` : "") +
+        (state.reverse ? "\nluma_reverse: true" : "");
+      map = null; shape(state.luma).then((levels) => { map = levels; if (still) paint(0.5); });
+    } else if (state.transition === "dissolve") {
+      params.innerHTML = ""; code.textContent = "transition: dissolve"; if (still) paint(0.5);
+    } else {
+      const these = renders.filter((r) => r.kind === state.transition);
+      const render = these.includes(state.render) ? state.render : these[0];
+      state.render = render;
+      const differs = ["transition", ...Object.keys(these[0].keys)].find((k) => new Set(these.map((r) => r.keys[k])).size > 1) || "";
+      params.innerHTML = these.length > 1 ? field(differs, `<select name="render">${options(these.map((r) => r.name), render.name)}</select>`) : "";
+      code.textContent = render.snippet;
+      const src = render.fig.querySelector("video").getAttribute("src");
+      if (video.getAttribute("src") !== src) { video.src = src; }
+      video.play().catch(() => {});
+    }
+    if (live) video.pause();
+  }
+  function paint(pos) {
+    if (!from || !to) return;
+    const wipe = state.transition === "wipe";
+    if (wipe && !map) return;
+    const soft = Math.max(SOFT, state.softness), smooth = state.softness > 0, p = pos * (1 + soft), d = out.data;
+    for (let i = 0; i < W * H; i++) {
+      let m = pos;
+      if (wipe) {
+        m = Math.min(1, Math.max(0, (p - (state.reverse ? 1 - map[i] : map[i])) / soft));
+        if (smooth) m = m * m * (3 - 2 * m);
+      }
+      const j = i * 4;
+      d[j] = from[j] + (to[j] - from[j]) * m; d[j + 1] = from[j + 1] + (to[j + 1] - from[j + 1]) * m;
+      d[j + 2] = from[j + 2] + (to[j + 2] - from[j + 2]) * m; d[j + 3] = 255;
+    }
+    ctx.putImageData(out, 0, 0);
+  }
+  pick.addEventListener("change", () => { state.transition = pick.value; show(); });
+  params.addEventListener("input", (e) => {
+    const el = e.target;
+    if (el.name === "luma") state.luma = el.value;
+    else if (el.name === "softness") state.softness = Number(el.value);
+    else if (el.name === "reverse") state.reverse = el.checked;
+    else if (el.name === "render") state.render = renders.find((r) => r.kind === state.transition && r.name === el.value);
+    if (el.name === "softness") {  // (dragging: only the number and the snippet change, not the controls)
+      el.nextElementSibling.textContent = state.softness;
+      code.textContent = code.textContent.replace(/\nluma_softness: .*|$/, state.softness ? `\nluma_softness: ${state.softness}` : "")
+        .replace(/(\nluma_reverse: true)(\nluma_softness: .*)$/, "$2$1");
+      if (still) paint(0.5);
+    } else show();
+  });
+  // a card's "Try": it, in the box
+  function load(fig) {
+    const keys = keysOf(fig.querySelector("pre code").textContent), lumaCard = lumaCards.find((c) => c.fig === fig);
+    if (lumaCard) Object.assign(state, { transition: "wipe", luma: lumaCard.name, softness: 0, reverse: false });
+    else if (keys.transition === "dissolve") state.transition = "dissolve";
+    else if (keys.transition === "wipe" && lumaCards.some((c) => c.name === keys.luma)) {
+      Object.assign(state, { transition: "wipe", luma: keys.luma, softness: Number(keys.luma_softness || 0),
+                             reverse: keys.luma_reverse === "true" });
+    } else {
+      const render = renders.find((r) => r.fig === fig);
+      Object.assign(state, { transition: render.kind, render });
+    }
+    show();
+    tryBox.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  for (const fig of [...lumaCards.map((c) => c.fig), ...renders.map((r) => r.fig)]) {
+    const button = document.createElement("button");
+    button.type = "button"; button.className = "try-card"; button.textContent = TRY_CARD;
+    button.addEventListener("click", () => load(fig));
+    (fig.querySelector("figcaption") || fig).append(button);
+  }
+  let visible = false;
+  new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(canvas.parentElement);
+  Promise.all([pixels(lumaSection.dataset.from), pixels(lumaSection.dataset.to)]).then(([a, b]) => {
+    from = a; to = b; paint(0.5);
+    const frame = (t) => {
+      if (visible && !still && !canvas.hidden) paint(position(t));
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
+  show();
+}
+// try an effect: picked by group and name, seen big - its card's
+// render (a video, or a sound), snippet, what it does and its key
+const effectsBox = document.querySelector('aside.try[data-tab="effects"]');
+if (effectsBox) {
+  const groups = [...document.querySelectorAll('section[data-tab="effects"]')].map((sec) => ({
+    name: sec.querySelector("summary h2").textContent,
+    cards: [...sec.querySelectorAll("figure")].filter((fig) => fig.querySelector("video, audio")),
+  })).filter((g) => g.cards.length);
+  const nameOf = (fig) => fig.querySelector("figcaption").firstChild.textContent.trim();
+  const groupPick = effectsBox.querySelector('select[name="group"]'), effectPick = effectsBox.querySelector('select[name="effect"]');
+  const video = effectsBox.querySelector("video"), audio = effectsBox.querySelector("audio");
+  const code = effectsBox.querySelector("pre code"), about = effectsBox.querySelector(".said"), doc = effectsBox.querySelector(".doc");
+  const params = effectsBox.querySelector(".params"), note = effectsBox.querySelector(".note"), sample = effectsBox.dataset.sample;
+  // those the page can play itself, from the sample as it is: speed, as
+  // the video's own rate (a loop as long as the sample's, not the clip's)
+  const LIVE = sample ? {
+    speed: { min: 0.25, max: 4, step: 0.25, play: (v) => { video.defaultPlaybackRate = video.playbackRate = v; } },
+  } : {};
+  const live = { speed: null };
+  const text = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  groupPick.innerHTML = groups.map((g, i) => `<option value="${i}">${text(g.name)}</option>`).join("");
+  let group = groups[0], card = group && group.cards[0];
+  function show() {
+    if (!card) return;
+    groupPick.value = String(groups.indexOf(group));
+    effectPick.innerHTML = group.cards.map((fig, i) => `<option value="${i}">${text(nameOf(fig))}</option>`).join("");
+    effectPick.value = String(group.cards.indexOf(card));
+    const name = nameOf(card), how = LIVE[name];
+    if (how && live[name] === null) live[name] = Number((card.querySelector("pre code").textContent.match(/: *(-?[\d.]+)/) || [])[1] || 1);
+    const media = card.querySelector("video, audio"), src = how ? sample : media.getAttribute("src"), sound = media.tagName === "AUDIO";
+    const [on, off] = sound ? [audio, video] : [video, audio];
+    off.hidden = true; off.pause();
+    on.hidden = false;
+    if (on.getAttribute("src") !== src) on.src = src;
+    if (!sound) on.play().catch(() => {});
+    note.hidden = !how;
+    if (how) {
+      const v = live[name];
+      params.innerHTML = `<label><code>${name}</code> <input type="range" name="live" min="${how.min}" max="${how.max}" step="${how.step}" value="${v}"> <output>${v}</output></label>`;
+      how.play(v);
+      code.textContent = `${name}: ${v}`;
+    } else {
+      params.innerHTML = "";
+      if (!sound) video.defaultPlaybackRate = video.playbackRate = 1;
+      code.textContent = card.querySelector("pre code").textContent;
+    }
+    const said = card.querySelector(".about");
+    about.textContent = said ? said.title : "";
+    const link = card.querySelector("a.to-doc");
+    doc.innerHTML = "";
+    if (link) doc.append(link.cloneNode(true));
+  }
+  params.addEventListener("input", (e) => {
+    const name = nameOf(card), v = Number(e.target.value);
+    live[name] = v; LIVE[name].play(v);
+    e.target.nextElementSibling.textContent = v;
+    code.textContent = `${name}: ${v}`;
+  });
+  groupPick.addEventListener("change", () => { group = groups[Number(groupPick.value)]; card = group.cards[0]; show(); });
+  effectPick.addEventListener("change", () => { card = group.cards[Number(effectPick.value)]; show(); });
+  for (const g of groups) {
+    for (const fig of g.cards) {
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "try-card"; button.textContent = TRY_CARD;
+      button.addEventListener("click", () => {
+        group = g; card = fig; show();
+        effectsBox.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      fig.querySelector("figcaption").append(button);
+    }
+  }
+  show();
 }
 </script>
 </body>
