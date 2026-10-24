@@ -259,7 +259,8 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system
 footer a { color: inherit; }
 main { max-width: 960px; margin: 0 auto; padding: 8px 16px 64px; }
 a { color: var(--accent); }
-code { font: 0.9em ui-monospace, monospace; background: var(--code); padding: 1px 4px; border-radius: 4px; }
+code { font: 0.9em ui-monospace, monospace; background: var(--code); padding: 1px 4px; border-radius: 4px; overflow-wrap: anywhere; }
+pre code { overflow-wrap: normal; }
 pre { background: var(--code); padding: 12px; border-radius: 6px; overflow-x: auto; }
 pre code { padding: 0; background: none; }
 table { border-collapse: collapse; display: block; overflow-x: auto; margin: 12px 0; }

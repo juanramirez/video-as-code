@@ -22,6 +22,12 @@ nav.site a[aria-current], nav.site a:hover { color: var(--fg); }
 nav.site a:first-child { color: var(--fg); font-weight: 600; }  /* the home: the site's name */
 nav.site a.repo { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 nav.site a.repo svg { width: 1em; height: 1em; fill: currentColor; }
+/* on a phone the bar takes several lines: it scrolls away with the page
+   instead of covering it, and tightens up */
+@media (max-width: 640px) {
+  nav.site { position: static; font-size: 15px; line-height: 1.4; gap: 12px; padding: 8px 16px; }
+  nav.site .pages { gap: 4px 14px; }
+}
 """
 
 

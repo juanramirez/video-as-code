@@ -1273,6 +1273,7 @@ figure:target { outline: 3px solid var(--accent, #2a6fdb); }
 body.in-site { padding-top: 0; }
 body.in-site > nav.site { margin: 0 -16px 24px; }
 body.in-site .bar { top: var(--site-h, 49px); }
+@media (max-width: 640px) { body.in-site .bar { top: 0; } body.in-site section, body.in-site figure { scroll-margin-top: 64px; } }
 body.in-site section, body.in-site figure { scroll-margin-top: calc(64px + var(--site-h, 49px)); }
 {site_css}
 </style>
