@@ -1,7 +1,7 @@
 [project]
 name = "video-as-code"
 version = "0.10.0"
-description = "Programmatic kdenlive project generator from a declarative YAML description, meant for versioning videos with a VCS (like Git)."
+description = "Describe a video in YAML, versioned with a VCS (like Git), and render it with melt - or open it in kdenlive."
 readme = "README.md"
 license = {text = "MIT"}
 authors = [{name = "Juan Ramírez"}]
