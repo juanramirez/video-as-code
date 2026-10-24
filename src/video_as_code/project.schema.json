@@ -1,0 +1,6438 @@
+{
+ "$schema": "http://json-schema.org/draft-07/schema#",
+ "$id": "https://video-as-code.juan-ramirez.es/project.schema.json",
+ "title": "video-as-code project",
+ "description": "A video-as-code project file: https://video-as-code.juan-ramirez.es/docs/project-yaml.html",
+ "type": "object",
+ "properties": {
+  "use": {
+   "allOf": [
+    {
+     "$ref": "#/definitions/use"
+    }
+   ],
+   "description": "A preset's name, or a list of them: their keys go in first, in that order, and the keys written next to `use:` last, so those win. A value replaces the preset's whole (a map isn't merged into the preset's map).",
+   "markdownDescription": "A preset's name, or a list of them: their keys go in first, in that order, and the keys written next to `use:` last, so those win. A value replaces the preset's whole (a map isn't merged into the preset's map)."
+  },
+  "project": {
+   "allOf": [
+    {
+     "$ref": "#/definitions/project"
+    }
+   ],
+   "description": "Required in a project's main file (a part has none): canvas, frame rate, where sources come from.",
+   "markdownDescription": "Required in a project's main file (a part has none): canvas, frame rate, where sources come from."
+  },
+  "bin": {
+   "type": "array",
+   "items": {
+    "$ref": "#/definitions/binClip"
+   },
+   "description": "The files (and titles) the video uses.",
+   "markdownDescription": "The files (and titles) the video uses."
+  },
+  "timeline": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "tracks": {
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/track"
+     },
+     "description": "A list of tracks, later ones above earlier ones.",
+     "markdownDescription": "A list of tracks, later ones above earlier ones."
+    }
+   },
+   "additionalProperties": false,
+   "description": "Low level: `tracks:`, every clip placed by hand.",
+   "markdownDescription": "Low level: `tracks:`, every clip placed by hand."
+  },
+  "scenes": {
+   "type": "array",
+   "items": {
+    "$ref": "#/definitions/scene"
+   },
+   "description": "High level: lists of clips with their timing worked out.",
+   "markdownDescription": "High level: lists of clips with their timing worked out."
+  },
+  "guides": {
+   "type": "array",
+   "items": {
+    "$ref": "#/definitions/guide"
+   },
+   "description": "Timeline markers.",
+   "markdownDescription": "Timeline markers."
+  },
+  "transitions": {
+   "type": "array",
+   "items": {
+    "$ref": "#/definitions/transition"
+   },
+   "description": "Transitions between two tracks over a time window.",
+   "markdownDescription": "Transitions between two tracks over a time window."
+  },
+  "presets": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "object"
+   },
+   "description": "A map of names to maps of keys.",
+   "markdownDescription": "A map of names to maps of keys."
+  },
+  "presets_file": {
+   "type": "string",
+   "description": "A YAML file, relative to the project file, with one key, `presets:`; its presets come first, and the project's own `presets:` of the same name replace them - for presets shared by several projects.",
+   "markdownDescription": "A YAML file, relative to the project file, with one key, `presets:`; its presets come first, and the project's own `presets:` of the same name replace them - for presets shared by several projects."
+  },
+  "parts": {
+   "type": "array",
+   "items": {
+    "$ref": "#/definitions/part"
+   },
+   "minItems": 1,
+   "description": "The parts, played one after the other: a file name (relative to the file listing it), or `{file: ..., ...}` with the keys of the transition into that part. A file with `parts:` has no `bin:`, `scenes:`, `timeline:`, `transitions:` or `guides:` of its own.",
+   "markdownDescription": "The parts, played one after the other: a file name (relative to the file listing it), or `{file: ..., ...}` with the keys of the transition into that part. A file with `parts:` has no `bin:`, `scenes:`, `timeline:`, `transitions:` or `guides:` of its own."
+  },
+  "x_kdenlive_raw": {
+   "description": "Written by `import`: what it couldn't map, carried back on `build`.",
+   "markdownDescription": "Written by `import`: what it couldn't map, carried back on `build`."
+  },
+  "x_reconstruct_unmatched": {
+   "description": "Written by `reconstruct`: the stretches it couldn't match, for a person to review.",
+   "markdownDescription": "Written by `reconstruct`: the stretches it couldn't match, for a person to review."
+  }
+ },
+ "additionalProperties": false,
+ "definitions": {
+  "use": {
+   "anyOf": [
+    {
+     "type": "string"
+    },
+    {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1
+    }
+   ],
+   "description": "A preset's name, or a list of them: their keys go in first, in that order, and the keys written next to `use:` last, so those win. A value replaces the preset's whole (a map isn't merged into the preset's map).",
+   "markdownDescription": "A preset's name, or a list of them: their keys go in first, in that order, and the keys written next to `use:` last, so those win. A value replaces the preset's whole (a map isn't merged into the preset's map)."
+  },
+  "source": {
+   "anyOf": [
+    {
+     "type": "string"
+    },
+    {
+     "type": "object",
+     "required": [
+      "name"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "taken": {
+       "type": "string",
+       "description": "Its capture time, local, to the second: `\"2015-03-08 15:23:51\"`.",
+       "markdownDescription": "Its capture time, local, to the second: `\"2015-03-08 15:23:51\"`."
+      },
+      "size": {
+       "type": "array",
+       "items": {
+        "type": "integer",
+        "exclusiveMinimum": 0
+       },
+       "minItems": 2,
+       "maxItems": 2,
+       "description": "Its size in pixels, `[w, h]`.",
+       "markdownDescription": "Its size in pixels, `[w, h]`."
+      },
+      "id": {
+       "type": "string",
+       "description": "The album item's id: its `media_id` in `sources.lock.yaml`.",
+       "markdownDescription": "The album item's id: its `media_id` in `sources.lock.yaml`."
+      }
+     }
+    }
+   ]
+  },
+  "luma": {
+   "anyOf": [
+    {
+     "enum": [
+      "linear_x",
+      "linear_y",
+      "diagonal",
+      "radial",
+      "square",
+      "clock",
+      "spiral",
+      "bars_horizontal",
+      "bars_vertical",
+      "checkerboard",
+      "heart",
+      "bowtie"
+     ]
+    },
+    {
+     "type": "string",
+     "pattern": "^openshot/[A-Za-z0-9][A-Za-z0-9_-]*$"
+    }
+   ]
+  },
+  "gl": {
+   "enum": [
+    "AdvancedMosaic",
+    "angular",
+    "BlockDissolve",
+    "BookFlip",
+    "Bounce",
+    "BowTieHorizontal",
+    "BowTieVertical",
+    "BowTieWithParameter",
+    "Box",
+    "burn",
+    "burn0",
+    "ButterflyWaveScrawler",
+    "cannabisleaf",
+    "chessboard",
+    "circle",
+    "CircleCrop",
+    "circleopen",
+    "colorphase",
+    "ColourDistance",
+    "coord-from-in",
+    "CrazyParametricFun",
+    "crosshatch",
+    "crosswarp",
+    "CrossZoom",
+    "cube",
+    "DefocusBlur",
+    "Directional",
+    "directional-easing",
+    "DirectionalScaled",
+    "directionalwarp",
+    "directionalwipe",
+    "displacement",
+    "dissolve",
+    "DoomScreenTransition",
+    "doorway",
+    "Dreamy",
+    "DreamyZoom",
+    "Drop_Zone_Flicker",
+    "EdgeTransition",
+    "fade",
+    "fadecolor",
+    "fadegrayscale",
+    "FilmBurn",
+    "flyeye",
+    "Fold",
+    "fragment",
+    "GlitchDisplace",
+    "GlitchMemories",
+    "GridFlip",
+    "heart",
+    "hexagonalize",
+    "HorizontalClose",
+    "HorizontalOpen",
+    "HSVfade",
+    "InvertedPageCurl",
+    "kaleidoscope",
+    "LeftRight",
+    "LinearBlur",
+    "luma",
+    "luminance_melt",
+    "morph",
+    "Mosaic",
+    "mosaic_transition",
+    "multiply_blend",
+    "old_tv_lost_signal",
+    "Overexposure",
+    "parametric_glitch",
+    "perlin",
+    "pinwheel",
+    "pixelize",
+    "polar_function",
+    "PolkaDotsCurtain",
+    "powerKaleido",
+    "PuzzleRight",
+    "Radial",
+    "randomNoisex",
+    "randomsquares",
+    "Rectangle",
+    "RectangleCrop",
+    "Revolve_Left",
+    "ripple",
+    "Rolls",
+    "rotate_scale_fade",
+    "RotateScaleVanish",
+    "rotateTransition",
+    "scale-in",
+    "SimpleFlip",
+    "SimpleZoom",
+    "SimpleZoomOut",
+    "Slides",
+    "splitSlideInHorizontal",
+    "splitSlideInOutHorizontal",
+    "splitSlideInOutVertical",
+    "splitSlideInVertical",
+    "splitSlideOutHorizontal",
+    "splitSlideOutVertical",
+    "squareswire",
+    "squeeze",
+    "StarWipe",
+    "static_wipe",
+    "StaticFade",
+    "StereoViewer",
+    "StripDatamoshGlitch",
+    "swap",
+    "Swirl",
+    "tangentMotionBlur",
+    "TilesWave",
+    "TopBottom",
+    "TVStatic",
+    "undulatingBurnOut",
+    "VerticalClose",
+    "VerticalOpen",
+    "WaterDrop",
+    "wind",
+    "windowblinds",
+    "windowslice",
+    "wipeDown",
+    "wipeLeft",
+    "wipeRight",
+    "wipeUp",
+    "x_axis_translation",
+    "ZoomInCircles",
+    "zoomInOut",
+    "ZoomLeftWipe",
+    "ZoomRigthWipe"
+   ]
+  },
+  "glParams": {
+   "type": "object"
+  },
+  "meltProperties": {
+   "type": "object",
+   "additionalProperties": {
+    "type": [
+     "string",
+     "number",
+     "boolean",
+     "null"
+    ]
+   }
+  },
+  "melt": {
+   "type": "array",
+   "items": {
+    "anyOf": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "additionalProperties": {
+       "anyOf": [
+        {
+         "type": "null"
+        },
+        {
+         "$ref": "#/definitions/meltProperties"
+        }
+       ]
+      }
+     }
+    ]
+   }
+  },
+  "glsl": {
+   "anyOf": [
+    {
+     "anyOf": [
+      {
+       "enum": [
+        "crt",
+        "chromatic",
+        "wave",
+        "glitch",
+        "kaleidoscope",
+        "vhs"
+       ]
+      },
+      {
+       "type": "string",
+       "pattern": "\\.glsl$"
+      }
+     ]
+    },
+    {
+     "type": "object",
+     "required": [
+      "shader"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "shader": {
+       "anyOf": [
+        {
+         "enum": [
+          "crt",
+          "chromatic",
+          "wave",
+          "glitch",
+          "kaleidoscope",
+          "vhs"
+         ]
+        },
+        {
+         "type": "string",
+         "pattern": "\\.glsl$"
+        }
+       ]
+      },
+      "params": {
+       "type": "object",
+       "additionalProperties": {
+        "anyOf": [
+         {
+          "type": "number"
+         },
+         {
+          "type": "boolean"
+         },
+         {
+          "type": "array",
+          "items": {
+           "type": "number"
+          }
+         }
+        ]
+       }
+      }
+     },
+     "allOf": [
+      {
+       "if": {
+        "properties": {
+         "shader": {
+          "const": "crt"
+         }
+        },
+        "required": [
+         "shader"
+        ]
+       },
+       "then": {
+        "properties": {
+         "params": {
+          "type": "object",
+          "properties": {
+           "curvature": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.6,
+            "default": 0.15
+           },
+           "scanlines": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.35
+           },
+           "vignette": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.4
+           }
+          },
+          "additionalProperties": false
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "shader": {
+          "const": "chromatic"
+         }
+        },
+        "required": [
+         "shader"
+        ]
+       },
+       "then": {
+        "properties": {
+         "params": {
+          "type": "object",
+          "properties": {
+           "amount": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.1,
+            "default": 0.012
+           }
+          },
+          "additionalProperties": false
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "shader": {
+          "const": "wave"
+         }
+        },
+        "required": [
+         "shader"
+        ]
+       },
+       "then": {
+        "properties": {
+         "params": {
+          "type": "object",
+          "properties": {
+           "amplitude": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 0.1,
+            "default": 0.012
+           },
+           "frequency": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 80,
+            "default": 14.0
+           },
+           "speed": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10,
+            "default": 2.0
+           }
+          },
+          "additionalProperties": false
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "shader": {
+          "const": "glitch"
+         }
+        },
+        "required": [
+         "shader"
+        ]
+       },
+       "then": {
+        "properties": {
+         "params": {
+          "type": "object",
+          "properties": {
+           "intensity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.5
+           },
+           "rate": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 30,
+            "default": 6.0
+           }
+          },
+          "additionalProperties": false
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "shader": {
+          "const": "kaleidoscope"
+         }
+        },
+        "required": [
+         "shader"
+        ]
+       },
+       "then": {
+        "properties": {
+         "params": {
+          "type": "object",
+          "properties": {
+           "segments": {
+            "type": "number",
+            "minimum": 2,
+            "maximum": 24,
+            "default": 6.0
+           },
+           "turn": {
+            "type": "number",
+            "minimum": -2,
+            "maximum": 2,
+            "default": 0.1
+           }
+          },
+          "additionalProperties": false
+         }
+        }
+       }
+      },
+      {
+       "if": {
+        "properties": {
+         "shader": {
+          "const": "vhs"
+         }
+        },
+        "required": [
+         "shader"
+        ]
+       },
+       "then": {
+        "properties": {
+         "params": {
+          "type": "object",
+          "properties": {
+           "strength": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "default": 0.6
+           }
+          },
+          "additionalProperties": false
+         }
+        }
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "lut": {
+   "type": "string"
+  },
+  "triple": {
+   "type": "array",
+   "items": {
+    "type": "number",
+    "minimum": 0
+   },
+   "minItems": 3,
+   "maxItems": 3
+  },
+  "sources": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "album": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "minProperties": 1,
+       "properties": {
+        "name": {
+         "type": "string"
+        },
+        "url": {
+         "type": "string"
+        }
+       }
+      }
+     ],
+     "description": "A Google Photos shared-album link (`https://photos.app.goo.gl/...`), or a map `{name, url}`: the album's `name` (for a tool that creates it, then writes its link as `url`) and its `url` once it exists. Needed for any `source:` clip; `fetch` needs the link. Keep it out of public repos: anyone with it can see the album. See README's *`video-as-code fetch`* section.",
+     "markdownDescription": "A Google Photos shared-album link (`https://photos.app.goo.gl/...`), or a map `{name, url}`: the album's `name` (for a tool that creates it, then writes its link as `url`) and its `url` once it exists. Needed for any `source:` clip; `fetch` needs the link. Keep it out of public repos: anyone with it can see the album. See README's *`video-as-code fetch`* section."
+    },
+    "reference": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "array",
+       "items": {
+        "type": "string"
+       },
+       "minItems": 1
+      },
+      {
+       "type": "object",
+       "required": [
+        "url"
+       ],
+       "additionalProperties": false,
+       "properties": {
+        "url": {
+         "anyOf": [
+          {
+           "type": "string"
+          },
+          {
+           "type": "array",
+           "items": {
+            "type": "string"
+           },
+           "minItems": 1
+          }
+         ]
+        },
+        "path": {
+         "type": "string"
+        }
+       }
+      }
+     ],
+     "description": "The video this project remakes, for a project that rebuilds an old edit: a link, a list of links (tried in order, as a clip's `url:`), or a map `{url, path}` - `path` being where to keep it (default `reference/reference.mp4`). `fetch` downloads it whole (from YouTube: video and sound, as an mp4) if it isn't there yet. Its size and sha256 are locked (`reference:` in `sources.lock.yaml`), and a download that isn't that file is reported: YouTube re-encodes now and then, so while shots are cut from it, list an exact copy first (a Google Drive link to the file) and YouTube after it. Only needed to find and match the old video's material, or while the project still cuts shots out of it (`derive: {path: reference/...}`); a new video has none. Keep unlisted links out of public repos.",
+     "markdownDescription": "The video this project remakes, for a project that rebuilds an old edit: a link, a list of links (tried in order, as a clip's `url:`), or a map `{url, path}` - `path` being where to keep it (default `reference/reference.mp4`). `fetch` downloads it whole (from YouTube: video and sound, as an mp4) if it isn't there yet. Its size and sha256 are locked (`reference:` in `sources.lock.yaml`), and a download that isn't that file is reported: YouTube re-encodes now and then, so while shots are cut from it, list an exact copy first (a Google Drive link to the file) and YouTube after it. Only needed to find and match the old video's material, or while the project still cuts shots out of it (`derive: {path: reference/...}`); a new video has none. Keep unlisted links out of public repos."
+    },
+    "dir": {
+     "type": "string",
+     "description": "Folder (relative to the YAML) where `fetch` puts downloads and `derive:` its outputs (in `<dir>/.derived/`).\n\nDefault: `assets`",
+     "markdownDescription": "Folder (relative to the YAML) where `fetch` puts downloads and `derive:` its outputs (in `<dir>/.derived/`).\n\nDefault: `assets`"
+    },
+    "prune_after_days": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Before each `render`, delete files the tool can bring back by itself (album items only `derive:` needs, stale generated files) that no `build`/`validate`/`render` has used for this many days. `0` = never. See README's *`video-as-code fetch`* section.\n\nDefault: `7`",
+     "markdownDescription": "Before each `render`, delete files the tool can bring back by itself (album items only `derive:` needs, stale generated files) that no `build`/`validate`/`render` has used for this many days. `0` = never. See README's *`video-as-code fetch`* section.\n\nDefault: `7`"
+    }
+   },
+   "additionalProperties": false
+  },
+  "project": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "id": {
+     "type": [
+      "string",
+      "number"
+     ],
+     "description": "Short identifier of the project.\n\nDefault: *(required)*",
+     "markdownDescription": "Short identifier of the project.\n\nDefault: *(required)*"
+    },
+    "title": {
+     "type": [
+      "string",
+      "number"
+     ],
+     "description": "Human-readable title.\n\nDefault: *(required)*",
+     "markdownDescription": "Human-readable title.\n\nDefault: *(required)*"
+    },
+    "fps": {
+     "type": "number",
+     "exclusiveMinimum": 0,
+     "description": "Frame rate: `25`, `30`, `29.97`, `23.976`...\n\nDefault: *(required)*",
+     "markdownDescription": "Frame rate: `25`, `30`, `29.97`, `23.976`...\n\nDefault: *(required)*"
+    },
+    "width": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "Canvas size in pixels.\n\nDefault: *(required)*",
+     "markdownDescription": "Canvas size in pixels.\n\nDefault: *(required)*"
+    },
+    "height": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "Canvas size in pixels.\n\nDefault: *(required)*",
+     "markdownDescription": "Canvas size in pixels.\n\nDefault: *(required)*"
+    },
+    "colorspace": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "Colour matrix of the output (`709` HD, `601` SD).\n\nDefault: `709`",
+     "markdownDescription": "Colour matrix of the output (`709` HD, `601` SD).\n\nDefault: `709`"
+    },
+    "default_image_duration": {
+     "type": "number",
+     "exclusiveMinimum": 0,
+     "description": "Length of a still image's producer. A still placed for longer than this is cut short at it: raise it if a still has to stay on screen longer.\n\nDefault: `4.0`",
+     "markdownDescription": "Length of a still image's producer. A still placed for longer than this is cut short at it: raise it if a still has to stay on screen longer.\n\nDefault: `4.0`"
+    },
+    "notes": {
+     "type": "string",
+     "description": "Free text, kept in the generated project.",
+     "markdownDescription": "Free text, kept in the generated project."
+    },
+    "sources": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/sources"
+      }
+     ],
+     "description": "Where clips come from and how the downloaded files are kept (below).",
+     "markdownDescription": "Where clips come from and how the downloaded files are kept (below)."
+    }
+   },
+   "additionalProperties": false,
+   "if": {
+    "not": {
+     "required": [
+      "use"
+     ]
+    }
+   },
+   "then": {
+    "required": [
+     "id",
+     "title",
+     "fps",
+     "width",
+     "height"
+    ]
+   }
+  },
+  "fit": {
+   "type": "object",
+   "required": [
+    "size"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "size": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 1
+     },
+     "minItems": 2,
+     "maxItems": 2
+    },
+    "background": {
+     "enum": [
+      "blur",
+      "black"
+     ]
+    },
+    "lighten": {
+     "type": "number",
+     "minimum": 0,
+     "exclusiveMaximum": 1
+    },
+    "margin": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "radius": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "edge": {
+     "type": "integer",
+     "minimum": 0
+    },
+    "shadow": {
+     "type": "number",
+     "minimum": 0,
+     "exclusiveMaximum": 1
+    },
+    "dim": {
+     "type": "number",
+     "minimum": 0,
+     "exclusiveMaximum": 1
+    }
+   }
+  },
+  "derive": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "source": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/source"
+      }
+     ],
+     "description": "An album item, by original file name - or `{name, taken, size, id}` like a bin `source:` (downloaded by `fetch`; if a plain `source:` clip uses the same item, its file is shared).",
+     "markdownDescription": "An album item, by original file name - or `{name, taken, size, id}` like a bin `source:` (downloaded by `fetch`; if a plain `source:` clip uses the same item, its file is shared)."
+    },
+    "path": {
+     "type": "string",
+     "description": "A local file.",
+     "markdownDescription": "A local file."
+    },
+    "clip": {
+     "type": [
+      "string",
+      "number"
+     ],
+     "description": "Another bin entry's file, by `id` (it may itself be derived).",
+     "markdownDescription": "Another bin entry's file, by `id` (it may itself be derived)."
+    },
+    "motion": {
+     "type": "boolean",
+     "description": "Take the short video inside a phone's motion photo (`.MP.jpg`) instead of the photo; the result is an `.mp4`.\n\nExample: `true`",
+     "markdownDescription": "Take the short video inside a phone's motion photo (`.MP.jpg`) instead of the photo; the result is an `.mp4`.\n\nExample: `true`"
+    },
+    "rotate": {
+     "enum": [
+      90,
+      180,
+      270
+     ],
+     "description": "Turn the picture 90, 180 or 270 degrees clockwise, before anything else (so `crop` works on the turned picture): for a photo whose EXIF orientation tag is wrong, shown upside down or on its side.\n\nExample: `180`",
+     "markdownDescription": "Turn the picture 90, 180 or 270 degrees clockwise, before anything else (so `crop` works on the turned picture): for a photo whose EXIF orientation tag is wrong, shown upside down or on its side.\n\nExample: `180`"
+    },
+    "trim": {
+     "type": "array",
+     "items": {
+      "type": "number",
+      "minimum": 0
+     },
+     "minItems": 2,
+     "maxItems": 2,
+     "description": "Keep only these input seconds `[start, end)`.\n\nExample: `[12, 16]`",
+     "markdownDescription": "Keep only these input seconds `[start, end)`.\n\nExample: `[12, 16]`"
+    },
+    "cut": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "items": {
+       "type": "number",
+       "minimum": 0
+      },
+      "minItems": 2,
+      "maxItems": 2
+     },
+     "minItems": 1,
+     "description": "Remove these input-second ranges from the middle, picture and sound alike.\n\nExample: `[[18.44, 20.36]]`",
+     "markdownDescription": "Remove these input-second ranges from the middle, picture and sound alike.\n\nExample: `[[18.44, 20.36]]`"
+    },
+    "crop": {
+     "type": "object",
+     "required": [
+      "x",
+      "y",
+      "w",
+      "h"
+     ],
+     "additionalProperties": false,
+     "properties": {
+      "x": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "y": {
+       "type": "integer",
+       "minimum": 0
+      },
+      "w": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "h": {
+       "type": "integer",
+       "minimum": 1
+      }
+     },
+     "description": "Keep this rectangle, in input pixels.\n\nExample: `{x: 0, y: 156, w: 4080, h: 2760}`",
+     "markdownDescription": "Keep this rectangle, in input pixels.\n\nExample: `{x: 0, y: 156, w: 4080, h: 2760}`"
+    },
+    "scale": {
+     "type": "array",
+     "items": {
+      "anyOf": [
+       {
+        "const": -1
+       },
+       {
+        "type": "integer",
+        "minimum": 1
+       }
+      ]
+     },
+     "minItems": 2,
+     "maxItems": 2,
+     "description": "Resize; `-1` on one side keeps the aspect ratio. Two sizes of another shape stretch the picture to it (square pixels: it shows at that shape).\n\nExample: `[1920, 1080]`",
+     "markdownDescription": "Resize; `-1` on one side keeps the aspect ratio. Two sizes of another shape stretch the picture to it (square pixels: it shows at that shape).\n\nExample: `[1920, 1080]`"
+    },
+    "devignette": {
+     "type": "number",
+     "exclusiveMinimum": 0,
+     "exclusiveMaximum": 1,
+     "description": "Undo a vignette baked into the input (a shot taken from an old edit, say): how bright its corners are relative to its centre, between 0 and 1.\n\nExample: `0.81`",
+     "markdownDescription": "Undo a vignette baked into the input (a shot taken from an old edit, say): how bright its corners are relative to its centre, between 0 and 1.\n\nExample: `0.81`"
+    },
+    "fit": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/fit"
+      }
+     ],
+     "description": "Make the whole picture fit inside `size`, centred, and fill the rest: `blur` (the default) with a blurred copy of the picture enlarged to cover it, `black` with black. Fits a portrait photo into a landscape frame without cropping it. With `blur`, `lighten: 0.35` (0-1) brightens the blurred copy - every channel times 1 + 5 x `lighten`, so its colours stay (a dark brown turns light brown, not grey) - for a dark picture (a cave, a night shot) whose blurred surround would otherwise look like plain black. As a **card** on its blurred copy (`blur` only): `margin: 60` keeps at least that many px of the copy all round the picture, `radius: 40` rounds its corners, `edge: 8` softens its edge over that many px, `shadow: 0.45` (0-1) lays a soft shadow of its shape under it, `dim: 0.2` (0-1) darkens the copy so the card stands out - e.g. `{size: [1920, 1080], background: blur, margin: 60, radius: 40, edge: 8, shadow: 0.45, dim: 0.2}`; any picture shape, a portrait one as a tall card. `margin`, `radius` and `edge` are whole pixels, `margin` less than half the smaller side of `size`; `shadow` and `dim` go from 0 up to (not including) 1; `dim` and `lighten` don't go together. On a video, the card's shape and shadow are worked out once, on its first frame.\n\nExample: `{size: [1440, 960], background: blur}`",
+     "markdownDescription": "Make the whole picture fit inside `size`, centred, and fill the rest: `blur` (the default) with a blurred copy of the picture enlarged to cover it, `black` with black. Fits a portrait photo into a landscape frame without cropping it. With `blur`, `lighten: 0.35` (0-1) brightens the blurred copy - every channel times 1 + 5 x `lighten`, so its colours stay (a dark brown turns light brown, not grey) - for a dark picture (a cave, a night shot) whose blurred surround would otherwise look like plain black. As a **card** on its blurred copy (`blur` only): `margin: 60` keeps at least that many px of the copy all round the picture, `radius: 40` rounds its corners, `edge: 8` softens its edge over that many px, `shadow: 0.45` (0-1) lays a soft shadow of its shape under it, `dim: 0.2` (0-1) darkens the copy so the card stands out - e.g. `{size: [1920, 1080], background: blur, margin: 60, radius: 40, edge: 8, shadow: 0.45, dim: 0.2}`; any picture shape, a portrait one as a tall card. `margin`, `radius` and `edge` are whole pixels, `margin` less than half the smaller side of `size`; `shadow` and `dim` go from 0 up to (not including) 1; `dim` and `lighten` don't go together. On a video, the card's shape and shadow are worked out once, on its first frame.\n\nExample: `{size: [1440, 960], background: blur}`"
+    },
+    "feather": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "Soft edges: the picture fades out over its last that many pixels on every side, to black (and, with `fit: blur`, the picture itself also melts into its blurred surround).\n\nExample: `16`",
+     "markdownDescription": "Soft edges: the picture fades out over its last that many pixels on every side, to black (and, with `fit: blur`, the picture itself also melts into its blurred surround).\n\nExample: `16`"
+    },
+    "vignette": {
+     "type": "number",
+     "exclusiveMinimum": 0,
+     "exclusiveMaximum": 1,
+     "description": "Darken the edges, the reverse of `devignette`: how bright the corners end up relative to the centre, between 0 and 1.\n\nExample: `0.81`",
+     "markdownDescription": "Darken the edges, the reverse of `devignette`: how bright the corners end up relative to the centre, between 0 and 1.\n\nExample: `0.81`"
+    },
+    "fps": {
+     "type": "number",
+     "exclusiveMinimum": 0,
+     "description": "Re-time to this frame rate.\n\nExample: `30`",
+     "markdownDescription": "Re-time to this frame rate.\n\nExample: `30`"
+    },
+    "reverse": {
+     "type": "boolean",
+     "description": "Play backwards, picture and sound.\n\nExample: `true`",
+     "markdownDescription": "Play backwards, picture and sound.\n\nExample: `true`"
+    },
+    "volume": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Multiply the sound's level.\n\nExample: `1.41`",
+     "markdownDescription": "Multiply the sound's level.\n\nExample: `1.41`"
+    },
+    "intra": {
+     "type": "boolean",
+     "description": "Encode a video with every frame a keyframe: avoids `speed:` stalling near the end of a file with long keyframe intervals, at the cost of a bigger file.\n\nExample: `true`",
+     "markdownDescription": "Encode a video with every frame a keyframe: avoids `speed:` stalling near the end of a file with long keyframe intervals, at the cost of a bigger file.\n\nExample: `true`"
+    },
+    "upscale": {
+     "const": 4,
+     "description": "Enlarge a still or a gif x4 with Real-ESRGAN (slow; `fetch` offers to install it).\n\nExample: `4`",
+     "markdownDescription": "Enlarge a still or a gif x4 with Real-ESRGAN (slow; `fetch` offers to install it).\n\nExample: `4`"
+    },
+    "openshot": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "effect"
+      ],
+      "properties": {
+       "effect": {
+        "type": "string"
+       }
+      }
+     },
+     "minItems": 1,
+     "description": "libopenshot's effects, last of all, in order: video ones (`Wave`, `AnalogTape`, `LensFlare`, `SphericalProjection`, `Pixelate`, `ColorShift`, `Shift`, `Bars`...) and audio ones (`Echo`, `Robotization`, `Whisperization`, `Distortion`...). Each a map with its `effect` and any of its properties: a number, a map of seconds to numbers (keyframes), a colour (`[r, g, b]` or `\"#rrggbb\"`), `true`/`false` or text - checked against libopenshot's own catalog. `Caption` (draws nothing outside OpenShot's editor: use a `type: title` clip) and `Mask` (needs a mask picture it can't be given) are refused. Needs libopenshot's Python bindings (`python3-openshot`, which `openshot-qt` brings): run with the system's Python (`VIDEO_AS_CODE_OPENSHOT_PYTHON` for another). Not with `upscale`.\n\nExample: `[{effect: Wave, amplitude: 0.6}]`",
+     "markdownDescription": "libopenshot's effects, last of all, in order: video ones (`Wave`, `AnalogTape`, `LensFlare`, `SphericalProjection`, `Pixelate`, `ColorShift`, `Shift`, `Bars`...) and audio ones (`Echo`, `Robotization`, `Whisperization`, `Distortion`...). Each a map with its `effect` and any of its properties: a number, a map of seconds to numbers (keyframes), a colour (`[r, g, b]` or `\"#rrggbb\"`), `true`/`false` or text - checked against libopenshot's own catalog. `Caption` (draws nothing outside OpenShot's editor: use a `type: title` clip) and `Mask` (needs a mask picture it can't be given) are refused. Needs libopenshot's Python bindings (`python3-openshot`, which `openshot-qt` brings): run with the system's Python (`VIDEO_AS_CODE_OPENSHOT_PYTHON` for another). Not with `upscale`.\n\nExample: `[{effect: Wave, amplitude: 0.6}]`"
+    }
+   },
+   "additionalProperties": false
+  },
+  "binClip": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "id": {
+     "type": [
+      "string",
+      "number"
+     ],
+     "description": "How the timeline (and `derive: {clip}`) refers to it.",
+     "markdownDescription": "How the timeline (and `derive: {clip}`) refers to it."
+    },
+    "type": {
+     "enum": [
+      "video",
+      "audio",
+      "image",
+      "title"
+     ],
+     "description": "`video`, `audio`, `image`, `animation` or `title`. Only needed to override the guess, or for titles.\n\nDefault: from the extension",
+     "markdownDescription": "`video`, `audio`, `image`, `animation` or `title`. Only needed to override the guess, or for titles.\n\nDefault: from the extension"
+    },
+    "folder": {
+     "type": "string",
+     "description": "Bin folder to show it in when the project is opened in kdenlive.",
+     "markdownDescription": "Bin folder to show it in when the project is opened in kdenlive."
+    },
+    "path": {
+     "type": "string",
+     "description": "A local file (relative to the YAML, or absolute).\n\nExample: `{id: beach, path: media/beach.jpg}`",
+     "markdownDescription": "A local file (relative to the YAML, or absolute).\n\nExample: `{id: beach, path: media/beach.jpg}`"
+    },
+    "source": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/source"
+      }
+     ],
+     "description": "An item of `project.sources.album`, by its original file name. `fetch` downloads it as `<dir>/<capture date>_<id><ext>`. When several album items share that name, `source: {name: IMG-20150308-WA0003.jpg, taken: \"2015-03-08 15:23:51\"}` - the name plus its capture `taken` time (local, to the second) - says which one; if even the time ties, `size: [w, h]` (in pixels) too; if even that ties, `id:` - the album item's id, the `media_id` in `sources.lock.yaml` (see README's *`video-as-code fetch`*).\n\nExample: `{id: slide, source: PXL_20250830_085416309.mp4}`",
+     "markdownDescription": "An item of `project.sources.album`, by its original file name. `fetch` downloads it as `<dir>/<capture date>_<id><ext>`. When several album items share that name, `source: {name: IMG-20150308-WA0003.jpg, taken: \"2015-03-08 15:23:51\"}` - the name plus its capture `taken` time (local, to the second) - says which one; if even the time ties, `size: [w, h]` (in pixels) too; if even that ties, `id:` - the album item's id, the `media_id` in `sources.lock.yaml` (see README's *`video-as-code fetch`*).\n\nExample: `{id: slide, source: PXL_20250830_085416309.mp4}`"
+    },
+    "url": {
+     "anyOf": [
+      {
+       "type": "string",
+       "pattern": "^https?://"
+      },
+      {
+       "type": "array",
+       "items": {
+        "type": "string",
+        "pattern": "^https?://"
+       },
+       "minItems": 1
+      }
+     ],
+     "description": "One link or a list, tried in order until one works: YouTube (audio only, via `yt-dlp`), Google Drive (shared as \"anyone with the link\"), or any direct link. Stored as `<dir>/<id><ext>`.\n\nExample: `{id: music, url: [https://www.youtube.com/watch?v=..., https://drive.google.com/file/d/.../view]}`",
+     "markdownDescription": "One link or a list, tried in order until one works: YouTube (audio only, via `yt-dlp`), Google Drive (shared as \"anyone with the link\"), or any direct link. Stored as `<dir>/<id><ext>`.\n\nExample: `{id: music, url: [https://www.youtube.com/watch?v=..., https://drive.google.com/file/d/.../view]}`"
+    },
+    "local_name": {
+     "type": "string",
+     "description": "With `source:`/`url:` only: the local file name to use instead of the automatic one (same extension as the original).",
+     "markdownDescription": "With `source:`/`url:` only: the local file name to use instead of the automatic one (same extension as the original)."
+    },
+    "derive": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/derive"
+      }
+     ],
+     "description": "Generated with ffmpeg from another file (below).\n\nExample: `{id: jump, derive: {source: VID_1.mp4, trim: [12, 16]}}`",
+     "markdownDescription": "Generated with ffmpeg from another file (below).\n\nExample: `{id: jump, derive: {source: VID_1.mp4, trim: [12, 16]}}`"
+    },
+    "text": {
+     "type": [
+      "string",
+      "number"
+     ],
+     "description": "The text; may span several lines.\n\nDefault: *(required)*",
+     "markdownDescription": "The text; may span several lines.\n\nDefault: *(required)*"
+    },
+    "font": {
+     "type": "string",
+     "description": "Font family.\n\nDefault: `Sans`",
+     "markdownDescription": "Font family.\n\nDefault: `Sans`"
+    },
+    "font_size": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "Size in pixels.\n\nDefault: `48`",
+     "markdownDescription": "Size in pixels.\n\nDefault: `48`"
+    },
+    "color": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+     },
+     "minItems": 4,
+     "maxItems": 4,
+     "description": "Text colour.\n\nDefault: `[255, 255, 255, 255]`",
+     "markdownDescription": "Text colour.\n\nDefault: `[255, 255, 255, 255]`"
+    },
+    "background": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+     },
+     "minItems": 4,
+     "maxItems": 4,
+     "description": "Background colour (transparent by default).\n\nDefault: `[0, 0, 0, 0]`",
+     "markdownDescription": "Background colour (transparent by default).\n\nDefault: `[0, 0, 0, 0]`"
+    },
+    "font_weight": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 100,
+       "maximum": 900
+      },
+      {
+       "enum": [
+        "thin",
+        "light",
+        "normal",
+        "medium",
+        "semibold",
+        "bold",
+        "black"
+       ]
+      }
+     ],
+     "description": "Weight, from `100` to `900` (`400` normal, `700` bold) or a name: `thin`, `light`, `normal`, `medium`, `semibold`, `bold`, `black` - the font needs a face of about that weight.\n\nDefault: `400`",
+     "markdownDescription": "Weight, from `100` to `900` (`400` normal, `700` bold) or a name: `thin`, `light`, `normal`, `medium`, `semibold`, `bold`, `black` - the font needs a face of about that weight.\n\nDefault: `400`"
+    },
+    "italic": {
+     "type": "boolean",
+     "description": "Italic.\n\nDefault: `false`",
+     "markdownDescription": "Italic.\n\nDefault: `false`"
+    },
+    "outline": {
+     "type": "number",
+     "minimum": 0,
+     "description": "An outline around each letter, this many pixels wide.\n\nDefault: `0`",
+     "markdownDescription": "An outline around each letter, this many pixels wide.\n\nDefault: `0`"
+    },
+    "outline_color": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+     },
+     "minItems": 4,
+     "maxItems": 4,
+     "description": "Its colour.\n\nDefault: `[0, 0, 0, 255]`",
+     "markdownDescription": "Its colour.\n\nDefault: `[0, 0, 0, 255]`"
+    },
+    "shadow": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "color": {
+         "type": "array",
+         "items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+         },
+         "minItems": 4,
+         "maxItems": 4
+        },
+        "blur": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "offset": {
+         "type": "array",
+         "items": {
+          "type": "integer"
+         },
+         "minItems": 2,
+         "maxItems": 2
+        }
+       }
+      }
+     ],
+     "description": "A drop shadow: `true` (soft, dark, 3 px down and right), or `{color: [r, g, b, a], blur: 6, offset: [3, 3]}`.\n\nDefault: `false`",
+     "markdownDescription": "A drop shadow: `true` (soft, dark, 3 px down and right), or `{color: [r, g, b, a], blur: 6, offset: [3, 3]}`.\n\nDefault: `false`"
+    }
+   },
+   "additionalProperties": false,
+   "if": {
+    "not": {
+     "required": [
+      "use"
+     ]
+    }
+   },
+   "then": {
+    "required": [
+     "id"
+    ]
+   }
+  },
+  "clip": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "clip": {
+     "type": [
+      "string",
+      "number"
+     ],
+     "description": "The bin entry it plays, by its `id`.",
+     "markdownDescription": "The bin entry it plays, by its `id`."
+    },
+    "start": {
+     "type": "number",
+     "description": "Where on the timeline it starts.",
+     "markdownDescription": "Where on the timeline it starts."
+    },
+    "in": {
+     "type": "number",
+     "description": "Where in the clip to start (default `0`); with `speed`, in timeline (already sped-up) seconds.",
+     "markdownDescription": "Where in the clip to start (default `0`); with `speed`, in timeline (already sped-up) seconds."
+    },
+    "out": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "Where in the clip to stop, same units as `in`.",
+     "markdownDescription": "Where in the clip to stop, same units as `in`."
+    },
+    "duration": {
+     "type": [
+      "number",
+      "null"
+     ],
+     "description": "How long it lasts on the timeline (instead of `out`).",
+     "markdownDescription": "How long it lasts on the timeline (instead of `out`)."
+    },
+    "source_in": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Start and end in *real source seconds*, whatever `speed` is. Both or neither, and not together with `in`/`out`/`duration`. With `speed_ramp`, `source_in` alone sets where the ramp starts reading.",
+     "markdownDescription": "Start and end in *real source seconds*, whatever `speed` is. Both or neither, and not together with `in`/`out`/`duration`. With `speed_ramp`, `source_in` alone sets where the ramp starts reading."
+    },
+    "source_out": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Start and end in *real source seconds*, whatever `speed` is. Both or neither, and not together with `in`/`out`/`duration`. With `speed_ramp`, `source_in` alone sets where the ramp starts reading.",
+     "markdownDescription": "Start and end in *real source seconds*, whatever `speed` is. Both or neither, and not together with `in`/`out`/`duration`. With `speed_ramp`, `source_in` alone sets where the ramp starts reading."
+    },
+    "speed": {
+     "type": "number",
+     "not": {
+      "const": 0
+     },
+     "description": "Constant speed factor (`2.0` = twice as fast, negative = backwards).",
+     "markdownDescription": "Constant speed factor (`2.0` = twice as fast, negative = backwards)."
+    },
+    "preserve_pitch": {
+     "type": "boolean",
+     "description": "Keep the sound's pitch when `speed` changes it.\n\nDefault: `false`",
+     "markdownDescription": "Keep the sound's pitch when `speed` changes it.\n\nDefault: `false`"
+    },
+    "speed_ramp": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "at",
+       "speed"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "at": {
+        "type": "number"
+       },
+       "speed": {
+        "type": "number",
+        "exclusiveMinimum": 0
+       }
+      }
+     },
+     "minItems": 1,
+     "description": "Changing speed: `[{at: 0, speed: 4}, {at: 0.75, speed: 1}]` - each entry starts a constant-speed stretch at `at` seconds into the clip; the first must be at `0`. Not together with `speed` or `in`; needs `out` or `duration`.",
+     "markdownDescription": "Changing speed: `[{at: 0, speed: 4}, {at: 0.75, speed: 1}]` - each entry starts a constant-speed stretch at `at` seconds into the clip; the first must be at `0`. Not together with `speed` or `in`; needs `out` or `duration`."
+    },
+    "speed_ramp_image_mode": {
+     "enum": [
+      "nearest",
+      "blend"
+     ],
+     "description": "`nearest` (repeat frames) or `blend` (mix neighbouring frames) when slowed down.\n\nDefault: `nearest`",
+     "markdownDescription": "`nearest` (repeat frames) or `blend` (mix neighbouring frames) when slowed down.\n\nDefault: `nearest`"
+    },
+    "boomerang": {
+     "type": "boolean",
+     "description": "Play the stretch forward and then backward, as two placements (the backward one muted, starting with a hard cut). Needs `out`, `duration` or `source_in`+`source_out`; not with `speed_ramp`.\n\nDefault: `false`",
+     "markdownDescription": "Play the stretch forward and then backward, as two placements (the backward one muted, starting with a hard cut). Needs `out`, `duration` or `source_in`+`source_out`; not with `speed_ramp`.\n\nDefault: `false`"
+    },
+    "boomerang_trim_hold": {
+     "type": "boolean",
+     "description": "With `boomerang`: if the source holds its last frame (a gif's long last delay), shorten both halves so the turnaround doesn't stall.\n\nDefault: `true`",
+     "markdownDescription": "With `boomerang`: if the source holds its last frame (a gif's long last delay), shorten both halves so the turnaround doesn't stall.\n\nDefault: `true`"
+    },
+    "freeze_at": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Freeze the picture at this second of the clip (counted from its first visible frame). Alone, the whole clip shows that frame.",
+     "markdownDescription": "Freeze the picture at this second of the clip (counted from its first visible frame). Alone, the whole clip shows that frame."
+    },
+    "freeze_before": {
+     "type": "boolean",
+     "description": "With `freeze_at`: play normally on one side and freeze only before / after it.\n\nDefault: `false`",
+     "markdownDescription": "With `freeze_at`: play normally on one side and freeze only before / after it.\n\nDefault: `false`"
+    },
+    "freeze_after": {
+     "type": "boolean",
+     "description": "With `freeze_at`: play normally on one side and freeze only before / after it.\n\nDefault: `false`",
+     "markdownDescription": "With `freeze_at`: play normally on one side and freeze only before / after it.\n\nDefault: `false`"
+    },
+    "fade_in": {
+     "type": "number",
+     "description": "Fade length. On video, from/to transparent (so it crossfades with the track below, or black if there is none); on audio, from/to silence.",
+     "markdownDescription": "Fade length. On video, from/to transparent (so it crossfades with the track below, or black if there is none); on audio, from/to silence."
+    },
+    "fade_out": {
+     "type": "number",
+     "description": "Fade length. On video, from/to transparent (so it crossfades with the track below, or black if there is none); on audio, from/to silence.",
+     "markdownDescription": "Fade length. On video, from/to transparent (so it crossfades with the track below, or black if there is none); on audio, from/to silence."
+    },
+    "fade_in_level": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 1,
+     "description": "Audio: start the fade-in at / end the fade-out at this level (`0`-`1`) instead of silence.",
+     "markdownDescription": "Audio: start the fade-in at / end the fade-out at this level (`0`-`1`) instead of silence."
+    },
+    "fade_out_level": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 1,
+     "description": "Audio: start the fade-in at / end the fade-out at this level (`0`-`1`) instead of silence.",
+     "markdownDescription": "Audio: start the fade-in at / end the fade-out at this level (`0`-`1`) instead of silence."
+    },
+    "gain": {
+     "type": "number",
+     "description": "Audio level multiplier (`2.0` = twice as loud).",
+     "markdownDescription": "Audio level multiplier (`2.0` = twice as loud)."
+    },
+    "mute": {
+     "type": "boolean",
+     "description": "`true` silences the clip's own sound.",
+     "markdownDescription": "`true` silences the clip's own sound."
+    },
+    "crop": {
+     "type": "object",
+     "additionalProperties": false,
+     "properties": {
+      "top": {
+       "type": "number",
+       "minimum": 0
+      },
+      "right": {
+       "type": "number",
+       "minimum": 0
+      },
+      "bottom": {
+       "type": "number",
+       "minimum": 0
+      },
+      "left": {
+       "type": "number",
+       "minimum": 0
+      }
+     },
+     "description": "Margins removed from the picture - `{top: 0, bottom: 316}`: any of `top`, `right`, `bottom`, `left`, in pixels of the source file - and the rest scaled to fill the frame. Not together with `position`/`size`/`position_keyframes`.",
+     "markdownDescription": "Margins removed from the picture - `{top: 0, bottom: 316}`: any of `top`, `right`, `bottom`, `left`, in pixels of the source file - and the rest scaled to fill the frame. Not together with `position`/`size`/`position_keyframes`."
+    },
+    "position": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2,
+     "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels.",
+     "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels."
+    },
+    "size": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2,
+     "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels.",
+     "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels."
+    },
+    "position_keyframes": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "at",
+       "position",
+       "size"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "at": {
+        "type": "number"
+       },
+       "position": {
+        "type": "array",
+        "items": {
+         "type": "number"
+        },
+        "minItems": 2,
+        "maxItems": 2
+       },
+       "size": {
+        "type": "array",
+        "items": {
+         "type": "number"
+        },
+        "minItems": 2,
+        "maxItems": 2
+       }
+      }
+     },
+     "minItems": 1,
+     "description": "Animated picture-in-picture: `[{at: 0, position: [x, y], size: [w, h]}, ...]`, first at `0`. Not together with `position`/`size`.",
+     "markdownDescription": "Animated picture-in-picture: `[{at: 0, position: [x, y], size: [w, h]}, ...]`, first at `0`. Not together with `position`/`size`."
+    },
+    "ken_burns_from": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 4,
+     "maxItems": 4,
+     "description": "Pan and zoom from one rectangle to another over the clip: `[x%, y%, w%, h%]` of the frame. Both or neither.",
+     "markdownDescription": "Pan and zoom from one rectangle to another over the clip: `[x%, y%, w%, h%]` of the frame. Both or neither."
+    },
+    "ken_burns_to": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 4,
+     "maxItems": 4,
+     "description": "Pan and zoom from one rectangle to another over the clip: `[x%, y%, w%, h%]` of the frame. Both or neither.",
+     "markdownDescription": "Pan and zoom from one rectangle to another over the clip: `[x%, y%, w%, h%]` of the frame. Both or neither."
+    },
+    "color_grade": {
+     "type": "object",
+     "minProperties": 1,
+     "additionalProperties": false,
+     "properties": {
+      "lift": {
+       "$ref": "#/definitions/triple"
+      },
+      "gamma": {
+       "$ref": "#/definitions/triple"
+      },
+      "gain": {
+       "$ref": "#/definitions/triple"
+      }
+     },
+     "description": "Three-way colour grading: any of `lift` (shadows), `gamma` (midtones), `gain` (highlights), each `[r, g, b]`. Neutral is lift `[0,0,0]`, gamma and gain `[1,1,1]`; e.g. `{gamma: [1.2, 1.2, 1.2]}` brightens the midtones.",
+     "markdownDescription": "Three-way colour grading: any of `lift` (shadows), `gamma` (midtones), `gain` (highlights), each `[r, g, b]`. Neutral is lift `[0,0,0]`, gamma and gain `[1,1,1]`; e.g. `{gamma: [1.2, 1.2, 1.2]}` brightens the midtones."
+    },
+    "color_grade_keyframes": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+       "at": {
+        "type": "number",
+        "minimum": 0
+       },
+       "lift": {
+        "$ref": "#/definitions/triple"
+       },
+       "gamma": {
+        "$ref": "#/definitions/triple"
+       },
+       "gain": {
+        "$ref": "#/definitions/triple"
+       }
+      }
+     },
+     "minItems": 1,
+     "description": "A second grade on top of `color_grade`, animated: `[{at: 0, lift: [0, 0, 0]}, {at: 1.5, lift: [0.2, 0.18, 0.06]}]`, `at` in seconds into the clip (the first `0`, each later than the one before), every keyframe with the same groups; eased linearly from one to the next and held after the last. For a swell of light that rises and falls across clips, give each clip its stretch of it.",
+     "markdownDescription": "A second grade on top of `color_grade`, animated: `[{at: 0, lift: [0, 0, 0]}, {at: 1.5, lift: [0.2, 0.18, 0.06]}]`, `at` in seconds into the clip (the first `0`, each later than the one before), every keyframe with the same groups; eased linearly from one to the next and held after the last. For a swell of light that rises and falls across clips, give each clip its stretch of it."
+    },
+    "old_film": {
+     "type": "boolean",
+     "description": "`true` turns on each \"old film\" filter (flicker and uneven developing, dust, scratches, grain).",
+     "markdownDescription": "`true` turns on each \"old film\" filter (flicker and uneven developing, dust, scratches, grain)."
+    },
+    "film_dust": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "style": {
+         "enum": [
+          "svg",
+          "dots"
+         ]
+        },
+        "size": {
+         "type": "integer",
+         "minimum": 1
+        },
+        "count": {
+         "type": "integer",
+         "minimum": 1
+        },
+        "pictures": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "minLength": 1
+         },
+         "minItems": 1
+        },
+        "hold": {
+         "type": "integer",
+         "minimum": 1
+        }
+       }
+      }
+     ],
+     "description": "`true` turns on each \"old film\" filter (flicker and uneven developing, dust, scratches, grain).\n\nAs a map: Instead of `true`: `style: svg` (the default) draws MLT's dust pictures, `size` percent of the clip's width across (default `2`); `dots` draws small round specks, darker and lighter, at most `size` pixels in radius (default `4`), like the dust on an old print. `count`: at most that many per frame (default `10`). One style per project: `dots` makes `render` run melt on a copy of its data folder without the dust pictures (opened in kdenlive, the project shows them). `pictures` (with `svg`): the pictures to pick from instead of MLT's five - theirs by name (`dust1`, `dust2` blots, the latter drawn white; `dust3`-`dust5` hairs) or `.svg` files of the project, a repeated one coming up more often; e.g. `[dust3, dust4, dust5, assets/speck.svg]`, the speck drawn small inside a larger transparent picture. One set per project, also by swapping the data folder. `hold`: the same specks for that many frames running (default `1`, new ones every frame).\n\nDefault: `{style: dots, size: 4, count: 10}`",
+     "markdownDescription": "`true` turns on each \"old film\" filter (flicker and uneven developing, dust, scratches, grain).\n\nAs a map: Instead of `true`: `style: svg` (the default) draws MLT's dust pictures, `size` percent of the clip's width across (default `2`); `dots` draws small round specks, darker and lighter, at most `size` pixels in radius (default `4`), like the dust on an old print. `count`: at most that many per frame (default `10`). One style per project: `dots` makes `render` run melt on a copy of its data folder without the dust pictures (opened in kdenlive, the project shows them). `pictures` (with `svg`): the pictures to pick from instead of MLT's five - theirs by name (`dust1`, `dust2` blots, the latter drawn white; `dust3`-`dust5` hairs) or `.svg` files of the project, a repeated one coming up more often; e.g. `[dust3, dust4, dust5, assets/speck.svg]`, the speck drawn small inside a larger transparent picture. One set per project, also by swapping the data folder. `hold`: the same specks for that many frames running (default `1`, new ones every frame).\n\nDefault: `{style: dots, size: 4, count: 10}`"
+    },
+    "film_scratches": {
+     "type": "boolean",
+     "description": "`true` turns on each \"old film\" filter (flicker and uneven developing, dust, scratches, grain).",
+     "markdownDescription": "`true` turns on each \"old film\" filter (flicker and uneven developing, dust, scratches, grain)."
+    },
+    "film_grain": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "noise": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "contrast": {
+         "type": "integer",
+         "minimum": 0
+        },
+        "brightness": {
+         "type": "integer",
+         "minimum": 0
+        }
+       }
+      }
+     ],
+     "description": "`true` turns on each \"old film\" filter (flicker and uneven developing, dust, scratches, grain).\n\nAs a map: Instead of `true`: grain that changes every frame, `noise` its strength (default `40`), with `contrast` and `brightness` in percent, `100` (the default) meaning unchanged. `true` keeps kdenlive's own settings (`40`/`160`/`70`), which also harden and darken the whole picture.\n\nDefault: `{noise: 12}`",
+     "markdownDescription": "`true` turns on each \"old film\" filter (flicker and uneven developing, dust, scratches, grain).\n\nAs a map: Instead of `true`: grain that changes every frame, `noise` its strength (default `40`), with `contrast` and `brightness` in percent, `100` (the default) meaning unchanged. `true` keeps kdenlive's own settings (`40`/`160`/`70`), which also harden and darken the whole picture.\n\nDefault: `{noise: 12}`"
+    },
+    "stabilize": {
+     "type": "boolean",
+     "description": "`true` smooths out camera shake (single pass).",
+     "markdownDescription": "`true` smooths out camera shake (single pass)."
+    },
+    "lut": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/lut"
+      }
+     ],
+     "description": "A 3D LUT file applied to the picture, after `color_grade` - `.cube`, `.3dl`, `.dat` or `.m3d`, relative to the project file: a look, or a camera's log-to-Rec.709 conversion. Or a LUT's name, without extension (`lut: teal-orange`): looked up in `luts/` next to the project file, then in `~/.local/share/video-as-code/luts/` (`$XDG_DATA_HOME`) - a pack of looks shared by every project.",
+     "markdownDescription": "A 3D LUT file applied to the picture, after `color_grade` - `.cube`, `.3dl`, `.dat` or `.m3d`, relative to the project file: a look, or a camera's log-to-Rec.709 conversion. Or a LUT's name, without extension (`lut: teal-orange`): looked up in `luts/` next to the project file, then in `~/.local/share/video-as-code/luts/` (`$XDG_DATA_HOME`) - a pack of looks shared by every project."
+    },
+    "lut_interp": {
+     "enum": [
+      "nearest",
+      "trilinear",
+      "tetrahedral"
+     ],
+     "description": "How the LUT is interpolated between its points: `nearest`, `trilinear` or `tetrahedral`.\n\nDefault: `tetrahedral`",
+     "markdownDescription": "How the LUT is interpolated between its points: `nearest`, `trilinear` or `tetrahedral`.\n\nDefault: `tetrahedral`"
+    },
+    "glsl": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/glsl"
+      }
+     ],
+     "description": "A GLSL effect on the picture, run on the GPU: one of this project's shaders by name (`crt`, `chromatic`, `wave`, `glitch`, `kaleidoscope`, `vhs`) or a `.glsl` file of your own, relative to the project file; `{shader: ..., params: {...}}` to set its parameters. See *`glsl:` shaders* below.",
+     "markdownDescription": "A GLSL effect on the picture, run on the GPU: one of this project's shaders by name (`crt`, `chromatic`, `wave`, `glitch`, `kaleidoscope`, `vhs`) or a `.glsl` file of your own, relative to the project file; `{shader: ..., params: {...}}` to set its parameters. See *`glsl:` shaders* below."
+    },
+    "focus_rect": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 4,
+     "maxItems": 4,
+     "description": "`[x%, y%, w%, h%]` kept sharp while the rest is blurred.",
+     "markdownDescription": "`[x%, y%, w%, h%]` kept sharp while the rest is blurred."
+    },
+    "focus_blur": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 50,
+     "description": "Blur radius for `focus_rect`, percent of the width (`0`-`50`).\n\nDefault: `4.0`",
+     "markdownDescription": "Blur radius for `focus_rect`, percent of the width (`0`-`50`).\n\nDefault: `4.0`"
+    },
+    "chroma_key": {
+     "type": "string",
+     "description": "Colour to make transparent (`\"#00ff00\"`).",
+     "markdownDescription": "Colour to make transparent (`\"#00ff00\"`)."
+    },
+    "chroma_key_distance": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 1,
+     "description": "How far from that colour still counts (`0`-`1`).\n\nDefault: `0.35`",
+     "markdownDescription": "How far from that colour still counts (`0`-`1`).\n\nDefault: `0.35`"
+    },
+    "reveal": {
+     "enum": [
+      "iris",
+      "flip",
+      "glitch",
+      "delaygrab",
+      "cairogradient"
+     ],
+     "description": "How the clip appears: `iris`, `flip`, `glitch`, `delaygrab` or `cairogradient`.",
+     "markdownDescription": "How the clip appears: `iris`, `flip`, `glitch`, `delaygrab` or `cairogradient`."
+    },
+    "overlay_text": {
+     "type": "string",
+     "description": "Text burned onto the clip; may use MLT's keywords (`#timecode#`, `#frame#`...).",
+     "markdownDescription": "Text burned onto the clip; may use MLT's keywords (`#timecode#`, `#frame#`...)."
+    },
+    "overlay_font": {
+     "type": "string",
+     "description": "Its font.\n\nDefault: `Sans`",
+     "markdownDescription": "Its font.\n\nDefault: `Sans`"
+    },
+    "overlay_font_size": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "Its size.\n\nDefault: `48`",
+     "markdownDescription": "Its size.\n\nDefault: `48`"
+    },
+    "overlay_color": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+     },
+     "minItems": 4,
+     "maxItems": 4,
+     "description": "Its colour.\n\nDefault: `[255, 255, 255, 255]`",
+     "markdownDescription": "Its colour.\n\nDefault: `[255, 255, 255, 255]`"
+    },
+    "overlay_background": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+     },
+     "minItems": 4,
+     "maxItems": 4,
+     "description": "Its background.\n\nDefault: `[0, 0, 0, 0]`",
+     "markdownDescription": "Its background.\n\nDefault: `[0, 0, 0, 0]`"
+    },
+    "melt": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/melt"
+      }
+     ],
+     "description": "Any other MLT filter, by its service name: a list of `<service>: {<property>: <value>}` (see *`melt:` and `melt/<service>`* below).",
+     "markdownDescription": "Any other MLT filter, by its service name: a list of `<service>: {<property>: <value>}` (see *`melt:` and `melt/<service>`* below)."
+    }
+   },
+   "additionalProperties": false,
+   "if": {
+    "not": {
+     "required": [
+      "use"
+     ]
+    }
+   },
+   "then": {
+    "required": [
+     "clip",
+     "start"
+    ]
+   }
+  },
+  "track": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "type": {
+     "enum": [
+      "video",
+      "audio"
+     ],
+     "description": "`video` or `audio`.\n\nDefault: *(required)*",
+     "markdownDescription": "`video` or `audio`.\n\nDefault: *(required)*"
+    },
+    "name": {
+     "type": "string",
+     "description": "Track name (`transitions:` refer to tracks by it).\n\nDefault: `V<n>` / `A<n>`",
+     "markdownDescription": "Track name (`transitions:` refer to tracks by it).\n\nDefault: `V<n>` / `A<n>`"
+    },
+    "clips": {
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/clip"
+     },
+     "description": "The clips placed on it (below). Clips on one track can't overlap.\n\nDefault: `[]`",
+     "markdownDescription": "The clips placed on it (below). Clips on one track can't overlap.\n\nDefault: `[]`"
+    },
+    "pan": {
+     "type": "number",
+     "minimum": -1,
+     "maximum": 1,
+     "description": "Audio tracks only: `-1.0` (left) to `1.0` (right).",
+     "markdownDescription": "Audio tracks only: `-1.0` (left) to `1.0` (right)."
+    },
+    "hidden": {
+     "type": "boolean",
+     "description": "Hide the track's picture.\n\nDefault: `false`",
+     "markdownDescription": "Hide the track's picture.\n\nDefault: `false`"
+    },
+    "locked": {
+     "type": "boolean",
+     "description": "Lock the track (when opened in kdenlive).\n\nDefault: `false`",
+     "markdownDescription": "Lock the track (when opened in kdenlive).\n\nDefault: `false`"
+    },
+    "audio_muted": {
+     "type": "boolean",
+     "description": "Mute the whole track's sound.\n\nDefault: `false`",
+     "markdownDescription": "Mute the whole track's sound.\n\nDefault: `false`"
+    }
+   },
+   "additionalProperties": false,
+   "if": {
+    "not": {
+     "required": [
+      "use"
+     ]
+    }
+   },
+   "then": {
+    "required": [
+     "type"
+    ]
+   }
+  },
+  "glRules": {
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "AdvancedMosaic"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "pixelSize": {
+          "type": "number",
+          "default": 50
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "angular"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "startingAngle": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360,
+          "default": 90,
+          "description": "Angle where the wipe starts, in degrees",
+          "markdownDescription": "Angle where the wipe starts, in degrees"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "BlockDissolve"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "blocksize": {
+          "type": "number",
+          "default": 0.02
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "BookFlip"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Bounce"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "shadow_colour": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+           0,
+           0,
+           0,
+           0.6
+          ],
+          "description": "Color of the shadow cast on the incoming image",
+          "markdownDescription": "Color of the shadow cast on the incoming image"
+         },
+         "shadow_height": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 0.5,
+          "default": 0.075,
+          "description": "Height of the shadow, relative to the image height",
+          "markdownDescription": "Height of the shadow, relative to the image height"
+         },
+         "bounces": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 3,
+          "description": "Number of bounces before settling",
+          "markdownDescription": "Number of bounces before settling"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "BowTieHorizontal"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "BowTieVertical"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "BowTieWithParameter"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "adjust": {
+          "type": "number",
+          "default": 0.5
+         },
+         "reverse": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run the wipe in reverse",
+          "markdownDescription": "Run the wipe in reverse"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Box"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "rectIn": {
+          "type": "integer",
+          "default": 1
+         },
+         "location": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "default": 0,
+          "description": "Where the box goes: 0 center, 1 left top, 2 left bottom, 3 right top, 4 right bottom",
+          "markdownDescription": "Where the box goes: 0 center, 1 left top, 2 left bottom, 3 right top, 4 right bottom"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "burn"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "color": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [
+           0.9,
+           0.4,
+           0.2
+          ],
+          "description": "Color the images brighten toward",
+          "markdownDescription": "Color the images brighten toward"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "burn0"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "burnColor": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [
+           1,
+           0.5,
+           0
+          ],
+          "description": "Color of the burning edges",
+          "markdownDescription": "Color of the burning edges"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "ButterflyWaveScrawler"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "amplitude": {
+          "type": "number",
+          "default": 1
+         },
+         "waves": {
+          "type": "number",
+          "default": 30
+         },
+         "colorSeparation": {
+          "type": "number",
+          "default": 0.3
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "cannabisleaf"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "chessboard"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "grid_num": {
+          "type": "number",
+          "default": 10,
+          "description": "Number of squares per row",
+          "markdownDescription": "Number of squares per row"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "circle"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "center": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0.5,
+           0.5
+          ],
+          "description": "Center of the circle",
+          "markdownDescription": "Center of the circle"
+         },
+         "backColor": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [
+           0.1,
+           0.1,
+           0.1
+          ],
+          "description": "Background color",
+          "markdownDescription": "Background color"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "CircleCrop"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "bgcolor": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+           0,
+           0,
+           0,
+           1
+          ],
+          "description": "Background color",
+          "markdownDescription": "Background color"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "circleopen"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "smoothness": {
+          "type": "number",
+          "default": 0.3,
+          "description": "Softness of the circle's edge",
+          "markdownDescription": "Softness of the circle's edge"
+         },
+         "opening": {
+          "type": "boolean",
+          "default": true,
+          "description": "Open the circle; false closes it instead",
+          "markdownDescription": "Open the circle; false closes it instead"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "colorphase"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "fromStep": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+           0,
+           0.2,
+           0.4,
+           0
+          ],
+          "description": "When each channel (r, g, b, a) starts changing",
+          "markdownDescription": "When each channel (r, g, b, a) starts changing"
+         },
+         "toStep": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+           0.6,
+           0.8,
+           1,
+           1
+          ],
+          "description": "When each channel (r, g, b, a) finishes changing",
+          "markdownDescription": "When each channel (r, g, b, a) finishes changing"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "ColourDistance"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "power": {
+          "type": "number",
+          "default": 5
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "coord-from-in"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "CrazyParametricFun"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "a": {
+          "type": "number",
+          "default": 4
+         },
+         "b": {
+          "type": "number",
+          "default": 1
+         },
+         "amplitude": {
+          "type": "number",
+          "default": 120
+         },
+         "smoothness": {
+          "type": "number",
+          "default": 0.1
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "crosshatch"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "center": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0.5,
+           0.5
+          ],
+          "description": "Point the lines spread from",
+          "markdownDescription": "Point the lines spread from"
+         },
+         "threshold": {
+          "type": "number",
+          "default": 3
+         },
+         "fadeEdge": {
+          "type": "number",
+          "default": 0.1
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "crosswarp"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "CrossZoom"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "strength": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.4,
+          "description": "Blur strength",
+          "markdownDescription": "Blur strength"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "cube"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "persp": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7,
+          "description": "Amount of perspective",
+          "markdownDescription": "Amount of perspective"
+         },
+         "unzoom": {
+          "type": "number",
+          "default": 0.3
+         },
+         "reflection": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.4,
+          "description": "Strength of the reflection",
+          "markdownDescription": "Strength of the reflection"
+         },
+         "floating": {
+          "type": "number",
+          "default": 3
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "DefocusBlur"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "blurSize": {
+          "type": "number",
+          "default": 0.02,
+          "description": "Amount of blur",
+          "markdownDescription": "Amount of blur"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Directional"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "direction": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0,
+           1
+          ],
+          "description": "Direction of the movement",
+          "markdownDescription": "Direction of the movement"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "directional-easing"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "direction": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0,
+           1
+          ],
+          "description": "Direction of the movement",
+          "markdownDescription": "Direction of the movement"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "DirectionalScaled"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "direction": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0,
+           1
+          ],
+          "description": "Direction of the movement",
+          "markdownDescription": "Direction of the movement"
+         },
+         "scale": {
+          "type": "number",
+          "default": 0.7
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "directionalwarp"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "smoothness": {
+          "type": "number",
+          "default": 0.1,
+          "description": "Softness of the edge",
+          "markdownDescription": "Softness of the edge"
+         },
+         "direction": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           -1,
+           1
+          ],
+          "description": "Direction of the wipe",
+          "markdownDescription": "Direction of the wipe"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "directionalwipe"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "direction": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           1,
+           -1
+          ],
+          "description": "Direction of the wipe",
+          "markdownDescription": "Direction of the wipe"
+         },
+         "smoothness": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Softness of the edge",
+          "markdownDescription": "Softness of the edge"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "displacement"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "strength": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Strength of the displacement",
+          "markdownDescription": "Strength of the displacement"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "dissolve"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "uLineWidth": {
+          "type": "number",
+          "default": 0.1
+         },
+         "uSpreadClr": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [
+           1,
+           0,
+           0
+          ],
+          "description": "Color of the spreading edge",
+          "markdownDescription": "Color of the spreading edge"
+         },
+         "uHotClr": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [
+           0.9,
+           0.9,
+           0.2
+          ],
+          "description": "Color of the hottest part of the edge",
+          "markdownDescription": "Color of the hottest part of the edge"
+         },
+         "uPow": {
+          "type": "number",
+          "default": 5
+         },
+         "uIntensity": {
+          "type": "number",
+          "default": 1
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "DoomScreenTransition"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "bars": {
+          "type": "integer",
+          "default": 30
+         },
+         "amplitude": {
+          "type": "number",
+          "default": 2
+         },
+         "noise": {
+          "type": "number",
+          "default": 0.1
+         },
+         "frequency": {
+          "type": "number",
+          "default": 0.5
+         },
+         "dripScale": {
+          "type": "number",
+          "default": 0.5
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "doorway"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "reflection": {
+          "type": "number",
+          "default": 0.4,
+          "description": "Strength of the reflection",
+          "markdownDescription": "Strength of the reflection"
+         },
+         "perspective": {
+          "type": "number",
+          "default": 0.4,
+          "description": "Amount of perspective",
+          "markdownDescription": "Amount of perspective"
+         },
+         "depth": {
+          "type": "number",
+          "default": 3
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Dreamy"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "DreamyZoom"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "rotation": {
+          "type": "number",
+          "default": 6
+         },
+         "scale": {
+          "type": "number",
+          "default": 1.2
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Drop_Zone_Flicker"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "frameRate": {
+          "type": "number",
+          "default": 24
+         },
+         "rgbOffset": {
+          "type": "number",
+          "default": 0.014
+         },
+         "blockAmount": {
+          "type": "number",
+          "default": 0.72
+         },
+         "ghostAmount": {
+          "type": "number",
+          "default": 0.62
+         },
+         "redCyan": {
+          "type": "number",
+          "default": 0.58
+         },
+         "scanline": {
+          "type": "number",
+          "default": 0.075
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "EdgeTransition"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "edge_thickness": {
+          "type": "number",
+          "default": 0.001
+         },
+         "edge_brightness": {
+          "type": "number",
+          "default": 8
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "fade"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "fadecolor"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "color": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [
+           0,
+           0,
+           0
+          ],
+          "description": "Color to fade through",
+          "markdownDescription": "Color to fade through"
+         },
+         "colorPhase": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.4,
+          "description": "How long the color shows in the middle",
+          "markdownDescription": "How long the color shows in the middle"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "fadegrayscale"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "intensity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.3,
+          "description": "How long the grayscale phase lasts",
+          "markdownDescription": "How long the grayscale phase lasts"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "FilmBurn"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "Seed": {
+          "type": "number",
+          "default": 2.31,
+          "description": "Random seed",
+          "markdownDescription": "Random seed"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "flyeye"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "size": {
+          "type": "number",
+          "default": 0.04
+         },
+         "zoom": {
+          "type": "number",
+          "default": 50
+         },
+         "colorSeparation": {
+          "type": "number",
+          "default": 0.3
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Fold"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "fragment"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "GlitchDisplace"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "GlitchMemories"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "GridFlip"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "size": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           4,
+           4
+          ],
+          "description": "Number of tiles (columns, rows)",
+          "markdownDescription": "Number of tiles (columns, rows)"
+         },
+         "pause": {
+          "type": "number",
+          "default": 0.1
+         },
+         "dividerWidth": {
+          "type": "number",
+          "default": 0.05
+         },
+         "bgcolor": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+           0,
+           0,
+           0,
+           1
+          ],
+          "description": "Color behind the tiles",
+          "markdownDescription": "Color behind the tiles"
+         },
+         "randomness": {
+          "type": "number",
+          "default": 0.1
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "heart"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "hexagonalize"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "steps": {
+          "type": "integer",
+          "default": 50
+         },
+         "horizontalHexagons": {
+          "type": "number",
+          "default": 20,
+          "description": "Number of hexagons across",
+          "markdownDescription": "Number of hexagons across"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "HorizontalClose"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "HorizontalOpen"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "HSVfade"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "InvertedPageCurl"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "kaleidoscope"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "speed": {
+          "type": "number",
+          "default": 1
+         },
+         "angle": {
+          "type": "number",
+          "default": 1
+         },
+         "power": {
+          "type": "number",
+          "default": 1.5
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "LeftRight"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "LinearBlur"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "intensity": {
+          "type": "number",
+          "default": 0.1,
+          "description": "Amount of blur",
+          "markdownDescription": "Amount of blur"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "luma"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "luminance_melt"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "direction": {
+          "type": "boolean",
+          "default": true,
+          "description": "Direction of the melt (false: up, true: down)",
+          "markdownDescription": "Direction of the melt (false: up, true: down)"
+         },
+         "l_threshold": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.8,
+          "description": "Luminance threshold",
+          "markdownDescription": "Luminance threshold"
+         },
+         "above": {
+          "type": "boolean",
+          "default": false,
+          "description": "Melt the parts above the threshold instead of below",
+          "markdownDescription": "Melt the parts above the threshold instead of below"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "morph"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "strength": {
+          "type": "number",
+          "default": 0.1,
+          "description": "Strength of the displacement",
+          "markdownDescription": "Strength of the displacement"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Mosaic"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "endx": {
+          "type": "integer",
+          "default": 2
+         },
+         "endy": {
+          "type": "integer",
+          "default": -1
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "mosaic_transition"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "mosaicNum": {
+          "type": "number",
+          "default": 10,
+          "description": "Number of mosaic blocks",
+          "markdownDescription": "Number of mosaic blocks"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "multiply_blend"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "old_tv_lost_signal"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Overexposure"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "strength": {
+          "type": "number",
+          "default": 0.6,
+          "description": "Amount of overexposure",
+          "markdownDescription": "Amount of overexposure"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "parametric_glitch"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "ampx": {
+          "type": "number",
+          "default": 1,
+          "description": "Horizontal amplitude of the glitch",
+          "markdownDescription": "Horizontal amplitude of the glitch"
+         },
+         "ampy": {
+          "type": "number",
+          "default": 1,
+          "description": "Vertical amplitude of the glitch",
+          "markdownDescription": "Vertical amplitude of the glitch"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "perlin"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "scale": {
+          "type": "number",
+          "default": 4,
+          "description": "Scale of the noise; higher values make smaller blobs",
+          "markdownDescription": "Scale of the noise; higher values make smaller blobs"
+         },
+         "smoothness": {
+          "type": "number",
+          "default": 0.01,
+          "description": "Softness of the blob edges",
+          "markdownDescription": "Softness of the blob edges"
+         },
+         "seed": {
+          "type": "number",
+          "default": 12.9898,
+          "description": "Random seed",
+          "markdownDescription": "Random seed"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "pinwheel"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "speed": {
+          "type": "number",
+          "default": 2,
+          "description": "Rotation speed",
+          "markdownDescription": "Rotation speed"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "pixelize"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "squaresMin": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           20,
+           20
+          ],
+          "description": "Number of squares at the strongest pixelation",
+          "markdownDescription": "Number of squares at the strongest pixelation"
+         },
+         "steps": {
+          "type": "integer",
+          "default": 50,
+          "description": "Number of pixelation steps; 0 for a continuous effect",
+          "markdownDescription": "Number of pixelation steps; 0 for a continuous effect"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "polar_function"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "segments": {
+          "type": "integer",
+          "default": 5,
+          "description": "Number of petals",
+          "markdownDescription": "Number of petals"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "PolkaDotsCurtain"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "dots": {
+          "type": "number",
+          "default": 20,
+          "description": "Number of dots across the image",
+          "markdownDescription": "Number of dots across the image"
+         },
+         "center": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0,
+           0
+          ]
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "powerKaleido"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "scale": {
+          "type": "number",
+          "default": 2
+         },
+         "z": {
+          "type": "number",
+          "default": 1.5
+         },
+         "speed": {
+          "type": "number",
+          "default": 5
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "PuzzleRight"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "size": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           4,
+           4
+          ]
+         },
+         "pause": {
+          "type": "number",
+          "default": 0.1
+         },
+         "dividerWidth": {
+          "type": "number",
+          "default": 0.005
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Radial"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "smoothness": {
+          "type": "number",
+          "default": 1
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "randomNoisex"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "randomsquares"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "size": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           10,
+           10
+          ],
+          "description": "Number of squares (columns, rows)",
+          "markdownDescription": "Number of squares (columns, rows)"
+         },
+         "smoothness": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Softness of each square's switch",
+          "markdownDescription": "Softness of each square's switch"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Rectangle"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "bgcolor": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+           0,
+           0,
+           0,
+           1
+          ],
+          "description": "Color of the rectangle",
+          "markdownDescription": "Color of the rectangle"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "RectangleCrop"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "bgcolor": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+           0,
+           0,
+           0,
+           1
+          ],
+          "description": "Background color",
+          "markdownDescription": "Background color"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Revolve_Left"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "center": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0.46,
+           0.52
+          ],
+          "description": "Center of the swirl",
+          "markdownDescription": "Center of the swirl"
+         },
+         "direction": {
+          "type": "number",
+          "default": -1
+         },
+         "maxRotation": {
+          "type": "number",
+          "default": 1.95
+         },
+         "peakZoom": {
+          "type": "number",
+          "default": 2.22
+         },
+         "swirl": {
+          "type": "number",
+          "default": 2.85
+         },
+         "barrel": {
+          "type": "number",
+          "default": 0.38
+         },
+         "motionBlur": {
+          "type": "number",
+          "default": 1
+         },
+         "switchStart": {
+          "type": "number",
+          "default": 0.3
+         },
+         "switchEnd": {
+          "type": "number",
+          "default": 0.5
+         },
+         "shadow": {
+          "type": "number",
+          "default": 0.16
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "ripple"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "amplitude": {
+          "type": "number",
+          "default": 100,
+          "description": "Frequency of the ripples",
+          "markdownDescription": "Frequency of the ripples"
+         },
+         "speed": {
+          "type": "number",
+          "default": 50,
+          "description": "Speed of the ripples",
+          "markdownDescription": "Speed of the ripples"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Rolls"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "type": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "default": 0,
+          "description": "Corner to roll around",
+          "markdownDescription": "Corner to roll around"
+         },
+         "RotDown": {
+          "type": "boolean",
+          "default": false,
+          "description": "Roll the outgoing image down instead of up",
+          "markdownDescription": "Roll the outgoing image down instead of up"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "rotate_scale_fade"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "center": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0.5,
+           0.5
+          ],
+          "description": "Center of the rotation",
+          "markdownDescription": "Center of the rotation"
+         },
+         "rotations": {
+          "type": "number",
+          "default": 1,
+          "description": "Number of turns",
+          "markdownDescription": "Number of turns"
+         },
+         "scale": {
+          "type": "number",
+          "default": 8,
+          "description": "Maximum zoom",
+          "markdownDescription": "Maximum zoom"
+         },
+         "backColor": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+           0.15,
+           0.15,
+           0.15,
+           1
+          ],
+          "description": "Background color",
+          "markdownDescription": "Background color"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "RotateScaleVanish"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "FadeInSecond": {
+          "type": "boolean",
+          "default": true,
+          "description": "Fade in the incoming image",
+          "markdownDescription": "Fade in the incoming image"
+         },
+         "ReverseEffect": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run the effect in reverse",
+          "markdownDescription": "Run the effect in reverse"
+         },
+         "ReverseRotation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Rotate the other way",
+          "markdownDescription": "Rotate the other way"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "rotateTransition"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "scale-in"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "SimpleFlip"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "SimpleZoom"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "zoom_quickness": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 1,
+          "default": 0.8,
+          "description": "Part of the transition spent zooming",
+          "markdownDescription": "Part of the transition spent zooming"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "SimpleZoomOut"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "zoom_quickness": {
+          "type": "number",
+          "minimum": 0.2,
+          "maximum": 1,
+          "default": 0.8,
+          "description": "Part of the transition spent zooming",
+          "markdownDescription": "Part of the transition spent zooming"
+         },
+         "fade": {
+          "type": "boolean",
+          "default": true,
+          "description": "Fade instead of cutting to the incoming image",
+          "markdownDescription": "Fade instead of cutting to the incoming image"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Slides"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "type": {
+          "type": "integer",
+          "default": 0
+         },
+         "In": {
+          "type": "boolean",
+          "default": false,
+          "description": "Slide the incoming image in instead of the outgoing one out",
+          "markdownDescription": "Slide the incoming image in instead of the outgoing one out"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "splitSlideInHorizontal"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "reverse": {
+          "type": "boolean",
+          "default": false,
+          "description": "Swap the directions of the halves",
+          "markdownDescription": "Swap the directions of the halves"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "splitSlideInOutHorizontal"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "reverse": {
+          "type": "boolean",
+          "default": false,
+          "description": "Swap the directions of the halves",
+          "markdownDescription": "Swap the directions of the halves"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "splitSlideInOutVertical"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "reverse": {
+          "type": "boolean",
+          "default": false,
+          "description": "Swap the directions of the halves",
+          "markdownDescription": "Swap the directions of the halves"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "splitSlideInVertical"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "reverse": {
+          "type": "boolean",
+          "default": false,
+          "description": "Swap the directions of the halves",
+          "markdownDescription": "Swap the directions of the halves"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "splitSlideOutHorizontal"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "reverse": {
+          "type": "boolean",
+          "default": false,
+          "description": "Swap the directions of the halves",
+          "markdownDescription": "Swap the directions of the halves"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "splitSlideOutVertical"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "reverse": {
+          "type": "boolean",
+          "default": false,
+          "description": "Swap the directions of the halves",
+          "markdownDescription": "Swap the directions of the halves"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "squareswire"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "squares": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           10,
+           10
+          ],
+          "description": "Number of squares (columns, rows)",
+          "markdownDescription": "Number of squares (columns, rows)"
+         },
+         "direction": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           1,
+           -0.5
+          ],
+          "description": "Direction of the sweep",
+          "markdownDescription": "Direction of the sweep"
+         },
+         "smoothness": {
+          "type": "number",
+          "default": 1.6,
+          "description": "Softness of the sweep",
+          "markdownDescription": "Softness of the sweep"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "squeeze"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "colorSeparation": {
+          "type": "number",
+          "default": 0.04,
+          "description": "Amount of color separation",
+          "markdownDescription": "Amount of color separation"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "StarWipe"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "border_thickness": {
+          "type": "number",
+          "default": 0.01,
+          "description": "Thickness of the star's border",
+          "markdownDescription": "Thickness of the star's border"
+         },
+         "star_rotation": {
+          "type": "number",
+          "default": 0.75
+         },
+         "border_color": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 4,
+          "maxItems": 4,
+          "default": [
+           1,
+           1,
+           1,
+           1
+          ],
+          "description": "Color of the star's border",
+          "markdownDescription": "Color of the star's border"
+         },
+         "star_center": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0.5,
+           0.5
+          ],
+          "description": "Center of the star",
+          "markdownDescription": "Center of the star"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "static_wipe"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "u_transitionUpToDown": {
+          "type": "boolean",
+          "default": true,
+          "description": "Wipe from top to bottom; false wipes from bottom to top",
+          "markdownDescription": "Wipe from top to bottom; false wipes from bottom to top"
+         },
+         "u_max_static_span": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Maximum height of the static band",
+          "markdownDescription": "Maximum height of the static band"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "StaticFade"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "n_noise_pixels": {
+          "type": "number",
+          "default": 200
+         },
+         "static_luminosity": {
+          "type": "number",
+          "default": 0.8
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "StereoViewer"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "zoom": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 1,
+          "default": 0.88,
+          "description": "How much the images zoom out",
+          "markdownDescription": "How much the images zoom out"
+         },
+         "corner_radius": {
+          "type": "number",
+          "default": 0.22
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "StripDatamoshGlitch"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "strength": {
+          "type": "number",
+          "default": 1
+         },
+         "horizontalBars": {
+          "type": "number",
+          "default": 42
+         },
+         "verticalSlits": {
+          "type": "number",
+          "default": 18
+         },
+         "tear": {
+          "type": "number",
+          "default": 0.18
+         },
+         "chroma": {
+          "type": "number",
+          "default": 0.032
+         },
+         "residue": {
+          "type": "number",
+          "default": 0.62
+         },
+         "noiseAmount": {
+          "type": "number",
+          "default": 0.16
+         },
+         "scanAmount": {
+          "type": "number",
+          "default": 0.13
+         },
+         "flashAmount": {
+          "type": "number",
+          "default": 0.2
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "swap"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "reflection": {
+          "type": "number",
+          "default": 0.4,
+          "description": "Strength of the reflection",
+          "markdownDescription": "Strength of the reflection"
+         },
+         "perspective": {
+          "type": "number",
+          "default": 0.2,
+          "description": "Amount of perspective",
+          "markdownDescription": "Amount of perspective"
+         },
+         "depth": {
+          "type": "number",
+          "default": 3
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "Swirl"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "tangentMotionBlur"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "TilesWave"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "tileCount": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           8,
+           8
+          ],
+          "description": "Number of tiles (columns, rows)",
+          "markdownDescription": "Number of tiles (columns, rows)"
+         },
+         "flipX": {
+          "type": "boolean",
+          "default": true
+         },
+         "flipY": {
+          "type": "boolean",
+          "default": false
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "TopBottom"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "TVStatic"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "offset": {
+          "type": "number",
+          "default": 0.05,
+          "description": "Part of the transition, at each end, that shows the images instead of static",
+          "markdownDescription": "Part of the transition, at each end, that shows the images instead of static"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "undulatingBurnOut"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "smoothness": {
+          "type": "number",
+          "default": 0.03,
+          "description": "Softness of the edge",
+          "markdownDescription": "Softness of the edge"
+         },
+         "center": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "default": [
+           0.5,
+           0.5
+          ],
+          "description": "Center of the circle",
+          "markdownDescription": "Center of the circle"
+         },
+         "color": {
+          "type": "array",
+          "items": {
+           "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3,
+          "default": [
+           0,
+           0,
+           0
+          ],
+          "description": "Color of the burning edge",
+          "markdownDescription": "Color of the burning edge"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "VerticalClose"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "VerticalOpen"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "WaterDrop"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "amplitude": {
+          "type": "number",
+          "default": 30,
+          "description": "Frequency of the ripples",
+          "markdownDescription": "Frequency of the ripples"
+         },
+         "speed": {
+          "type": "number",
+          "default": 30,
+          "description": "Speed of the ripples",
+          "markdownDescription": "Speed of the ripples"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "wind"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "size": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.2,
+          "description": "Width of the ragged edge",
+          "markdownDescription": "Width of the ragged edge"
+         },
+         "reversed": {
+          "type": "boolean",
+          "default": false,
+          "description": "Wipe from right to left instead",
+          "markdownDescription": "Wipe from right to left instead"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "windowblinds"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "windowslice"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "count": {
+          "type": "number",
+          "default": 10,
+          "description": "Number of slices",
+          "markdownDescription": "Number of slices"
+         },
+         "smoothness": {
+          "type": "number",
+          "default": 0.5,
+          "description": "Softness of the slices' edges",
+          "markdownDescription": "Softness of the slices' edges"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "wipeDown"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "wipeLeft"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "wipeRight"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "wipeUp"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "x_axis_translation"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "ZoomInCircles"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "zoomInOut"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "ZoomLeftWipe"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "zoom_quickness": {
+          "type": "number",
+          "default": 0.8,
+          "description": "Part of the first half spent zooming (capped at 0.5)",
+          "markdownDescription": "Part of the first half spent zooming (capped at 0.5)"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "gl": {
+        "const": "ZoomRigthWipe"
+       }
+      },
+      "required": [
+       "gl"
+      ]
+     },
+     "then": {
+      "properties": {
+       "gl_params": {
+        "type": "object",
+        "properties": {
+         "zoom_quickness": {
+          "type": "number",
+          "default": 0.8,
+          "description": "Part of the first half spent zooming (capped at 0.5)",
+          "markdownDescription": "Part of the first half spent zooming (capped at 0.5)"
+         }
+        },
+        "additionalProperties": false
+       }
+      }
+     }
+    }
+   ]
+  },
+  "sceneClip": {
+   "anyOf": [
+    {
+     "type": "string"
+    },
+    {
+     "type": "object",
+     "properties": {
+      "use": {
+       "$ref": "#/definitions/use"
+      },
+      "clip": {
+       "type": [
+        "string",
+        "number"
+       ],
+       "description": "A bin entry, by its `id`.",
+       "markdownDescription": "A bin entry, by its `id`."
+      },
+      "path": {
+       "type": "string",
+       "description": "A file (relative to the YAML, or absolute), added to the bin by itself.",
+       "markdownDescription": "A file (relative to the YAML, or absolute), added to the bin by itself."
+      },
+      "mute": {
+       "type": "boolean",
+       "description": "`true` silences the clip's own sound.",
+       "markdownDescription": "`true` silences the clip's own sound."
+      },
+      "speed": {
+       "type": "number",
+       "not": {
+        "const": 0
+       },
+       "description": "Constant speed factor (`2.0` = twice as fast, negative = backwards).",
+       "markdownDescription": "Constant speed factor (`2.0` = twice as fast, negative = backwards)."
+      },
+      "preserve_pitch": {
+       "type": "boolean",
+       "description": "Keep the sound's pitch when `speed` changes it.\n\nDefault: `false`",
+       "markdownDescription": "Keep the sound's pitch when `speed` changes it.\n\nDefault: `false`"
+      },
+      "position": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       },
+       "minItems": 2,
+       "maxItems": 2,
+       "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels.",
+       "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels."
+      },
+      "size": {
+       "type": "array",
+       "items": {
+        "type": "number"
+       },
+       "minItems": 2,
+       "maxItems": 2,
+       "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels.",
+       "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels."
+      },
+      "chroma_key": {
+       "type": "string",
+       "description": "Colour to make transparent (`\"#00ff00\"`).",
+       "markdownDescription": "Colour to make transparent (`\"#00ff00\"`)."
+      },
+      "chroma_key_distance": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "description": "How far from that colour still counts (`0`-`1`).\n\nDefault: `0.35`",
+       "markdownDescription": "How far from that colour still counts (`0`-`1`).\n\nDefault: `0.35`"
+      },
+      "glsl": {
+       "allOf": [
+        {
+         "$ref": "#/definitions/glsl"
+        }
+       ],
+       "description": "A GLSL effect on the picture, run on the GPU: one of this project's shaders by name (`crt`, `chromatic`, `wave`, `glitch`, `kaleidoscope`, `vhs`) or a `.glsl` file of your own, relative to the project file; `{shader: ..., params: {...}}` to set its parameters. See *`glsl:` shaders* below.",
+       "markdownDescription": "A GLSL effect on the picture, run on the GPU: one of this project's shaders by name (`crt`, `chromatic`, `wave`, `glitch`, `kaleidoscope`, `vhs`) or a `.glsl` file of your own, relative to the project file; `{shader: ..., params: {...}}` to set its parameters. See *`glsl:` shaders* below."
+      },
+      "lut": {
+       "allOf": [
+        {
+         "$ref": "#/definitions/lut"
+        }
+       ],
+       "description": "A 3D LUT file applied to the picture, after `color_grade` - `.cube`, `.3dl`, `.dat` or `.m3d`, relative to the project file: a look, or a camera's log-to-Rec.709 conversion. Or a LUT's name, without extension (`lut: teal-orange`): looked up in `luts/` next to the project file, then in `~/.local/share/video-as-code/luts/` (`$XDG_DATA_HOME`) - a pack of looks shared by every project.",
+       "markdownDescription": "A 3D LUT file applied to the picture, after `color_grade` - `.cube`, `.3dl`, `.dat` or `.m3d`, relative to the project file: a look, or a camera's log-to-Rec.709 conversion. Or a LUT's name, without extension (`lut: teal-orange`): looked up in `luts/` next to the project file, then in `~/.local/share/video-as-code/luts/` (`$XDG_DATA_HOME`) - a pack of looks shared by every project."
+      },
+      "lut_interp": {
+       "enum": [
+        "nearest",
+        "trilinear",
+        "tetrahedral"
+       ],
+       "description": "How the LUT is interpolated between its points: `nearest`, `trilinear` or `tetrahedral`.\n\nDefault: `tetrahedral`",
+       "markdownDescription": "How the LUT is interpolated between its points: `nearest`, `trilinear` or `tetrahedral`.\n\nDefault: `tetrahedral`"
+      },
+      "melt": {
+       "allOf": [
+        {
+         "$ref": "#/definitions/melt"
+        }
+       ],
+       "description": "Any other MLT filter, by its service name: a list of `<service>: {<property>: <value>}` (see *`melt:` and `melt/<service>`* below).",
+       "markdownDescription": "Any other MLT filter, by its service name: a list of `<service>: {<property>: <value>}` (see *`melt:` and `melt/<service>`* below)."
+      }
+     },
+     "additionalProperties": false,
+     "if": {
+      "not": {
+       "required": [
+        "use"
+       ]
+      }
+     },
+     "then": {
+      "oneOf": [
+       {
+        "required": [
+         "clip"
+        ]
+       },
+       {
+        "required": [
+         "path"
+        ]
+       }
+      ]
+     }
+    }
+   ]
+  },
+  "scene": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "scene": {
+     "type": "string",
+     "description": "Name.\n\nDefault: `scene<n>`",
+     "markdownDescription": "Name.\n\nDefault: `scene<n>`"
+    },
+    "clips": {
+     "type": "array",
+     "items": {
+      "$ref": "#/definitions/sceneClip"
+     },
+     "minItems": 1,
+     "description": "The clips (below).\n\nDefault: *(required)*",
+     "markdownDescription": "The clips (below).\n\nDefault: *(required)*"
+    },
+    "pacing": {
+     "enum": [
+      "energetic",
+      "normal",
+      "slow"
+     ],
+     "description": "How long each clip lasts when `duration` isn't given: `energetic` (stills 1.5 s, videos up to 3 s), `normal` (3 s / up to 6 s) or `slow` (5 s / up to 10 s). A video shorter than its cap plays whole.\n\nDefault: `normal`",
+     "markdownDescription": "How long each clip lasts when `duration` isn't given: `energetic` (stills 1.5 s, videos up to 3 s), `normal` (3 s / up to 6 s) or `slow` (5 s / up to 10 s). A video shorter than its cap plays whole.\n\nDefault: `normal`"
+    },
+    "duration": {
+     "type": "number",
+     "exclusiveMinimum": 0,
+     "description": "Total length of the scene, split evenly across its clips.",
+     "markdownDescription": "Total length of the scene, split evenly across its clips."
+    },
+    "transition": {
+     "anyOf": [
+      {
+       "enum": [
+        "none",
+        "dissolve",
+        "wipe",
+        "affine",
+        "iris",
+        "flip",
+        "glitch",
+        "delaygrab",
+        "cairogradient",
+        "gl"
+       ]
+      },
+      {
+       "type": "string",
+       "pattern": "^melt/."
+      }
+     ],
+     "description": "Between consecutive clips: `none`, `dissolve`, `wipe`, `affine`, `iris`, `flip`, `glitch`, `delaygrab` or `cairogradient` - all but `none`/`dissolve` need video - `gl` (one of gl-transitions', below) or any MLT transition as `melt/<service>` (below).\n\nDefault: `none`",
+     "markdownDescription": "Between consecutive clips: `none`, `dissolve`, `wipe`, `affine`, `iris`, `flip`, `glitch`, `delaygrab` or `cairogradient` - all but `none`/`dissolve` need video - `gl` (one of gl-transitions', below) or any MLT transition as `melt/<service>` (below).\n\nDefault: `none`"
+    },
+    "transition_duration": {
+     "type": "number",
+     "exclusiveMinimum": 0,
+     "description": "Length of each transition.\n\nDefault: `1.0`",
+     "markdownDescription": "Length of each transition.\n\nDefault: `1.0`"
+    },
+    "luma": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/luma"
+      }
+     ],
+     "description": "With `wipe`: its shape - `linear_x`, `linear_y`, `diagonal`, `radial`, `square`, `clock`, `spiral`, `bars_horizontal`, `bars_vertical`, `checkerboard`, `heart` or `bowtie`; or, with openshot-qt installed, one of OpenShot's 412 as `openshot/<name>` (see the README's *OpenShot's transitions*).\n\nDefault: `linear_x`",
+     "markdownDescription": "With `wipe`: its shape - `linear_x`, `linear_y`, `diagonal`, `radial`, `square`, `clock`, `spiral`, `bars_horizontal`, `bars_vertical`, `checkerboard`, `heart` or `bowtie`; or, with openshot-qt installed, one of OpenShot's 412 as `openshot/<name>` (see the README's *OpenShot's transitions*).\n\nDefault: `linear_x`"
+    },
+    "luma_softness": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 1,
+     "description": "With `wipe`: how soft the edge between the two clips is, from `0` (hard) to `1`.\n\nDefault: `0`",
+     "markdownDescription": "With `wipe`: how soft the edge between the two clips is, from `0` (hard) to `1`.\n\nDefault: `0`"
+    },
+    "luma_reverse": {
+     "type": "boolean",
+     "description": "With `wipe`: the shape's light parts change first instead of its dark ones.\n\nDefault: `false`",
+     "markdownDescription": "With `wipe`: the shape's light parts change first instead of its dark ones.\n\nDefault: `false`"
+    },
+    "style": {
+     "enum": [
+      "zoom",
+      "slide"
+     ],
+     "description": "With `affine`: `zoom` or `slide`.\n\nDefault: `zoom`",
+     "markdownDescription": "With `affine`: `zoom` or `slide`.\n\nDefault: `zoom`"
+    },
+    "transition_properties": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/meltProperties"
+      }
+     ],
+     "description": "With `melt/<service>`: its properties, `{<property>: <value>}`.",
+     "markdownDescription": "With `melt/<service>`: its properties, `{<property>: <value>}`."
+    },
+    "gl": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/gl"
+      }
+     ],
+     "description": "With `gl`: which of gl-transitions' 125 (`cube`, `doorway`, `ripple`...; see *`transition: gl`* below).",
+     "markdownDescription": "With `gl`: which of gl-transitions' 125 (`cube`, `doorway`, `ripple`...; see *`transition: gl`* below)."
+    },
+    "gl_params": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/glParams"
+      }
+     ],
+     "description": "With `gl`: its parameters, `{<name>: <value>}`; the rest keep their defaults.",
+     "markdownDescription": "With `gl`: its parameters, `{<name>: <value>}`; the rest keep their defaults."
+    }
+   },
+   "additionalProperties": false,
+   "if": {
+    "not": {
+     "required": [
+      "use"
+     ]
+    }
+   },
+   "then": {
+    "required": [
+     "clips"
+    ]
+   },
+   "allOf": [
+    {
+     "$ref": "#/definitions/glRules"
+    }
+   ]
+  },
+  "guide": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "at": {
+     "type": "number",
+     "minimum": 0,
+     "description": "Where, in seconds.\n\nDefault: *(required)*",
+     "markdownDescription": "Where, in seconds.\n\nDefault: *(required)*"
+    },
+    "text": {
+     "type": "string",
+     "description": "Its label.\n\nDefault: `Marker`",
+     "markdownDescription": "Its label.\n\nDefault: `Marker`"
+    },
+    "category": {
+     "type": "integer",
+     "description": "kdenlive's marker category (its colour).\n\nDefault: `0`",
+     "markdownDescription": "kdenlive's marker category (its colour).\n\nDefault: `0`"
+    }
+   },
+   "additionalProperties": false,
+   "if": {
+    "not": {
+     "required": [
+      "use"
+     ]
+    }
+   },
+   "then": {
+    "required": [
+     "at"
+    ]
+   }
+  },
+  "transition": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "type": {
+     "anyOf": [
+      {
+       "enum": [
+        "wipe",
+        "affine",
+        "gl"
+       ]
+      },
+      {
+       "type": "string",
+       "pattern": "^melt/."
+      }
+     ],
+     "description": "`wipe`, `affine`, `gl` or `melt/<service>`.\n\nDefault: *(required)*",
+     "markdownDescription": "`wipe`, `affine`, `gl` or `melt/<service>`.\n\nDefault: *(required)*"
+    },
+    "track_a": {
+     "type": "string",
+     "description": "The two tracks, by `name`.\n\nDefault: *(required)*",
+     "markdownDescription": "The two tracks, by `name`.\n\nDefault: *(required)*"
+    },
+    "track_b": {
+     "type": "string",
+     "description": "The two tracks, by `name`.\n\nDefault: *(required)*",
+     "markdownDescription": "The two tracks, by `name`.\n\nDefault: *(required)*"
+    },
+    "start": {
+     "type": "number",
+     "description": "The window, in timeline seconds.\n\nDefault: *(required)*",
+     "markdownDescription": "The window, in timeline seconds.\n\nDefault: *(required)*"
+    },
+    "end": {
+     "type": "number",
+     "description": "The window, in timeline seconds.\n\nDefault: *(required)*",
+     "markdownDescription": "The window, in timeline seconds.\n\nDefault: *(required)*"
+    },
+    "luma": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/luma"
+      }
+     ],
+     "description": "With `wipe`: its shape (see `scenes:`).\n\nDefault: `linear_x`",
+     "markdownDescription": "With `wipe`: its shape (see `scenes:`).\n\nDefault: `linear_x`"
+    },
+    "softness": {
+     "type": "number",
+     "minimum": 0,
+     "maximum": 1,
+     "description": "With `wipe`: as a scene's `luma_softness`.\n\nDefault: `0`",
+     "markdownDescription": "With `wipe`: as a scene's `luma_softness`.\n\nDefault: `0`"
+    },
+    "reverse": {
+     "type": "boolean",
+     "description": "With `wipe`: as a scene's `luma_reverse`.\n\nDefault: `false`",
+     "markdownDescription": "With `wipe`: as a scene's `luma_reverse`.\n\nDefault: `false`"
+    },
+    "style": {
+     "enum": [
+      "zoom",
+      "slide"
+     ],
+     "description": "With `affine`: `zoom` or `slide`.\n\nDefault: `zoom`",
+     "markdownDescription": "With `affine`: `zoom` or `slide`.\n\nDefault: `zoom`"
+    },
+    "properties": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/meltProperties"
+      }
+     ],
+     "description": "With `melt/<service>`: its properties, `{<property>: <value>}`.",
+     "markdownDescription": "With `melt/<service>`: its properties, `{<property>: <value>}`."
+    },
+    "gl": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/gl"
+      }
+     ],
+     "description": "With `gl`: as on a scene.",
+     "markdownDescription": "With `gl`: as on a scene."
+    },
+    "gl_params": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/glParams"
+      }
+     ],
+     "description": "With `gl`: as on a scene.",
+     "markdownDescription": "With `gl`: as on a scene."
+    }
+   },
+   "additionalProperties": false,
+   "if": {
+    "not": {
+     "required": [
+      "use"
+     ]
+    }
+   },
+   "then": {
+    "required": [
+     "type",
+     "track_a",
+     "track_b",
+     "start",
+     "end"
+    ]
+   },
+   "allOf": [
+    {
+     "$ref": "#/definitions/glRules"
+    }
+   ]
+  },
+  "part": {
+   "anyOf": [
+    {
+     "type": "string"
+    },
+    {
+     "type": "object",
+     "properties": {
+      "use": {
+       "$ref": "#/definitions/use"
+      },
+      "file": {
+       "type": "string",
+       "description": "The part's file.",
+       "markdownDescription": "The part's file."
+      },
+      "transition": {
+       "anyOf": [
+        {
+         "enum": [
+          "none",
+          "dissolve",
+          "wipe",
+          "affine",
+          "iris",
+          "flip",
+          "gl"
+         ]
+        },
+        {
+         "type": "string",
+         "pattern": "^melt/."
+        }
+       ],
+       "description": "From the part before into this one: `dissolve`, `wipe` (with `luma`, `luma_softness`, `luma_reverse`), `affine` (`style`), `iris`, `flip`, `gl` (`gl`, `gl_params`) or `melt/<service>` (`transition_properties`), over `transition_duration` (default 1). The parts overlap by it; none, a cut. glitch, delaygrab and cairogradient (bursts on a clip) don't go between parts.",
+       "markdownDescription": "From the part before into this one: `dissolve`, `wipe` (with `luma`, `luma_softness`, `luma_reverse`), `affine` (`style`), `iris`, `flip`, `gl` (`gl`, `gl_params`) or `melt/<service>` (`transition_properties`), over `transition_duration` (default 1). The parts overlap by it; none, a cut. glitch, delaygrab and cairogradient (bursts on a clip) don't go between parts."
+      },
+      "transition_duration": {
+       "type": "number",
+       "exclusiveMinimum": 0,
+       "description": "Length of each transition.\n\nDefault: `1.0`",
+       "markdownDescription": "Length of each transition.\n\nDefault: `1.0`"
+      },
+      "luma": {
+       "allOf": [
+        {
+         "$ref": "#/definitions/luma"
+        }
+       ],
+       "description": "With `wipe`: its shape - `linear_x`, `linear_y`, `diagonal`, `radial`, `square`, `clock`, `spiral`, `bars_horizontal`, `bars_vertical`, `checkerboard`, `heart` or `bowtie`; or, with openshot-qt installed, one of OpenShot's 412 as `openshot/<name>` (see the README's *OpenShot's transitions*).\n\nDefault: `linear_x`",
+       "markdownDescription": "With `wipe`: its shape - `linear_x`, `linear_y`, `diagonal`, `radial`, `square`, `clock`, `spiral`, `bars_horizontal`, `bars_vertical`, `checkerboard`, `heart` or `bowtie`; or, with openshot-qt installed, one of OpenShot's 412 as `openshot/<name>` (see the README's *OpenShot's transitions*).\n\nDefault: `linear_x`"
+      },
+      "luma_softness": {
+       "type": "number",
+       "minimum": 0,
+       "maximum": 1,
+       "description": "With `wipe`: how soft the edge between the two clips is, from `0` (hard) to `1`.\n\nDefault: `0`",
+       "markdownDescription": "With `wipe`: how soft the edge between the two clips is, from `0` (hard) to `1`.\n\nDefault: `0`"
+      },
+      "luma_reverse": {
+       "type": "boolean",
+       "description": "With `wipe`: the shape's light parts change first instead of its dark ones.\n\nDefault: `false`",
+       "markdownDescription": "With `wipe`: the shape's light parts change first instead of its dark ones.\n\nDefault: `false`"
+      },
+      "style": {
+       "enum": [
+        "zoom",
+        "slide"
+       ],
+       "description": "With `affine`: `zoom` or `slide`.\n\nDefault: `zoom`",
+       "markdownDescription": "With `affine`: `zoom` or `slide`.\n\nDefault: `zoom`"
+      },
+      "transition_properties": {
+       "allOf": [
+        {
+         "$ref": "#/definitions/meltProperties"
+        }
+       ],
+       "description": "With `melt/<service>`: its properties, `{<property>: <value>}`.",
+       "markdownDescription": "With `melt/<service>`: its properties, `{<property>: <value>}`."
+      },
+      "gl": {
+       "allOf": [
+        {
+         "$ref": "#/definitions/gl"
+        }
+       ],
+       "description": "With `gl`: which of gl-transitions' 125 (`cube`, `doorway`, `ripple`...; see *`transition: gl`* below).",
+       "markdownDescription": "With `gl`: which of gl-transitions' 125 (`cube`, `doorway`, `ripple`...; see *`transition: gl`* below)."
+      },
+      "gl_params": {
+       "allOf": [
+        {
+         "$ref": "#/definitions/glParams"
+        }
+       ],
+       "description": "With `gl`: its parameters, `{<name>: <value>}`; the rest keep their defaults.",
+       "markdownDescription": "With `gl`: its parameters, `{<name>: <value>}`; the rest keep their defaults."
+      }
+     },
+     "additionalProperties": false,
+     "if": {
+      "not": {
+       "required": [
+        "use"
+       ]
+      }
+     },
+     "then": {
+      "required": [
+       "file"
+      ]
+     },
+     "allOf": [
+      {
+       "$ref": "#/definitions/glRules"
+      }
+     ]
+    }
+   ]
+  }
+ }
+}

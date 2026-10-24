@@ -1396,3 +1396,15 @@ whole video can be built from a fresh checkout anywhere.
   against melt's render: same wipe direction both ways, the dissolve's
   half-way mix, fades on their frames, the Wave effect within encoding
   noise of the generated file.
+- **The project YAML's JSON Schema: `video-as-code schema`** —
+  **implemented** (2026-10-24, `yamlschema.py`, `tests/test_yamlschema.py`):
+  an editor with yaml-language-server (VS Code's YAML extension)
+  completes keys and values, shows each key's meaning and underlines a
+  typo or a wrong value as it's typed. Written key by key after the
+  parsers, with the meanings taken from `docs/project-yaml.md`'s tables
+  and the bundled catalogs (wipe shapes, gl-transitions and their
+  parameters, GLSL shaders and theirs); shipped as
+  `project.schema.json` and published with the docs, at the URL its
+  `$id` says. The tests keep it in step: the shipped file up to date,
+  every key the parsers read in it, every key described, and every
+  project file the docs and the gallery show valid by it.

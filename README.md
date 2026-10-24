@@ -42,6 +42,7 @@ video-as-code build project.yaml --format openshot      # an OpenShot project (.
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
+video-as-code schema [-o schema.json]                   # the YAML's JSON Schema, for an editor
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
 video-as-code docs [--with photo.jpg] [--public DIR]    # this documentation as a local web, the gallery in it
 video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
@@ -102,6 +103,27 @@ and a title clip): `video-as-code build examples/simple/project.yaml`. See
 See `docs/making-a-video.md` for a short step-by-step howto of this
 whole flow, and `docs/project-yaml.md` for every key a project file
 accepts.
+
+### Writing the YAML in an editor: `video-as-code schema`
+
+The project file has a JSON Schema: an editor that knows it completes
+keys and values as you type, shows what each key means (the text of
+`docs/project-yaml.md`) and underlines a typo - `fade_inn`, `reveal:
+irs`, a gl-transition's parameter past its range - as you write it, not
+when `validate` runs. In VS Code, install Red Hat's *YAML* extension and
+start the project file with this line (any editor with
+yaml-language-server reads it too):
+
+```yaml
+# yaml-language-server: $schema=https://video-as-code.juan-ramirez.es/project.schema.json
+```
+
+`video-as-code schema -o schema.json` writes the schema of the installed
+version, for a line that points at that file instead (offline, or to
+match an older version). It checks each key as it's written; whether a
+file exists, a clip fits its source or two clips overlap is still
+`validate`'s - and so are melt's services and libopenshot's effects,
+which depend on what's installed.
 
 ### `--proxy`: light previews of only the parts used
 

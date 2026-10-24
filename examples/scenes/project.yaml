@@ -1,3 +1,5 @@
+# yaml-language-server: $schema=https://video-as-code.juan-ramirez.es/project.schema.json
+
 # Project-wide settings: frame rate and canvas size apply to every
 # scene below.
 project:
