@@ -1277,6 +1277,7 @@ aside.try h2 { margin: 0 0 4px; }
 aside.try > p { margin: 0 0 12px; color: var(--muted); }
 .try-body { display: grid; grid-template-columns: minmax(0, 480px) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
 @media (max-width: 720px) { .try-body { grid-template-columns: minmax(0, 1fr); } }
+.try-preview [hidden] { display: none; }  /* (over "video, canvas { display: block }") */
 .try-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .try-preview .note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
 .try-controls, .try-controls .params { display: flex; flex-direction: column; gap: 12px; }
