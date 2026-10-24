@@ -385,11 +385,13 @@ def plan(
     costs: dict[str, float],
     base_mb: float,
     budget_mb: float,
+    max_frames: int = MAX_FRAMES,
 ) -> list[Segment]:
     """Segments covering frames 0..total_frames-1: aligned blocks of
-    MAX_FRAMES, each halved (recursively) until its estimate - base_mb
-    plus the cost of every producer played in it - fits budget_mb, or it
-    is MIN_FRAMES long (rendered anyway, the best that can be done)."""
+    `max_frames` (MIN_FRAMES * 2^k), each halved (recursively) until its
+    estimate - base_mb plus the cost of every producer played in it -
+    fits budget_mb, or it is MIN_FRAMES long (rendered anyway, the best
+    that can be done)."""
 
     def estimate(first: int, last: int) -> float:
         played = {pid for start, end, pid in entries if start <= last and end >= first}
@@ -408,8 +410,8 @@ def plan(
         split(first, size // 2)
         split(first + size // 2, size // 2)
 
-    for start in range(0, total_frames, MAX_FRAMES):
-        split(start, MAX_FRAMES)
+    for start in range(0, total_frames, max_frames):
+        split(start, max_frames)
     return segments
 
 
@@ -519,13 +521,17 @@ def render(
     report: Callable[[str], None] = lambda text: None,
     memory_cap: Optional[bool] = None,
     env: Optional[dict[str, str]] = None,
+    max_frames: int = MAX_FRAMES,
+    rendered: Optional[list[Segment]] = None,
+    report_cached: bool = True,
 ) -> list[Segment]:
     """Renders `kdenlive_path` to `output` in segments (see the module
-    docstring); returns the plan used. Raises SplitRenderError."""
+    docstring); returns the plan used, and adds to `rendered` the
+    segments that weren't in the cache. Raises SplitRenderError."""
     root = ET.parse(kdenlive_path).getroot()
     base = Path(root.get("root") or kdenlive_path.parent)
     budget = budget_mb or default_budget_mb()
-    segments = plan(total_frames, _timeline_entries(root), producer_costs(root, base), baseline_mb(root), budget)
+    segments = plan(total_frames, _timeline_entries(root), producer_costs(root, base), baseline_mb(root), budget, max_frames)
     over = [s for s in segments if s.est_mb > budget]
     if over:
         report(msg("split.over_budget", n=len(over), budget=budget))
@@ -571,29 +577,32 @@ def render(
                 parts.append(part)
                 done_before = sum(s.frames for s in segments[:n - 1])
                 if part.exists() and _read(part.with_suffix(".key")) == key:
-                    report(msg("split.segment_cached", n=n, total=len(segments), first=seg.first, last=seg.last))
+                    if report_cached:
+                        report(msg("split.segment_cached", n=n, total=len(segments), first=seg.first, last=seg.last))
                     progress.update(done_before + seg.frames, n, len(segments))
                     continue
                 progress.update(done_before, n, len(segments))
                 report(msg("split.segment", n=n, total=len(segments), first=seg.first, last=seg.last, mb=seg.est_mb))
                 seg_xml = tmp / "segment.kdenlive"
                 ET.ElementTree(seg_root).write(seg_xml, encoding="utf-8", xml_declaration=True)
-                rendered = tmp / part.name
+                rendered_part = tmp / part.name
                 returncode, stderr = _run_melt_with_progress(
                     _melt_command(
                         melt,
-                        [str(seg_xml), "-consumer", f"avformat:{rendered}", *_ENCODE, f"in={seg.first}", f"out={seg.last}"],
+                        [str(seg_xml), "-consumer", f"avformat:{rendered_part}", *_ENCODE, f"in={seg.first}", f"out={seg.last}"],
                         cap(seg.est_mb),
                     ),
                     env,
                     lambda frame: progress.update(done_before + max(0, min(frame - seg.first, seg.frames)), n, len(segments)),
                 )
-                if returncode != 0 or not rendered.exists():
+                if returncode != 0 or not rendered_part.exists():
                     detail = (stderr.strip().splitlines() or [f"exit {returncode}"])[-1]
                     raise SplitRenderError(msg("split.segment_failed", first=seg.first, last=seg.last, detail=detail))
                 # only a finished segment enters the cache
-                shutil.move(str(rendered), part)
+                shutil.move(str(rendered_part), part)
                 part.with_suffix(".key").write_text(key, encoding="utf-8")
+                if rendered is not None:
+                    rendered.append(seg)
         except BaseException:
             if audio_proc is not None:
                 audio_proc.kill()

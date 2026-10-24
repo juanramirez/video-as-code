@@ -10,7 +10,7 @@ from typing import Optional
 
 import yaml
 
-from . import autoprune, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, osp, parts, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import autoprune, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, osp, parts, watch, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -289,6 +289,24 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def melt_env_for(resolved, melt: str) -> Optional[dict[str, str]]:
+    """The environment melt renders `resolved` in - None (after saying
+    why) if it can't be made."""
+    # C locale, or decimals like `gain: 2.5`/`speed: 1.08` get truncated
+    # under a comma-decimal locale - see probe.melt_env; and, for
+    # `film_dust: {style: dots}`, melt's data folder without its dust
+    # pictures (with `pictures:`, with the chosen ones) - see mltdata.py
+    mlt_data = None
+    dust_pictures = mltdata.wanted_pictures(resolved)
+    if mltdata.wants_dots(resolved) or dust_pictures:
+        data_dir = mltdata.find_data_dir(melt)
+        if data_dir is None:
+            print(msg("cli.render_no_mlt_data", melt=melt), file=sys.stderr)
+            return None
+        mlt_data = mltdata.pictures_data_dir(data_dir, mltdata.default_cache_root(), dust_pictures or ())
+    return probe.melt_env(mlt_data=mlt_data)
+
+
 def cmd_render(args: argparse.Namespace) -> int:
     yaml_path = Path(args.project)
     output = _output(yaml_path, args, ".mp4")
@@ -317,19 +335,9 @@ def cmd_render(args: argparse.Namespace) -> int:
         # not a sign that nothing uses them)
         _autoprune(yaml_path, resolved)
 
-    # C locale, or decimals like `gain: 2.5`/`speed: 1.08` get truncated
-    # under a comma-decimal locale - see probe.melt_env; and, for
-    # `film_dust: {style: dots}`, melt's data folder without its dust
-    # pictures (with `pictures:`, with the chosen ones) - see mltdata.py
-    mlt_data = None
-    dust_pictures = mltdata.wanted_pictures(resolved)
-    if mltdata.wants_dots(resolved) or dust_pictures:
-        data_dir = mltdata.find_data_dir(melt)
-        if data_dir is None:
-            print(msg("cli.render_no_mlt_data", melt=melt), file=sys.stderr)
-            return 1
-        mlt_data = mltdata.pictures_data_dir(data_dir, mltdata.default_cache_root(), dust_pictures or ())
-    env = probe.melt_env(mlt_data=mlt_data)
+    env = melt_env_for(resolved, melt)
+    if env is None:
+        return 1
 
     with contextlib.ExitStack() as stack:
         if args.keep_kdenlive:
@@ -418,6 +426,21 @@ def cmd_transitions(args: argparse.Namespace) -> int:
         print(msg("cli.transitions_no_openshot", env=lumas.OPENSHOT_DIR_ENV), file=sys.stderr)
     for name, _ in lumas.all_lumas():
         print(name)
+    return 0
+
+
+def cmd_watch(args: argparse.Namespace) -> int:
+    """The preview rendered again on every save, played from where it
+    changed (watch.py)."""
+    yaml_path = Path(args.project)
+    if not yaml_path.is_file():
+        print(msg("validation.yaml_missing", path=yaml_path), file=sys.stderr)
+        return 1
+    try:
+        watch.run(yaml_path, part=args.part, proxy=None if args.full else args.proxy, play=not args.no_play,
+                  report=lambda text: print(text, file=sys.stderr))
+    except KeyboardInterrupt:
+        print(file=sys.stderr)
     return 0
 
 
@@ -538,6 +561,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_transitions = sub.add_parser("transitions", help=msg("cli.help.transitions"))
     p_transitions.set_defaults(func=cmd_transitions)
+
+    p_watch = sub.add_parser("watch", help=msg("cli.help.watch"))
+    p_watch.add_argument("project", help=msg("cli.help.project_path"))
+    p_watch.add_argument("--proxy", metavar="WxH", default=watch.DEFAULT_PROXY, help=msg("cli.help.watch_proxy"))
+    p_watch.add_argument("--full", action="store_true", help=msg("cli.help.watch_full"))
+    p_watch.add_argument("--part", metavar="PATH", help=msg("cli.help.part"))
+    p_watch.add_argument("--no-play", action="store_true", help=msg("cli.help.watch_no_play"))
+    p_watch.set_defaults(func=cmd_watch)
 
     p_schema = sub.add_parser("schema", help=msg("cli.help.schema"))
     p_schema.add_argument("-o", "--output", metavar="FILE", help=msg("cli.help.schema_output"))
