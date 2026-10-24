@@ -76,16 +76,20 @@ def _copy_images(body: str, md_dir: Path, root: Path) -> None:
             shutil.copy2(found, root / src)
 
 
-def _project(source: Path) -> tuple[Optional[str], Optional[str]]:
-    """The repository's URL and the license's name, from the checkout's
-    pyproject.toml (`[project.urls]` Repository, `license`)."""
+def _project(source: Path) -> tuple[Optional[str], Optional[str], Optional[tuple[str, str]]]:
+    """The repository's URL, the license's name and the author (name, site),
+    from the checkout's pyproject.toml (`[project.urls]` Repository and
+    Author, `license`, `authors`' first name)."""
     try:
         text = (source / "pyproject.toml").read_text(encoding="utf-8")
     except OSError:
-        return None, None
+        return None, None, None
     repo = re.search(r'(?m)^Repository\s*=\s*"([^"]+)"', text)
     license = re.search(r'(?m)^license\s*=\s*\{\s*text\s*=\s*"([^"]+)"', text)
-    return (repo.group(1) if repo else None), (license.group(1) if license else None)
+    name = re.search(r'(?m)^authors\s*=\s*\[\s*\{\s*name\s*=\s*"([^"]+)"', text)
+    site_url = re.search(r'(?m)^Author\s*=\s*"([^"]+)"', text)
+    author = (name.group(1), site_url.group(1)) if name and site_url else None
+    return (repo.group(1) if repo else None), (license.group(1) if license else None), author
 
 
 def _about(repo: Optional[str], license: Optional[str]) -> str:
@@ -178,20 +182,23 @@ def build(
             body, keys = key_anchors(body)
         bodies[page] = (_title(text, page), body)
     doc_links = {key: f"../{DOCS_DIR}/{REFERENCE}#key-{key}" for key in keys}
-    repo, license = _project(source)
+    repo, license, author = _project(source)
     about = _about(repo, license)
+    theme_file = source / "docs" / "theme.css"  # (the project's look over the docs' own, if it has one)
+    theme = theme_file.read_text(encoding="utf-8") if theme_file.is_file() else ""
     gallery_path = f"{gallery.GALLERY_DIR}/index.html"
     pages = [(f"{DOCS_DIR}/{page}", SHORT.get(page, title)) for page, (title, _) in bodies.items()] + [(gallery_path, msg("docs.gallery"))]
     gallery_page = gallery.build(own=own, cache_root=cache_root, on_progress=on_progress,
                                  doc_links=doc_links, docs_home=f"../{DOCS_DIR}/index.html", public=public,
-                                 footer=about, site_nav=site.nav(pages, gallery_path, gallery.GALLERY_DIR, repo))
+                                 footer=about, site_nav=site.nav(pages, gallery_path, gallery.GALLERY_DIR, repo, author),
+                                 theme=theme)
     cards = json.loads((gallery_page.parent / gallery.DOC_CARDS).read_text(encoding="utf-8"))
     note = msg("docs.public_note", date=datetime.date.today().isoformat(), melt=gallery._melt_version()) if public else ""
     for page, (title, body) in bodies.items():
         if page == REFERENCE:
             body = _to_gallery(body, cards)
-        bar = site.nav(pages, f"{DOCS_DIR}/{page}", DOCS_DIR, repo)
-        (root / page).write_text(_page(title, body, bar, note, about), encoding="utf-8")
+        bar = site.nav(pages, f"{DOCS_DIR}/{page}", DOCS_DIR, repo, author)
+        (root / page).write_text(_page(title, body, bar, note, about, theme), encoding="utf-8")
     return root / "index.html"
 
 
@@ -231,7 +238,7 @@ def publish(
     return out / "index.html"
 
 
-def _page(title: str, body: str, bar: str, note: str = "", about: str = "") -> str:
+def _page(title: str, body: str, bar: str, note: str = "", about: str = "", theme: str = "") -> str:
     footer = "<br>".join(([about] if about else []) + ([html.escape(note)] if note else []))
     return f"""<!doctype html>
 <html lang="{msg("gallery.lang")}">
@@ -240,6 +247,7 @@ def _page(title: str, body: str, bar: str, note: str = "", about: str = "") -> s
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)} - video-as-code</title>
 <style>{site.SITE_CSS}{_CSS}</style>
+{f"<style>{theme}</style>" if theme else ""}
 </head>
 <body>
 {bar}

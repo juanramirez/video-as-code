@@ -1,0 +1,25 @@
+/* The docs' look, over their own (docs.py): that of juan-ramirez.es, the
+   author's site - its paper and ink, its rust accent, Source Serif 4 for
+   the headings and IBM Plex Sans for the text. Without this file the docs
+   keep their neutral look. */
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap");
+:root { --bg: #f7f4ee; --fg: #1b1f23; --muted: #5b5f65; --line: #e2dccf; --code: #efe9de; --card: #fbf9f5;
+        --accent: #b14623; --on-accent: #ffffff; }
+/* the site has no dark mode: this one is the same paper, at night */
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1c1a16; --fg: #ece6da; --muted: #a59e91; --line: #36322b; --code: #26231e; --card: #23201b;
+          --accent: #e0835e; --on-accent: #1c1a16; }
+}
+body, nav.site, .tabs button, input { font-family: "IBM Plex Sans", Helvetica, Arial, sans-serif; }
+h1, h2, h3, nav.site .pages > a:first-child { font-family: "Source Serif 4", Georgia, serif; }
+nav.site .pages > a:first-child { font-size: 1.1em; }
+/* the bar, as the site's header: ink, with white on it - the page you're
+   on in white, underlined in the accent, the rest dimmed */
+nav.site { --bg: #1b1f23; --line: #1b1f23; --fg: #ffffff; --muted: rgb(255 255 255 / 0.6);
+           background: var(--bg); color: var(--fg); border-bottom-color: var(--line); box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); }
+nav.site a[aria-current] { font-weight: 600; text-decoration: underline; text-decoration-color: #b14623;
+                           text-decoration-thickness: 2px; text-underline-offset: 6px; }
+nav.site .pages > a:first-child { text-decoration: none; }
+@media (prefers-color-scheme: dark) { nav.site { --line: #34322c; } nav.site a[aria-current] { text-decoration-color: #e0835e; } }
+/* the gallery's links to the reference, in the accent too */
+a.to-doc { color: var(--accent); }

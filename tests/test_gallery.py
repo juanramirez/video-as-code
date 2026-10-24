@@ -42,7 +42,7 @@ def test_page_from_cached_renders(tmp_path: Path, melt, openshot_transitions, mo
     page = gallery.build(cache_root=tmp_path / "cache")
     text = page.read_text(encoding="utf-8")
     assert sorted(rendered) == sorted(["dissolve", "fade_in / fade_out", "broken"])
-    assert text.count("<video") == 2  # the broken one shows its error instead
+    assert text.count("<video src=") == 2  # the broken one shows its error instead
     assert "speed" in text and "transition: wipe\nluma: openshot/ramp_left" in text
     assert "files/transitions-dissolve-" in text
     # what the page reads the pixels of is in it, not in files beside it
@@ -291,3 +291,5 @@ def test_inside_the_docs_the_gallery_wears_their_bar(tmp_path: Path):
     assert bar in page and 'class="hide-unchanged in-site"' in page
     assert 'class="docs"' not in page  # (the bar links the docs already)
     assert "@view-transition" in page and '<nav class="sections">' in page
+    themed = gallery._page([(entry, None)], {}, [], pictures, tmp_path, {}, {}, "../docs/index.html", "", bar, ":root{--bg:sepia}")
+    assert themed.index("<style>:root{--bg:sepia}</style>") > themed.index("@view-transition")  # (over theirs)
