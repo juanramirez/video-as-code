@@ -161,6 +161,16 @@ def test_tweaks_from_ranges():
     assert gallery._tweaks(entry, tries=2) == [{"level": 11.25}, {"u": 64}]
 
 
+def test_a_transitions_progress_moves_over_it():
+    entry = gallery.Entry("melt_transitions", "frei0r.sleid0r_wipe-left", "", "", params=(
+        (("default", 0.5), ("maximum", 1.0), ("minimum", 0.0), ("name", "softness"), ("type", "float")),
+        (("default", 0), ("maximum", 1), ("minimum", 0), ("name", "position"), ("type", "float")),
+    ))
+    # still at any one value: from 0 to 1 over the transition, before the rest
+    assert gallery._tweaks(entry)[0] == {"position": "0=0;-1=1"}
+    assert {"softness": 0.25} in gallery._tweaks(entry)
+
+
 def test_failures_told_in_a_line():
     assert "crashed" in gallery._failure("melt: filter.c:12: f: Assertion `x' failed.")
     assert "ffmpeg" in gallery._failure("[Parsed_x] Cannot configure the filter graph")
