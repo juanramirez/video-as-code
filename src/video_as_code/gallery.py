@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from . import glfilters, gltransitions, lumas, meltpass, openshot_effects, probe
+from .site import SITE_CSS
 from .errors import KdenliveAsCodeError
 from . import i18n
 from .i18n import msg
@@ -756,12 +757,13 @@ def _with_own(samples: dict[str, Path], own: Optional[Path]) -> dict[str, Path]:
 def _code_key() -> str:
     """This package's own code and data (the gl-transitions shaders and
     plugin source among them): a change to how anything is built renders
-    every preview again. Not the messages or this page's own code, which
-    don't change a render (an entry's project is in its own key)."""
+    every preview again. Not the messages, this page's own code or the
+    docs' pages around it, which don't change a render (an entry's
+    project is in its own key)."""
     h = hashlib.sha256()
     package = Path(__file__).parent
     for path in sorted([*package.glob("*.py"), *package.glob("*_data/**/*")]):
-        if path.is_file() and path.name not in ("i18n.py", "gallery.py"):
+        if path.is_file() and path.name not in ("i18n.py", "gallery.py", "docs.py", "site.py"):
             h.update(path.name.encode() + path.read_bytes())
     return h.hexdigest()
 
@@ -877,6 +879,7 @@ def build(
     docs_home: Optional[str] = None,
     public: bool = False,
     footer: str = "",
+    site_nav: str = "",
 ) -> Path:
     """Writes the page (rendering what isn't cached yet); returns its path.
     Part of the docs (docs.py): `doc_links` maps the reference's keys to
@@ -886,7 +889,9 @@ def build(
     publish (docs.py --public) - over generated pictures, not the
     wallpapers' photos; without OpenShot's wipe shapes (GPL) nor the
     user's own LUTs. `footer`: HTML for the page's foot (the docs' line
-    on the code and its license)."""
+    on the code and its license); `site_nav`: the docs' bar, for the
+    page to look like one of theirs (site.py) - its own link to the docs
+    left out then."""
     if probe.find_melt() is None:
         raise KdenliveAsCodeError(msg("cli.render_missing_melt"))
     root = (cache_root or default_cache_root()) / GALLERY_DIR
@@ -1035,7 +1040,7 @@ def build(
     page = root / "index.html"
     shown = [(e, out) for e, out in previews if e not in baselines.values()]
     shown += [(e, None) for e in catalog if not e.render]
-    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged, doc_links or {}, docs_home, footer), encoding="utf-8")
+    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged, doc_links or {}, docs_home, footer, site_nav), encoding="utf-8")
     first: dict[str, str] = {}
     for section in SECTIONS:  # (in the page's order)
         if section == "lumas" and luma_cards and "luma" in (doc_links or {}):
@@ -1073,6 +1078,7 @@ def _page(
     doc_links: Optional[dict[str, str]] = None,
     docs_home: Optional[str] = None,
     footer: str = "",
+    site_nav: str = "",
 ) -> str:
     def rel(path: Path) -> str:
         return html.escape(path.relative_to(root).as_posix())
@@ -1182,7 +1188,11 @@ def _page(
         .replace("{copied}", json.dumps(msg("gallery.copied")))
         .replace("{thumb_w}", str(THUMB_SIZE[0]))
         .replace("{thumb_h}", str(THUMB_SIZE[1]))
-        .replace("{docs}", f'<a class="docs" href="{html.escape(docs_home)}">{html.escape(msg("gallery.docs"))}</a>' if docs_home else "")
+        .replace("{docs}", f'<a class="docs" href="{html.escape(docs_home)}">{html.escape(msg("gallery.docs"))}</a>'
+                 if docs_home and not site_nav else "")
+        .replace("{site_css}", SITE_CSS if site_nav else "")
+        .replace("{site_nav}", site_nav)
+        .replace("{in_site}", " in-site" if site_nav else "")
         .replace("{footer}", f"<footer>{footer}</footer>" if footer else "")
         .replace("{sections}", "\n".join(sections))
     )
@@ -1200,7 +1210,7 @@ _PAGE = """<!doctype html>
   :root { --bg: #181816; --fg: #ecebe7; --muted: #9c9890; --card: #23221f; --line: #34332f; --code: #1c1b19; --bad: #f2b8b5; }
 }
 body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, sans-serif; }
-header, .bar, nav, section { max-width: 1200px; margin: 0 auto; }
+header, .bar, nav.sections, section { max-width: 1200px; margin: 0 auto; }
 /* only a thin bar stays on top while scrolling: the tabs, the filter, the box */
 .bar { position: sticky; top: 0; z-index: 1; background: var(--bg); display: flex; flex-wrap: wrap; align-items: center;
        gap: 6px 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
@@ -1211,10 +1221,10 @@ h1 { font-size: 20px; margin: 0 0 6px; }
                border-radius: 8px 8px 0 0; background: none; color: var(--muted); cursor: pointer; margin-bottom: -1px; }
 .tabs button[aria-selected="true"] { color: var(--fg); background: var(--bg); border-color: var(--line); }
 [data-tab].off { display: none !important; }
-nav { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px auto; }
-nav a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card);
+nav.sections { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px auto; }
+nav.sections a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--card);
         color: var(--fg); text-decoration: none; font-size: 13px; }
-nav a:hover { border-color: var(--muted); }
+nav.sections a:hover { border-color: var(--muted); }
 section, figure { scroll-margin-top: 64px; }
 section > details > summary { cursor: pointer; display: flex; align-items: baseline; gap: 10px; margin: 24px 0 8px; list-style: none; }
 section > details > summary::-webkit-details-marker { display: none; }
@@ -1258,9 +1268,17 @@ body > footer { max-width: 1200px; margin: 32px auto 0; padding-top: 12px; borde
 body > footer a { color: inherit; }
 a.to-doc { margin-left: 6px; font: 12px ui-monospace, monospace; font-weight: normal; }
 figure:target { outline: 3px solid var(--accent, #2a6fdb); }
+/* inside the docs (site.py): their bar on top, edge to edge, and the
+   thin bar here sticking under it */
+body.in-site { padding-top: 0; }
+body.in-site > nav.site { margin: 0 -16px 24px; }
+body.in-site .bar { top: var(--site-h, 49px); }
+body.in-site section, body.in-site figure { scroll-margin-top: calc(64px + var(--site-h, 49px)); }
+{site_css}
 </style>
 </head>
-<body class="hide-unchanged">
+<body class="hide-unchanged{in_site}">
+{site_nav}
 <header>
 {docs}
 <h1>{title}</h1>
@@ -1271,12 +1289,18 @@ figure:target { outline: 3px solid var(--accent, #2a6fdb); }
 <input type="search" placeholder="{filter}" aria-label="{filter}">
 <label class="hide"><input type="checkbox" checked> {hide_unchanged}</label>
 </div>
-<nav>{nav}</nav>
+<nav class="sections">{nav}</nav>
 {sections}
 {footer}
 <div class="toast" role="status"></div>
 <script>
 const COPY = {copy}, COPIED = {copied};
+// inside the docs: the thin bar sticks under theirs, however tall it wraps
+const siteNav = document.querySelector("nav.site");
+if (siteNav) {
+  const fit = () => document.body.style.setProperty("--site-h", siteNav.offsetHeight + "px");
+  fit(); addEventListener("resize", fit);
+}
 // videos play while on screen
 const seen = new IntersectionObserver((entries) => {
   for (const e of entries) {
@@ -1361,7 +1385,7 @@ for (const pre of document.querySelectorAll("figure > pre")) {
 // the two tabs; the last one shown is remembered
 function showTab(tab) {
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", String(b.dataset.tab === tab));
-  for (const el of document.querySelectorAll("nav a[data-tab], section[data-tab]")) el.classList.toggle("off", el.dataset.tab !== tab);
+  for (const el of document.querySelectorAll("nav.sections a[data-tab], section[data-tab]")) el.classList.toggle("off", el.dataset.tab !== tab);
   try { localStorage.setItem("gallery-tab", tab); } catch (e) {}
 }
 for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => showTab(b.dataset.tab));
@@ -1370,7 +1394,7 @@ try { firstTab = localStorage.getItem("gallery-tab") || firstTab; } catch (e) {}
 const linked = location.hash && document.querySelector(location.hash + "[data-tab]");
 showTab(linked ? linked.dataset.tab : firstTab);
 // a link to a section opens it
-for (const a of document.querySelectorAll('nav a')) {
+for (const a of document.querySelectorAll('nav.sections a')) {
   a.addEventListener("click", () => {
     const details = document.querySelector(a.getAttribute("href") + " > details");
     if (details) details.open = true;
