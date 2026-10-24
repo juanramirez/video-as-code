@@ -116,6 +116,18 @@ def test_the_gallery_gets_the_docs_bar(tmp_path: Path, monkeypatch):
     assert '<a href="index.html" aria-current=page>' in bar  # (the gallery itself)
 
 
+def test_a_long_title_short_in_the_bar(tmp_path: Path, monkeypatch):
+    source = tmp_path / "src"
+    (source / "docs").mkdir(parents=True)
+    (source / "README.md").write_text("# video-as-code\n", encoding="utf-8")
+    (source / "docs" / "reconstructing.md").write_text("# How to recover a YAML from an already-rendered video\n", encoding="utf-8")
+    _fake_gallery(monkeypatch, {})
+    page = (docs.build(cache_root=tmp_path / "cache", source=source).parent / "reconstructing.html").read_text(encoding="utf-8")
+    assert '<a href="reconstructing.html" aria-current=page>How to recover a YAML</a>' in page
+    assert "<title>How to recover a YAML from an already-rendered video - video-as-code</title>" in page
+    assert '<button class="menu"' in page and '<span class="more">' in page
+
+
 def test_without_a_pyproject_no_links(tmp_path: Path):
     assert docs._project(tmp_path) == (None, None) and docs._about(None, None) == ""
 
