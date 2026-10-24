@@ -233,6 +233,9 @@ def publish(
         f'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url={DOCS_DIR}/index.html">'
         f'<link rel="canonical" href="{DOCS_DIR}/index.html"><a href="{DOCS_DIR}/index.html">video-as-code</a>\n',
         encoding="utf-8")
+    from . import yamlschema  # (at the URL the schema's own $id says)
+
+    (out / yamlschema.URL.rsplit("/", 1)[1]).write_text(yamlschema.shipped(), encoding="utf-8")
     (out / ".nojekyll").write_text("", encoding="utf-8")
     (out / SITE_MARK).write_text(msg("docs.site_mark"), encoding="utf-8")
     return out / "index.html"

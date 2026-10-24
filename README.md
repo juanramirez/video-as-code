@@ -1,10 +1,13 @@
 # <img src="docs/logo.svg" alt="" width="48" height="48" align="absmiddle"/> video-as-code
 
-Programmatic generator for [kdenlive](https://kdenlive.org) projects from a
-declarative YAML description, meant for versioning videos with a VCS (like
-Git): the `.yaml` is what you check in; the `.kdenlive` (XML/MLT) is
-regenerated deterministically with `video-as-code build` and doesn't need to live
-in the repo.
+Describe a video in a YAML file and render it straight to video with
+`video-as-code render` - through melt, the MLT engine
+[kdenlive](https://kdenlive.org) renders with. The YAML is what you
+check into a VCS (like Git), so `git diff` shows what changed in the
+edit. To keep editing by hand, `video-as-code build` gives a `.kdenlive`
+to open in kdenlive (see *What you see in kdenlive* in
+[How to make a video](docs/making-a-video.md#what-you-see-in-kdenlive)),
+and `video-as-code import` turns a `.kdenlive` back into a YAML.
 
 These docs, with a gallery where each effect and transition plays, are
 also at <https://video-as-code.juan-ramirez.es/>.
@@ -32,12 +35,14 @@ anything else.
 ## Usage
 
 ```bash
-video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
-video-as-code validate project.yaml                     # validate without building
+video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # render straight to video via melt
+video-as-code validate project.yaml                     # validate without rendering
+video-as-code build project.yaml [-o output.kdenlive]   # a .kdenlive, to open in kdenlive
+video-as-code build project.yaml --format openshot      # an OpenShot project (.osp) instead
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
-video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # build + render straight to video via melt
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
+video-as-code schema [-o schema.json]                   # the YAML's JSON Schema, for an editor
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
 video-as-code docs [--with photo.jpg] [--public DIR]    # this documentation as a local web, the gallery in it
 video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
@@ -98,6 +103,27 @@ and a title clip): `video-as-code build examples/simple/project.yaml`. See
 See `docs/making-a-video.md` for a short step-by-step howto of this
 whole flow, and `docs/project-yaml.md` for every key a project file
 accepts.
+
+### Writing the YAML in an editor: `video-as-code schema`
+
+The project file has a JSON Schema: an editor that knows it completes
+keys and values as you type, shows what each key means (the text of
+`docs/project-yaml.md`) and underlines a typo - `fade_inn`, `reveal:
+irs`, a gl-transition's parameter past its range - as you write it, not
+when `validate` runs. In VS Code, install Red Hat's *YAML* extension and
+start the project file with this line (any editor with
+yaml-language-server reads it too):
+
+```yaml
+# yaml-language-server: $schema=https://video-as-code.juan-ramirez.es/project.schema.json
+```
+
+`video-as-code schema -o schema.json` writes the schema of the installed
+version, for a line that points at that file instead (offline, or to
+match an older version). It checks each key as it's written; whether a
+file exists, a clip fits its source or two clips overlap is still
+`validate`'s - and so are melt's services and libopenshot's effects,
+which depend on what's installed.
 
 ### `--proxy`: light previews of only the parts used
 
@@ -510,6 +536,33 @@ refused, saying why: `Caption` draws nothing outside OpenShot's own
 editor (a title clip does that), and `Mask` needs a mask picture it
 can't be given here. See `docs/project-yaml.md`; `video-as-code gallery`
 shows each one, over the sample video or sound.
+
+### An OpenShot project: `build --format openshot`
+
+`video-as-code build project.yaml --format openshot` (or `-o
+project.osp`) writes the timeline as an [OpenShot](https://www.openshot.org)
+project instead of a `.kdenlive`, to finish the video by hand there. It
+needs `python3-openshot` too: the project is written by libopenshot
+itself, so it's in the shape the installed OpenShot expects.
+
+What carries over: the files; each track as a layer (the last track on
+top); each clip's trim and place; fades, as the clip's opacity (picture)
+or volume (sound), with `gain` and `mute`; dissolves; wipes, as
+OpenShot's own transition - a mask over the same grayscale picture,
+darker parts first, either way and `reverse`d, `softness` as its
+contrast (approximately) - with `luma: openshot/<name>` using OpenShot's
+own file; and guides, as markers. A `derive:` of libopenshot's effects
+alone (`openshot:`, no other operation) arrives as its input with the
+effects on it, editable in OpenShot - the reverse of kdenlive, where it's
+the generated file.
+
+The rest has no counterpart in OpenShot and is left out, each thing
+named in a warning: melt's own effects and transitions (`melt:`,
+`glsl:`, `transition: gl`, `affine`, `film_*`, `color_grade`,
+`ken_burns`...), `speed`, position and size, title clips, Lottie
+animations and parts. Checked by playing the result with libopenshot's
+own timeline - what OpenShot plays and exports with - against melt's
+render (`tests/test_osp.py`).
 
 ### `video-as-code gallery`: every transition and effect, in the browser
 

@@ -531,6 +531,11 @@ class ResolvedBinClip:
     # sequence, by its uuid
     sequence: Optional["ResolvedProject"] = None
     sequence_uuid: Optional[str] = None
+    # a derive: of libopenshot's effects alone (openshot_effects.py): its
+    # input and the effects, so an OpenShot project (osp.py) can apply
+    # them itself rather than use the generated file
+    openshot_input: Optional[Path] = None
+    openshot_effects: tuple[str, ...] = ()
 
 
 @dataclass
