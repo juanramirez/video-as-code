@@ -5,6 +5,8 @@ from __future__ import annotations
 import html
 from typing import Optional
 
+from .i18n import msg
+
 SITE_CSS = """
 :root { color-scheme: light dark; --bg: #fdfdfc; --fg: #1d1f21; --muted: #6b7075; --line: #e2e4e6; --code: #f2f3f4; }
 @media (prefers-color-scheme: dark) { :root { --bg: #16181a; --fg: #e4e6e8; --muted: #9aa0a6; --line: #2c3034; --code: #212427; } }
@@ -19,14 +21,26 @@ nav.site { position: sticky; top: 0; z-index: 2; display: flex; align-items: cen
 nav.site .pages { flex: 1; display: flex; flex-wrap: wrap; gap: 4px 18px; }
 nav.site a { color: var(--muted); text-decoration: none; }
 nav.site a[aria-current], nav.site a:hover { color: var(--fg); }
-nav.site a:first-child { color: var(--fg); font-weight: 600; }  /* the home: the site's name */
+nav.site .pages > a:first-child { color: var(--fg); font-weight: 600; }  /* the home: the site's name */
 nav.site a.repo { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 nav.site a.repo svg { width: 1em; height: 1em; fill: currentColor; }
-/* on a phone the bar takes several lines: it scrolls away with the page
-   instead of covering it, and tightens up */
+nav.site .more { display: contents; }
+nav.site button.menu { display: none; }
+/* on a phone the pages fold behind a chevron by the site's name, and
+   open in a menu floating over the page; the bar scrolls away with it */
 @media (max-width: 640px) {
-  nav.site { position: static; font-size: 15px; line-height: 1.4; gap: 12px; padding: 8px 16px; }
-  nav.site .pages { gap: 4px 14px; }
+  nav.site { position: relative; gap: 12px; padding: 8px 16px; }
+  nav.site .pages { align-items: center; gap: 4px; }
+  nav.site .more { display: none; position: absolute; top: calc(100% - 4px); left: 8px; z-index: 3; flex-direction: column;
+                   min-width: 220px; max-width: calc(100% - 16px); padding: 6px 0; background: var(--bg);
+                   border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
+  nav.site.open .more { display: flex; }
+  nav.site .more a { padding: 8px 16px; }
+  nav.site button.menu { display: inline-flex; padding: 6px; margin: -6px 0; border: 0; background: none; color: var(--fg);
+                         cursor: pointer; }
+  nav.site button.menu svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;
+                             transition: transform .15s; }
+  nav.site.open button.menu svg { transform: rotate(180deg); }
 }
 """
 
@@ -49,9 +63,14 @@ def nav(pages: list[tuple[str, str]], current: str, here: str, repo: Optional[st
         folder, _, name = path.rpartition("/")
         return name if folder == here else f"../{path}"
 
-    links = "".join(
+    links = [
         f'<a href="{html.escape(href(path))}"{" aria-current=page" if path == current else ""}>{html.escape(name)}</a>'
         for path, name in pages
-    )
+    ]
+    # (shown on a phone only: the rest of the pages, in a menu under the first)
+    menu = (f'<button class="menu" type="button" aria-label="{html.escape(msg("docs.menu"))}" aria-expanded="false" '
+            'onclick="this.setAttribute(\'aria-expanded\', this.closest(\'nav\').classList.toggle(\'open\'))">'
+            '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg></button>')
+    links = "".join(links[:1]) + (f'{menu}<span class="more">{"".join(links[1:])}</span>' if len(links) > 1 else "")
     repo_link = f'<a class="repo" href="{html.escape(repo)}">{GITHUB_MARK}GitHub</a>' if repo else ""
     return f'<nav class="site"><span class="pages">{links}</span>{repo_link}</nav>'
