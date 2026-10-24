@@ -344,3 +344,75 @@ long chain of crossfades, previewed at 480x270 on a 4-core laptop with
 - **Generating several `derive:` clips at once**: ffmpeg already uses
   every core for most encodes, so on a 4-core machine with little RAM
   the gain is small (maybe x1.5); last in line.
+
+## Ideas from a brainstorm (2026-10-24)
+
+Not checked against the code yet - each needs a look before it's scoped.
+Grouped by what they improve.
+
+### The edit-and-look loop
+
+- **`video-as-code watch`**: saving the YAML regenerates, on its own, a
+  light preview (`--proxy`) of what changed, with the player open at
+  that point.
+- **Rendering just a stretch**: `render --from 1:20 --to 1:35`, to look
+  at a transition without rendering the whole video.
+- **A strip of thumbnails**: one picture with a frame per clip, like a
+  storyboard - the order and the pace at a glance; also usable in a
+  project's own docs.
+- **Visual diff between versions**: `video-as-code diff v1 v2` - before
+  and after of only the parts that changed between two commits. What
+  really makes the most of a video living in Git.
+
+### Writing the YAML
+
+- **A JSON Schema of the format**: editors (VS Code's YAML extension,
+  among others) would complete and check keys as they're typed. Cheap:
+  `schema.py` already knows everything it needs.
+- **An editor extension**: hovering over a clip shows its thumbnail;
+  over an effect, its gallery card.
+- **Timing to the music**: cuts placed on the song's beats
+  (`start: beat 32`), the tempo detected with librosa or aubio. Shows a
+  lot in home videos set to music.
+- **Templates**: `video-as-code new --template trip`, with the usual
+  shape (an intro with a title, scenes, credits).
+
+### Content made for you
+
+- **Subtitles with Whisper**: transcribe the sound into title clips or
+  an `.srt` - would also give the *Subtitles* entry above (not touched
+  at all yet) something to carry.
+- **A first cut from the album**: from the Google Photos album, a
+  starting YAML - grouped by date and place, blurred or repeated photos
+  left out.
+- **Even loudness**: every clip brought to the same level (EBU R128,
+  ffmpeg's `loudnorm`) with a single option.
+- **Scene detection**: a long video split into its shots
+  (PySceneDetect), each as a clip with its `in`/`out`.
+
+### Quality and robustness
+
+- **`video-as-code doctor`**: one command that checks melt, the
+  gl-transitions plugin, libopenshot, ffmpeg and their versions, and
+  says what's missing and how to get it.
+- **Reference frames as tests**: a few key frames kept per example, and
+  a warning when a change alters the result - would have caught the
+  `sleid0r` transitions frozen at one position.
+- **CI on GitHub Actions**: with a pinned melt in a container, so pull
+  requests are tested on their own instead of on one machine.
+
+### Reaching more people
+
+- **Published on PyPI**, so `pipx install video-as-code` works.
+- **A Docker image** with melt, frei0r and the plugin ready - installing
+  MLT is the biggest hurdle to start.
+- **An editor on the web**: the YAML on one side, a rough preview on the
+  other, built on what the gallery's "Try" boxes already do. The most
+  ambitious one, and a good showcase.
+- **A demo video made with the tool itself**, its YAML linked - the best
+  proof that it works.
+
+Picked as the first three, if any: the JSON Schema (most help writing
+YAML day to day, small), `watch` with rendering just a stretch (a much
+shorter loop), subtitles with Whisper (useful on their own, and they'd
+show well in the gallery).
