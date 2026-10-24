@@ -1199,7 +1199,10 @@ def _page(
         .replace("{footer}", f"<footer>{footer}</footer>" if footer else "")
         .replace("{try}", _TRY.format(
             title=html.escape(msg("gallery.try_title")), hint=html.escape(msg("gallery.try_hint")),
-            rendered=html.escape(msg("gallery.try_rendered")), w=THUMB_SIZE[0], h=THUMB_SIZE[1]))
+            rendered=html.escape(msg("gallery.try_rendered")), w=THUMB_SIZE[0], h=THUMB_SIZE[1])
+            + _TRY_EFFECTS.format(
+                title=html.escape(msg("gallery.try_effects_title")), hint=html.escape(msg("gallery.try_effects_hint")),
+                group=html.escape(msg("gallery.try_group")), effect=html.escape(msg("gallery.try_effect"))))
         .replace("{try_card}", json.dumps(msg("gallery.try_card")))
         .replace("{sections}", "\n".join(sections))
     )
@@ -1211,6 +1214,14 @@ _TRY = """<aside class="try" data-tab="transitions"><h2>{title}</h2><p>{hint}</p
 <div class="try-body"><div class="try-preview"><canvas width="{w}" height="{h}"></canvas>
 <video muted loop playsinline hidden></video><p class="note" hidden>{rendered}</p><pre><code></code></pre></div>
 <div class="try-controls"><label><code>transition</code> <select name="transition"></select></label><div class="params"></div></div>
+</div></aside>"""
+# an effect to see big, in one box: all rendered by melt, so only picked
+# (a group, then one of its cards), with its snippet and what it does
+_TRY_EFFECTS = """<aside class="try" data-tab="effects"><h2>{title}</h2><p>{hint}</p>
+<div class="try-body"><div class="try-preview"><video muted loop playsinline hidden></video><audio controls hidden></audio>
+<pre><code></code></pre></div>
+<div class="try-controls"><label>{group} <select name="group"></select></label><label>{effect} <select name="effect"></select></label>
+<p class="said"></p><p class="doc"></p></div>
 </div></aside>"""
 
 
@@ -1280,6 +1291,8 @@ aside.try > p { margin: 0 0 12px; color: var(--muted); }
 .try-preview [hidden] { display: none; }  /* (over "video, canvas { display: block }") */
 .try-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .try-preview .note { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.try-preview audio { width: 100%; }
+.try-controls p { margin: 0; color: var(--muted); }
 .try-controls, .try-controls .params { display: flex; flex-direction: column; gap: 12px; }
 .try-controls label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .try-controls select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg);
@@ -1478,7 +1491,7 @@ if (card) {
 // live, by the page, where it can (dissolve; wipe, with the shapes the
 // cards below play), else the card rendered with them; and the snippet
 // what's shown. A card's "Try" brings it there.
-const tryBox = document.querySelector("aside.try");
+const tryBox = document.querySelector('aside.try[data-tab="transitions"]');
 if (tryBox && lumaSection) {
   const LIVE = ["dissolve", "wipe"];
   const keysOf = (text) => Object.fromEntries(text.split("\\n").map((line) => line.match(/^(\\w+):\\s*(.*)$/))
@@ -1602,6 +1615,54 @@ if (tryBox && lumaSection) {
     };
     requestAnimationFrame(frame);
   });
+  show();
+}
+// try an effect: picked by group and name, seen big - its card's
+// render (a video, or a sound), snippet, what it does and its key
+const effectsBox = document.querySelector('aside.try[data-tab="effects"]');
+if (effectsBox) {
+  const groups = [...document.querySelectorAll('section[data-tab="effects"]')].map((sec) => ({
+    name: sec.querySelector("summary h2").textContent,
+    cards: [...sec.querySelectorAll("figure")].filter((fig) => fig.querySelector("video, audio")),
+  })).filter((g) => g.cards.length);
+  const nameOf = (fig) => fig.querySelector("figcaption").firstChild.textContent.trim();
+  const groupPick = effectsBox.querySelector('select[name="group"]'), effectPick = effectsBox.querySelector('select[name="effect"]');
+  const video = effectsBox.querySelector("video"), audio = effectsBox.querySelector("audio");
+  const code = effectsBox.querySelector("pre code"), about = effectsBox.querySelector(".said"), doc = effectsBox.querySelector(".doc");
+  const text = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  groupPick.innerHTML = groups.map((g, i) => `<option value="${i}">${text(g.name)}</option>`).join("");
+  let group = groups[0], card = group && group.cards[0];
+  function show() {
+    if (!card) return;
+    groupPick.value = String(groups.indexOf(group));
+    effectPick.innerHTML = group.cards.map((fig, i) => `<option value="${i}">${text(nameOf(fig))}</option>`).join("");
+    effectPick.value = String(group.cards.indexOf(card));
+    const media = card.querySelector("video, audio"), src = media.getAttribute("src"), sound = media.tagName === "AUDIO";
+    const [on, off] = sound ? [audio, video] : [video, audio];
+    off.hidden = true; off.pause();
+    on.hidden = false;
+    if (on.getAttribute("src") !== src) on.src = src;
+    if (!sound) on.play().catch(() => {});
+    code.textContent = card.querySelector("pre code").textContent;
+    const said = card.querySelector(".about");
+    about.textContent = said ? said.title : "";
+    const link = card.querySelector("a.to-doc");
+    doc.innerHTML = "";
+    if (link) doc.append(link.cloneNode(true));
+  }
+  groupPick.addEventListener("change", () => { group = groups[Number(groupPick.value)]; card = group.cards[0]; show(); });
+  effectPick.addEventListener("change", () => { card = group.cards[Number(effectPick.value)]; show(); });
+  for (const g of groups) {
+    for (const fig of g.cards) {
+      const button = document.createElement("button");
+      button.type = "button"; button.className = "try-card"; button.textContent = TRY_CARD;
+      button.addEventListener("click", () => {
+        group = g; card = fig; show();
+        effectsBox.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      fig.querySelector("figcaption").append(button);
+    }
+  }
   show();
 }
 </script>
