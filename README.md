@@ -1,10 +1,13 @@
 # <img src="docs/logo.svg" alt="" width="48" height="48" align="absmiddle"/> video-as-code
 
-Programmatic generator for [kdenlive](https://kdenlive.org) projects from a
-declarative YAML description, meant for versioning videos with a VCS (like
-Git): the `.yaml` is what you check in; the `.kdenlive` (XML/MLT) is
-regenerated deterministically with `video-as-code build` and doesn't need to live
-in the repo.
+Describe a video in a YAML file and render it straight to video with
+`video-as-code render` - through melt, the MLT engine
+[kdenlive](https://kdenlive.org) renders with. The YAML is what you
+check into a VCS (like Git), so `git diff` shows what changed in the
+edit. To keep editing by hand, `video-as-code build` gives a `.kdenlive`
+to open in kdenlive (see *What you see in kdenlive* in
+[How to make a video](docs/making-a-video.md#what-you-see-in-kdenlive)),
+and `video-as-code import` turns a `.kdenlive` back into a YAML.
 
 These docs, with a gallery where each effect and transition plays, are
 also at <https://video-as-code.juan-ramirez.es/>.
@@ -32,10 +35,10 @@ anything else.
 ## Usage
 
 ```bash
-video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
-video-as-code validate project.yaml                     # validate without building
+video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # render straight to video via melt
+video-as-code validate project.yaml                     # validate without rendering
+video-as-code build project.yaml [-o output.kdenlive]   # a .kdenlive, to open in kdenlive
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
-video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # build + render straight to video via melt
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
