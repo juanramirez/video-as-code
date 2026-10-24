@@ -315,6 +315,47 @@ melt 7.32.0, not assumed.
   for richer titles - all three through `derive:`, no engine change -
   and GES only if a second full backend is ever wanted.
 
+## Other editors to export to (raised 2026-10-24)
+
+`build --format openshot` (v0.11) is the first export besides the
+`.kdenlive`. Next, by how they'd go:
+
+- **OpenShot, second step: melt's effects baked in.** What has no
+  counterpart there (`melt:`, `glsl:`, `film_*`, `color_grade`,
+  `transition: gl`/`affine`, titles, Lottie) is now left out with a
+  warning; instead, melt could render just that clip - or that
+  transition's overlap - with it applied, and the project use the file
+  (the same "generate a file" path `derive:` takes, the other way round).
+  Then `speed` (libopenshot's `time` curve) and position/size (its
+  `location_x/y`, `scale_x/y`).
+- **`import` of a `.osp`**: the reverse, as for a `.kdenlive`.
+- **Premiere, DaVinci Resolve, Final Cut, Avid through OpenTimelineIO**:
+  Premiere has no open project format of its own but imports Final Cut
+  Pro 7's XML; Resolve and Final Cut take FCPXML, Avid AAF.
+  OpenTimelineIO (ASWF) has adapters for all of them (and EDL), so one
+  translation to its timeline would cover them - cuts, tracks, dissolves
+  and levels at most: effects don't travel in these formats.
+- **libopenshot's effects as an MLT module** - the reverse of an
+  OpenShot plugin for melt's effects, which isn't possible (libopenshot's
+  effects are compiled into it; a "run any melt filter" effect would mean
+  a patched libopenshot, and a project that only opens with it). MLT does
+  load modules (`MLT_REPOSITORY`): one wrapping libopenshot's effects as
+  filters would put `openshot:` in the `.kdenlive` as real, editable
+  filters instead of a generated file - with kdenlive's effect
+  descriptions (XML, which can be generated) for its UI. C++, medium-size.
+
+Found while doing the first one:
+
+- **A scene's last frames of a libopenshot-generated clip**: a `derive:`
+  file written by libopenshot reports a container duration slightly
+  longer than its video (4.010s for 4.000s); in `scenes:` a clip taken
+  whole gets that as its `out`, which validation then rejects as past the
+  clip's end. Plain `timeline:` placements are fine.
+- **libopenshot 0.5.0 (Ubuntu's) aborts resampling audio** in its
+  Timeline (44.1 kHz sound in a 48 kHz project: `std::bad_array_new_length`)
+  - seen from Python, not tried in OpenShot's own window; the .osp itself
+  is unaffected, but a project mixing rates may not play there.
+
 ## Disk use of fetched sources
 
 With every source in a shared album (`source:`, `url:`, `derive:`), the

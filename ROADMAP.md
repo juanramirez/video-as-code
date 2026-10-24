@@ -1385,3 +1385,14 @@ whole video can be built from a fresh checkout anywhere.
   pages and the previews shown copied, with an `index.html` to the docs,
   a `.nojekyll`, and on each page when and with which melt it was built.
   Replaces only a folder it wrote itself.
+- **`build --format openshot`** — **implemented** (2026-10-24, `osp.py`,
+  `tests/test_osp.py`): the timeline as an OpenShot project - files,
+  tracks as layers, trims, fades as opacity/volume, dissolves, wipes as
+  OpenShot's Mask transition (direction, `reverse` and `softness`
+  matched), guides as markers; a derive: of `openshot:` effects alone as
+  native, editable effects. What has no counterpart is left out, each
+  thing named. Written by libopenshot itself (openshot_render.py
+  `--project`) and checked by playing it with libopenshot's Timeline
+  against melt's render: same wipe direction both ways, the dissolve's
+  half-way mix, fades on their frames, the Wave effect within encoding
+  noise of the generated file.
