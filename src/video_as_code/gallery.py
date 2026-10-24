@@ -876,6 +876,7 @@ def build(
     doc_links: Optional[dict[str, str]] = None,
     docs_home: Optional[str] = None,
     public: bool = False,
+    footer: str = "",
 ) -> Path:
     """Writes the page (rendering what isn't cached yet); returns its path.
     Part of the docs (docs.py): `doc_links` maps the reference's keys to
@@ -884,7 +885,8 @@ def build(
     to is written to DOC_CARDS next to the page. `public`: a page to
     publish (docs.py --public) - over generated pictures, not the
     wallpapers' photos; without OpenShot's wipe shapes (GPL) nor the
-    user's own LUTs."""
+    user's own LUTs. `footer`: HTML for the page's foot (the docs' line
+    on the code and its license)."""
     if probe.find_melt() is None:
         raise KdenliveAsCodeError(msg("cli.render_missing_melt"))
     root = (cache_root or default_cache_root()) / GALLERY_DIR
@@ -1033,7 +1035,7 @@ def build(
     page = root / "index.html"
     shown = [(e, out) for e, out in previews if e not in baselines.values()]
     shown += [(e, None) for e in catalog if not e.render]
-    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged, doc_links or {}, docs_home), encoding="utf-8")
+    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged, doc_links or {}, docs_home, footer), encoding="utf-8")
     first: dict[str, str] = {}
     for section in SECTIONS:  # (in the page's order)
         if section == "lumas" and luma_cards and "luma" in (doc_links or {}):
@@ -1070,6 +1072,7 @@ def _page(
     unchanged: Optional[dict[str, bool]] = None,
     doc_links: Optional[dict[str, str]] = None,
     docs_home: Optional[str] = None,
+    footer: str = "",
 ) -> str:
     def rel(path: Path) -> str:
         return html.escape(path.relative_to(root).as_posix())
@@ -1180,6 +1183,7 @@ def _page(
         .replace("{thumb_w}", str(THUMB_SIZE[0]))
         .replace("{thumb_h}", str(THUMB_SIZE[1]))
         .replace("{docs}", f'<a class="docs" href="{html.escape(docs_home)}">{html.escape(msg("gallery.docs"))}</a>' if docs_home else "")
+        .replace("{footer}", f"<footer>{footer}</footer>" if footer else "")
         .replace("{sections}", "\n".join(sections))
     )
 
@@ -1250,6 +1254,8 @@ figure.luma pre { white-space: pre-wrap; overflow-wrap: anywhere; }
          padding: 6px 12px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .toast.on { opacity: 1; }
 a.docs { float: right; margin-top: 4px; }
+body > footer { max-width: 1200px; margin: 32px auto 0; padding-top: 12px; border-top: 1px solid var(--line); color: var(--muted); }
+body > footer a { color: inherit; }
 a.to-doc { margin-left: 6px; font: 12px ui-monospace, monospace; font-weight: normal; }
 figure:target { outline: 3px solid var(--accent, #2a6fdb); }
 </style>
@@ -1267,6 +1273,7 @@ figure:target { outline: 3px solid var(--accent, #2a6fdb); }
 </div>
 <nav>{nav}</nav>
 {sections}
+{footer}
 <div class="toast" role="status"></div>
 <script>
 const COPY = {copy}, COPIED = {copied};

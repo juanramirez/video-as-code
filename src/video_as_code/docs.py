@@ -75,6 +75,29 @@ def _copy_images(body: str, md_dir: Path, root: Path) -> None:
             shutil.copy2(found, root / src)
 
 
+def _project(source: Path) -> tuple[Optional[str], Optional[str]]:
+    """The repository's URL and the license's name, from the checkout's
+    pyproject.toml (`[project.urls]` Repository, `license`)."""
+    try:
+        text = (source / "pyproject.toml").read_text(encoding="utf-8")
+    except OSError:
+        return None, None
+    repo = re.search(r'(?m)^Repository\s*=\s*"([^"]+)"', text)
+    license = re.search(r'(?m)^license\s*=\s*\{\s*text\s*=\s*"([^"]+)"', text)
+    return (repo.group(1) if repo else None), (license.group(1) if license else None)
+
+
+def _about(repo: Optional[str], license: Optional[str]) -> str:
+    """The footer's line on every page: the code and its license."""
+    parts = []
+    if repo:
+        parts.append(f'<a href="{html.escape(repo)}">{html.escape(msg("docs.repository"))}</a>')
+    if license:
+        text = html.escape(msg("docs.license", license=license))
+        parts.append(f'<a href="{html.escape(repo)}/blob/HEAD/LICENSE">{text}</a>' if repo else text)
+    return " · ".join(["video-as-code"] + parts) if parts else ""
+
+
 def _title(text: str, fallback: str) -> str:
     found = re.search(r"(?m)^# (.+)$", text)
     return re.sub(r"<[^>]+>|[`*]", "", found.group(1)).strip() if found else fallback
@@ -154,15 +177,18 @@ def build(
             body, keys = key_anchors(body)
         bodies[page] = (_title(text, page), body)
     doc_links = {key: f"../{DOCS_DIR}/{REFERENCE}#key-{key}" for key in keys}
+    repo, license = _project(source)
+    about = _about(repo, license)
     gallery_page = gallery.build(own=own, cache_root=cache_root, on_progress=on_progress,
-                                 doc_links=doc_links, docs_home=f"../{DOCS_DIR}/index.html", public=public)
+                                 doc_links=doc_links, docs_home=f"../{DOCS_DIR}/index.html", public=public,
+                                 footer=about)
     cards = json.loads((gallery_page.parent / gallery.DOC_CARDS).read_text(encoding="utf-8"))
     nav = [(page, title) for page, (title, _) in bodies.items()]
     note = msg("docs.public_note", date=datetime.date.today().isoformat(), melt=gallery._melt_version()) if public else ""
     for page, (title, body) in bodies.items():
         if page == REFERENCE:
             body = _to_gallery(body, cards)
-        (root / page).write_text(_page(title, body, page, nav, note), encoding="utf-8")
+        (root / page).write_text(_page(title, body, page, nav, note, repo, about), encoding="utf-8")
     return root / "index.html"
 
 
@@ -202,11 +228,15 @@ def publish(
     return out / "index.html"
 
 
-def _page(title: str, body: str, current: str, nav: list[tuple[str, str]], note: str = "") -> str:
+def _page(title: str, body: str, current: str, nav: list[tuple[str, str]], note: str = "",
+          repo: Optional[str] = None, about: str = "") -> str:
     links = "".join(
         f'<a href="{page}"{" aria-current=page" if page == current else ""}>{html.escape(name)}</a>' for page, name in nav
     )
     links += f'<a href="../{gallery.GALLERY_DIR}/index.html">{html.escape(msg("docs.gallery"))}</a>'
+    if repo:
+        links += f'<a class="repo" href="{html.escape(repo)}">{html.escape(msg("docs.repository"))}</a>'
+    footer = "<br>".join(([about] if about else []) + ([html.escape(note)] if note else []))
     return f"""<!doctype html>
 <html lang="{msg("gallery.lang")}">
 <head>
@@ -220,7 +250,7 @@ def _page(title: str, body: str, current: str, nav: list[tuple[str, str]], note:
 <main>
 {body}
 </main>
-{f'<footer>{html.escape(note)}</footer>' if note else ""}
+{f'<footer>{footer}</footer>' if footer else ""}
 <script>{_JS}</script>
 </body>
 </html>
@@ -235,6 +265,8 @@ nav { position: sticky; top: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; p
       border-bottom: 1px solid var(--line); z-index: 1; }
 nav a { color: var(--muted); text-decoration: none; }
 nav a[aria-current], nav a:hover { color: var(--fg); }
+nav a.repo { margin-left: auto; }
+footer a { color: inherit; }
 main { max-width: 960px; margin: 0 auto; padding: 8px 16px 64px; }
 a { color: var(--accent); }
 code { font: 0.9em ui-monospace, monospace; background: var(--code); padding: 1px 4px; border-radius: 4px; }

@@ -33,7 +33,7 @@ def test_pages_and_gallery_linked_both_ways(tmp_path: Path, monkeypatch):
         "# Project YAML reference\n\n| Key | Meaning |\n|---|---|\n| `luma` | A shape. |\n| `notes` | Text. |\n", encoding="utf-8")
     seen = {}
 
-    def fake_gallery(own, cache_root, on_progress, doc_links, docs_home, public):
+    def fake_gallery(own, cache_root, on_progress, doc_links, docs_home, public, footer=""):
         seen.update(doc_links=doc_links, docs_home=docs_home, public=public)
         root = cache_root / gallery.GALLERY_DIR
         root.mkdir(parents=True)
@@ -66,13 +66,42 @@ def test_local_images_copied_next_to_the_pages(tmp_path: Path, monkeypatch):
     assert "<title>video-as-code - video-as-code</title>" in page.read_text(encoding="utf-8")
 
 
+def test_repository_and_license_on_every_page(tmp_path: Path, monkeypatch):
+    source = tmp_path / "src"
+    source.mkdir()
+    (source / "README.md").write_text("# video-as-code\n", encoding="utf-8")
+    (source / "pyproject.toml").write_text(
+        '[project]\nname = "video-as-code"\nlicense = {text = "MIT"}\n\n'
+        '[project.urls]\nRepository = "https://github.com/someone/video-as-code"\n', encoding="utf-8")
+    seen: dict = {}
+
+    def fake(own, cache_root, on_progress, doc_links, docs_home, public, footer=""):
+        seen["footer"] = footer
+        root = cache_root / gallery.GALLERY_DIR
+        root.mkdir(parents=True)
+        (root / gallery.DOC_CARDS).write_text("{}", encoding="utf-8")
+        (root / "index.html").write_text("", encoding="utf-8")
+        return root / "index.html"
+
+    monkeypatch.setattr(gallery, "build", fake)
+    page = docs.build(cache_root=tmp_path / "cache", source=source).read_text(encoding="utf-8")
+    assert '<a class="repo" href="https://github.com/someone/video-as-code">' in page
+    assert 'href="https://github.com/someone/video-as-code/blob/HEAD/LICENSE"' in page
+    assert "<footer>video-as-code · " in page
+    assert seen["footer"] and "LICENSE" in seen["footer"]  # (the gallery gets the same line)
+
+
+def test_without_a_pyproject_no_links(tmp_path: Path):
+    assert docs._project(tmp_path) == (None, None) and docs._about(None, None) == ""
+
+
 def test_without_a_checkout(tmp_path: Path):
     with pytest.raises(docs.KdenliveAsCodeError, match="README.md"):
         docs.build(cache_root=tmp_path, source=tmp_path / "nowhere")
 
 
 def _fake_gallery(monkeypatch, seen: dict):
-    def build(own, cache_root, on_progress, doc_links, docs_home, public):
+    def build(own, cache_root, on_progress, doc_links, docs_home, public, footer=""):
         seen.update(public=public, cache_root=cache_root)
         root = cache_root / gallery.GALLERY_DIR
         (root / "files").mkdir(parents=True, exist_ok=True)
