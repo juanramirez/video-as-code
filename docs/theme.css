@@ -13,3 +13,11 @@
 body, nav.site, .tabs button, input { font-family: "IBM Plex Sans", Helvetica, Arial, sans-serif; }
 h1, h2, h3, nav.site .pages > a:first-child { font-family: "Source Serif 4", Georgia, serif; }
 nav.site .pages > a:first-child { font-size: 1.1em; }
+/* the bar, as the site's header: ink, with white on it - the page you're
+   on in white, underlined in the accent, the rest dimmed */
+nav.site { --bg: #1b1f23; --line: #1b1f23; --fg: #ffffff; --muted: rgb(255 255 255 / 0.6);
+           background: var(--bg); color: var(--fg); border-bottom-color: var(--line); box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); }
+nav.site a[aria-current] { font-weight: 600; text-decoration: underline; text-decoration-color: #b14623;
+                           text-decoration-thickness: 2px; text-underline-offset: 6px; }
+nav.site .pages > a:first-child { text-decoration: none; }
+@media (prefers-color-scheme: dark) { nav.site { --line: #34322c; } nav.site a[aria-current] { text-decoration-color: #e0835e; } }
