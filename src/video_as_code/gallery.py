@@ -1041,7 +1041,9 @@ def build(
     page = root / "index.html"
     shown = [(e, out) for e, out in previews if e not in baselines.values()]
     shown += [(e, None) for e in catalog if not e.render]
-    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged, doc_links or {}, docs_home, footer, site_nav, theme), encoding="utf-8")
+    sample = baseline_outs.get("video")  # (the sample video as it is: what the try box plays live, at a speed)
+    page.write_text(_page(shown, errors, luma_cards, pictures, root, unchanged, doc_links or {}, docs_home, footer, site_nav, theme,
+                          sample_video=sample if sample and sample.exists() else None), encoding="utf-8")
     first: dict[str, str] = {}
     for section in SECTIONS:  # (in the page's order)
         if section == "lumas" and luma_cards and "luma" in (doc_links or {}):
@@ -1081,6 +1083,7 @@ def _page(
     footer: str = "",
     site_nav: str = "",
     theme: str = "",
+    sample_video: Optional[Path] = None,
 ) -> str:
     def rel(path: Path) -> str:
         return html.escape(path.relative_to(root).as_posix())
@@ -1202,7 +1205,8 @@ def _page(
             rendered=html.escape(msg("gallery.try_rendered")), w=THUMB_SIZE[0], h=THUMB_SIZE[1])
             + _TRY_EFFECTS.format(
                 title=html.escape(msg("gallery.try_effects_title")), hint=html.escape(msg("gallery.try_effects_hint")),
-                group=html.escape(msg("gallery.try_group")), effect=html.escape(msg("gallery.try_effect"))))
+                group=html.escape(msg("gallery.try_group")), effect=html.escape(msg("gallery.try_effect")),
+                video=rel(sample_video) if sample_video else "", live=html.escape(msg("gallery.try_live"))))
         .replace("{try_card}", json.dumps(msg("gallery.try_card")))
         .replace("{sections}", "\n".join(sections))
     )
@@ -1217,11 +1221,11 @@ _TRY = """<aside class="try" data-tab="transitions"><h2>{title}</h2><p>{hint}</p
 </div></aside>"""
 # an effect to see big, in one box: all rendered by melt, so only picked
 # (a group, then one of its cards), with its snippet and what it does
-_TRY_EFFECTS = """<aside class="try" data-tab="effects"><h2>{title}</h2><p>{hint}</p>
+_TRY_EFFECTS = """<aside class="try" data-tab="effects" data-sample="{video}"><h2>{title}</h2><p>{hint}</p>
 <div class="try-body"><div class="try-preview"><video muted loop playsinline hidden></video><audio controls hidden></audio>
-<pre><code></code></pre></div>
+<p class="note" hidden>{live}</p><pre><code></code></pre></div>
 <div class="try-controls"><label>{group} <select name="group"></select></label><label>{effect} <select name="effect"></select></label>
-<p class="said"></p><p class="doc"></p></div>
+<div class="params"></div><p class="said"></p><p class="doc"></p></div>
 </div></aside>"""
 
 
@@ -1629,6 +1633,13 @@ if (effectsBox) {
   const groupPick = effectsBox.querySelector('select[name="group"]'), effectPick = effectsBox.querySelector('select[name="effect"]');
   const video = effectsBox.querySelector("video"), audio = effectsBox.querySelector("audio");
   const code = effectsBox.querySelector("pre code"), about = effectsBox.querySelector(".said"), doc = effectsBox.querySelector(".doc");
+  const params = effectsBox.querySelector(".params"), note = effectsBox.querySelector(".note"), sample = effectsBox.dataset.sample;
+  // those the page can play itself, from the sample as it is: speed, as
+  // the video's own rate (a loop as long as the sample's, not the clip's)
+  const LIVE = sample ? {
+    speed: { min: 0.25, max: 4, step: 0.25, play: (v) => { video.defaultPlaybackRate = video.playbackRate = v; } },
+  } : {};
+  const live = { speed: null };
   const text = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
   groupPick.innerHTML = groups.map((g, i) => `<option value="${i}">${text(g.name)}</option>`).join("");
   let group = groups[0], card = group && group.cards[0];
@@ -1637,19 +1648,37 @@ if (effectsBox) {
     groupPick.value = String(groups.indexOf(group));
     effectPick.innerHTML = group.cards.map((fig, i) => `<option value="${i}">${text(nameOf(fig))}</option>`).join("");
     effectPick.value = String(group.cards.indexOf(card));
-    const media = card.querySelector("video, audio"), src = media.getAttribute("src"), sound = media.tagName === "AUDIO";
+    const name = nameOf(card), how = LIVE[name];
+    if (how && live[name] === null) live[name] = Number((card.querySelector("pre code").textContent.match(/: *(-?[\\d.]+)/) || [])[1] || 1);
+    const media = card.querySelector("video, audio"), src = how ? sample : media.getAttribute("src"), sound = media.tagName === "AUDIO";
     const [on, off] = sound ? [audio, video] : [video, audio];
     off.hidden = true; off.pause();
     on.hidden = false;
     if (on.getAttribute("src") !== src) on.src = src;
     if (!sound) on.play().catch(() => {});
-    code.textContent = card.querySelector("pre code").textContent;
+    note.hidden = !how;
+    if (how) {
+      const v = live[name];
+      params.innerHTML = `<label><code>${name}</code> <input type="range" name="live" min="${how.min}" max="${how.max}" step="${how.step}" value="${v}"> <output>${v}</output></label>`;
+      how.play(v);
+      code.textContent = `${name}: ${v}`;
+    } else {
+      params.innerHTML = "";
+      if (!sound) video.defaultPlaybackRate = video.playbackRate = 1;
+      code.textContent = card.querySelector("pre code").textContent;
+    }
     const said = card.querySelector(".about");
     about.textContent = said ? said.title : "";
     const link = card.querySelector("a.to-doc");
     doc.innerHTML = "";
     if (link) doc.append(link.cloneNode(true));
   }
+  params.addEventListener("input", (e) => {
+    const name = nameOf(card), v = Number(e.target.value);
+    live[name] = v; LIVE[name].play(v);
+    e.target.nextElementSibling.textContent = v;
+    code.textContent = `${name}: ${v}`;
+  });
   groupPick.addEventListener("change", () => { group = groups[Number(groupPick.value)]; card = group.cards[0]; show(); });
   effectPick.addEventListener("change", () => { card = group.cards[Number(effectPick.value)]; show(); });
   for (const g of groups) {
