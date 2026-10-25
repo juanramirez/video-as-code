@@ -103,7 +103,9 @@ kdenlive itself offers, and show differently:
 
 ## 5. Iterate
 
-Change the YAML, re-run `validate`/`build`/`render`. Since the YAML is
+Change the YAML, re-run `validate`/`build`/`render` - or leave
+`video-as-code watch project.yaml` running: each save renders a light
+preview again (only what changed) and plays it from there. Since the YAML is
 what you check into version control, `git diff` on it is a real, readable
 diff of what changed in the edit - trims, timing, added clips - the same
 way it would be for code.

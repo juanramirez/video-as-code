@@ -36,6 +36,7 @@ anything else.
 
 ```bash
 video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # render straight to video via melt
+video-as-code watch project.yaml [--proxy WxH]          # a preview again on every save, played from what changed
 video-as-code validate project.yaml                     # validate without rendering
 video-as-code build project.yaml [-o output.kdenlive]   # a .kdenlive, to open in kdenlive
 video-as-code build project.yaml --format openshot      # an OpenShot project (.osp) instead
@@ -103,6 +104,31 @@ and a title clip): `video-as-code build examples/simple/project.yaml`. See
 See `docs/making-a-video.md` for a short step-by-step howto of this
 whole flow, and `docs/project-yaml.md` for every key a project file
 accepts.
+
+### `video-as-code watch`: a preview on every save
+
+```bash
+video-as-code watch project.yaml
+```
+
+renders a light preview (from 480x270 copies of the videos, as
+`--proxy`), opens it in a player, and does it again every time the YAML
+- or any other YAML file in its folder, its parts and presets - is
+saved: the player opens again a second before the first frame that
+changed. Only what changed is rendered again: the preview is rendered
+in short segments (8 s at most), each cached by what it plays, as
+`render --split` does, so after the first time an edit costs the few
+seconds of video it touches. Where in them the picture actually changed
+is found frame by frame, comparing them with the last render.
+
+A save that doesn't validate is reported, and the last preview stays.
+`--proxy WxH` sets the copies' size, `--full` uses the original files,
+`--part P` watches one part of a project in several files and
+`--no-play` only renders (and says where it changed). The player is the
+first of mpv, vlc and ffplay found, or a command of your own in
+`VIDEO_AS_CODE_PLAYER` - `{file}` and `{start}` (seconds) replaced:
+`VIDEO_AS_CODE_PLAYER="mplayer -ss {start} {file}"`. Its cache
+is its own (`.render_cache/watch/`), apart from a full render's.
 
 ### Writing the YAML in an editor: `video-as-code schema`
 

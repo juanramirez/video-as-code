@@ -1408,3 +1408,13 @@ whole video can be built from a fresh checkout anywhere.
   `$id` says. The tests keep it in step: the shipped file up to date,
   every key the parsers read in it, every key described, and every
   project file the docs and the gallery show valid by it.
+- **`video-as-code watch`** — **implemented** (2026-10-24, `watch.py`,
+  `tests/test_watch.py`): a light preview (`--proxy`, 480x270 by default)
+  rendered again on every save of the project's YAML files and played
+  from a second before the first frame that changed. Rendered as
+  `render --split` renders, in segments cached by what they play, but
+  short ones (8 s at most: `splitrender.render(max_frames=)`), so an edit
+  re-renders only the few seconds it touches; where the picture changed
+  in them, found by the frames' md5s against the last render's. A save
+  that doesn't validate keeps the last preview. mpv, vlc or ffplay, or
+  `VIDEO_AS_CODE_PLAYER`.
