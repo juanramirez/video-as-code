@@ -421,6 +421,19 @@ def cmd_transitions(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_schema(args: argparse.Namespace) -> int:
+    """The project YAML's JSON Schema (yamlschema.py), for an editor."""
+    from . import yamlschema
+
+    if args.output is None:
+        sys.stdout.write(yamlschema.shipped())
+        return 0
+    output = Path(args.output).resolve()
+    output.write_text(yamlschema.shipped(), encoding="utf-8")
+    print(msg("cli.schema_done", path=output, url=yamlschema.URL))
+    return 0
+
+
 def cmd_gallery(args: argparse.Namespace) -> int:
     """A page with every transition and effect, opened in the browser
     (gallery.py)."""
@@ -525,6 +538,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_transitions = sub.add_parser("transitions", help=msg("cli.help.transitions"))
     p_transitions.set_defaults(func=cmd_transitions)
+
+    p_schema = sub.add_parser("schema", help=msg("cli.help.schema"))
+    p_schema.add_argument("-o", "--output", metavar="FILE", help=msg("cli.help.schema_output"))
+    p_schema.set_defaults(func=cmd_schema)
 
     p_gallery = sub.add_parser("gallery", help=msg("cli.help.gallery"))
     p_gallery.add_argument("--with", dest="with_file", metavar="FILE", help=msg("cli.help.gallery_with"))

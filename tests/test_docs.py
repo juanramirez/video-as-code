@@ -187,6 +187,7 @@ def test_public_a_folder_to_publish(tmp_path: Path, monkeypatch):
     assert seen == {"public": True, "cache_root": tmp_path / "cache" / "public"}
     assert page == out / "index.html" and 'url=docs/index.html' in page.read_text(encoding="utf-8")
     assert (out / ".nojekyll").exists() and (out / "gallery" / "files" / "a.mp4").exists()
+    assert json.loads((out / "project.schema.json").read_text(encoding="utf-8"))["$id"].endswith("/project.schema.json")  # (where its $id says)
     assert not (out / "gallery" / "work").exists() and not (out / "gallery" / gallery.DOC_CARDS).exists()
     readme = (out / "docs" / "index.html").read_text(encoding="utf-8")
     assert "<footer>" in readme and "melt 7.36.1" in readme
