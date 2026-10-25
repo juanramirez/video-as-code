@@ -28,6 +28,14 @@ pip install -e ".[dev,reconstruct]"
 `video-as-code docs` needs the optional `docs` extra (Python-Markdown):
 `pip install -e ".[docs]"`.
 
+Then `video-as-code doctor` says what this machine has of what
+video-as-code uses - melt, ffmpeg, each MLT module a feature needs
+(titles, compositing, frei0r, Lottie, stabilization...), the plugins it
+builds and the optional tools - and, for what's missing, how to get it.
+A module missing from melt doesn't stop it: what uses it renders as
+nothing, silently, so it's worth running on a new machine. It exits 1
+only when something nothing renders without is missing.
+
 The rest of `video-as-code` (`build`/`validate`/`import`) only ever needs PyYAML —
 `reconstruct.py` is imported lazily, so skipping this extra doesn't affect
 anything else.
@@ -48,6 +56,7 @@ video-as-code schema [-o schema.json]                   # the YAML's JSON Schema
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
 video-as-code docs [--with photo.jpg] [--public DIR]    # this documentation as a local web, the gallery in it
 video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
+video-as-code doctor                                    # what's installed of what it uses, and how to get the rest
 ```
 
 `build` and `render` also take `--fetch`, to run `fetch` first, and
@@ -507,6 +516,23 @@ window): melt then renders them in the same pass as everything else.
 The shaders are bundled (MIT, two BSD; see
 `src/video_as_code/gltransitions_data/LICENSE`). See
 `docs/project-yaml.md`.
+
+### Even loudness: `loudness:`
+
+```yaml
+project: {id: trip, title: Trip, fps: 25, width: 1920, height: 1080, loudness: -16}
+```
+
+brings every clip with sound on an audio track to -16 LUFS: each is
+measured (EBU R128, over the stretch of its file it plays) and given the
+fixed gain that takes it there - a quiet phone video and a loud song end
+up alike. It's a `volume` filter like `gain:`'s, so kdenlive shows it,
+and a clip's own `gain:` applies on top. Within a clip, loud and quiet
+parts keep their difference: it isn't a compressor. A clip whose peak
+would go over -1 dBTP, or that needs more than 20 dB, stays quieter
+than the target rather than clipping or turning hiss up. A clip can say
+its own target (`loudness: -20`) or stay out (`loudness: false`).
+Measurements are cached in `.render_cache/loudness.json`.
 
 ### Presets: `presets:`, `use:` and `presets_file:`
 

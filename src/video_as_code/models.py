@@ -46,6 +46,10 @@ class ProjectSpec:
     # stale generated files) that no render has used for this long - see
     # autoprune.py. 0 turns it off.
     prune_after_days: float = 7.0
+    # `project.loudness`: the loudness (LUFS) every clip with sound on an
+    # audio track is brought to by a static gain - see loudness.py. None:
+    # left as they are.
+    loudness: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -206,6 +210,9 @@ class ClipPlacementSpec:
     # doubled, etc.) - a static gain, independent of fade_in/fade_out.
     # Ignored for video clips.
     gain: Optional[float] = None
+    # This clip's own `loudness:` target (LUFS), instead of the project's;
+    # False leaves it as it is. None: the project's (loudness.py).
+    loudness: Optional[float | bool] = None
     mute: bool = False
     speed: Optional[float] = None
     preserve_pitch: bool = False

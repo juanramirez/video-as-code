@@ -777,6 +777,13 @@
      "description": "Length of a still image's producer. A still placed for longer than this is cut short at it: raise it if a still has to stay on screen longer.\n\nDefault: `4.0`",
      "markdownDescription": "Length of a still image's producer. A still placed for longer than this is cut short at it: raise it if a still has to stay on screen longer.\n\nDefault: `4.0`"
     },
+    "loudness": {
+     "type": "number",
+     "maximum": 0,
+     "exclusiveMinimum": -70,
+     "description": "Even loudness: every clip with sound on an audio track brought to this many LUFS (`-16`; `-14` is what YouTube plays at, `-23` broadcast) by a fixed gain, from its own measured loudness (EBU R128). Its peak kept under -1 dBTP and the boost under 20 dB, so a clip that can't reach it stays quieter. A clip's own `gain:` applies on top.",
+     "markdownDescription": "Even loudness: every clip with sound on an audio track brought to this many LUFS (`-16`; `-14` is what YouTube plays at, `-23` broadcast) by a fixed gain, from its own measured loudness (EBU R128). Its peak kept under -1 dBTP and the boost under 20 dB, so a clip that can't reach it stays quieter. A clip's own `gain:` applies on top."
+    },
     "notes": {
      "type": "string",
      "description": "Free text, kept in the generated project.",
@@ -1419,6 +1426,20 @@
      "type": "number",
      "description": "Audio level multiplier (`2.0` = twice as loud).",
      "markdownDescription": "Audio level multiplier (`2.0` = twice as loud)."
+    },
+    "loudness": {
+     "oneOf": [
+      {
+       "type": "number",
+       "maximum": 0,
+       "exclusiveMinimum": -70
+      },
+      {
+       "const": false
+      }
+     ],
+     "description": "This clip's own target loudness, in LUFS, instead of `project.loudness`; `false` leaves it as it is. Only on an audio track.",
+     "markdownDescription": "This clip's own target loudness, in LUFS, instead of `project.loudness`; `false` leaves it as it is. Only on an audio track."
     },
     "mute": {
      "type": "boolean",
