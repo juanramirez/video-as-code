@@ -47,6 +47,7 @@ couldn't match, for a person to review).
 | `width`, `height` | *(required)* | Canvas size in pixels. |
 | `colorspace` | `709` | Colour matrix of the output (`709` HD, `601` SD). |
 | `default_image_duration` | `4.0` | Length of a still image's producer. A still placed for longer than this is cut short at it: raise it if a still has to stay on screen longer. |
+| `loudness` | - | Even loudness: every clip with sound on an audio track brought to this many LUFS (`-16`; `-14` is what YouTube plays at, `-23` broadcast) by a fixed gain, from its own measured loudness (EBU R128). Its peak kept under -1 dBTP and the boost under 20 dB, so a clip that can't reach it stays quieter. A clip's own `gain:` applies on top. |
 | `notes` | - | Free text, kept in the generated project. |
 | `sources` | - | Where clips come from and how the downloaded files are kept (below). |
 
@@ -194,6 +195,7 @@ required.
 | `fade_in`, `fade_out` | Fade length. On video, from/to transparent (so it crossfades with the track below, or black if there is none); on audio, from/to silence. |
 | `fade_in_level`, `fade_out_level` | Audio: start the fade-in at / end the fade-out at this level (`0`-`1`) instead of silence. |
 | `gain` | Audio level multiplier (`2.0` = twice as loud). |
+| `loudness` | This clip's own target loudness, in LUFS, instead of `project.loudness`; `false` leaves it as it is. Only on an audio track. |
 | `mute` | `true` silences the clip's own sound. |
 
 **Framing**

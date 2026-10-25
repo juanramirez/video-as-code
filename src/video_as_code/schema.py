@@ -21,6 +21,7 @@ from typing import Any, Callable, Optional
 import yaml
 
 from . import autoprune
+from . import loudness as loudness_mod
 from . import derive as derive_mod
 from . import probe, sources_lock, titles
 from . import upscale as upscale_mod
@@ -340,6 +341,10 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
     if isinstance(prune_days, bool) or not isinstance(prune_days, (int, float)) or prune_days < 0:
         errors.append(msg("validation.prune_after_days_invalid", value=prune_days))
         prune_days = autoprune.DEFAULT_DAYS
+    loudness = data.get("loudness")
+    if loudness is not None and not _loudness_ok(loudness):
+        errors.append(msg("validation.loudness_invalid", ctx="project", value=loudness))
+        loudness = None
     return ProjectSpec(
         id=str(data["id"]),
         title=str(data["title"]),
@@ -355,7 +360,13 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
         reference_path=reference_path,
         sources_dir=str(sources.get("dir", "assets")),
         prune_after_days=float(prune_days),
+        loudness=float(loudness) if loudness is not None else None,
     )
+
+
+def _loudness_ok(value: Any) -> bool:
+    """A target loudness: LUFS, from -70 (silence) to 0."""
+    return not isinstance(value, bool) and isinstance(value, (int, float)) and -70 < value <= 0
 
 
 def _parse_album(raw, errors: list[str]) -> tuple[Optional[str], Optional[str]]:
@@ -973,6 +984,16 @@ def _parse_track(item: Any, idx: int, errors: list[str], fps: FrameRate) -> Trac
     )
 
 
+def _clip_loudness(value: Any, ctx: str, errors: list[str]) -> Optional[float | bool]:
+    """A clip's `loudness:`: a target (LUFS), or false - not evened out."""
+    if value is None or value is False:
+        return value
+    if not _loudness_ok(value):
+        errors.append(msg("validation.loudness_invalid", ctx=ctx, value=value))
+        return None
+    return float(value)
+
+
 def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list[str]) -> ClipPlacementSpec | None:
     ctx = f"timeline.tracks[{track_idx}].clips[{clip_idx}]"
     if not isinstance(item, dict) or "clip" not in item or "start" not in item:
@@ -1320,6 +1341,7 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
         fade_in_level=float(item["fade_in_level"]) if item.get("fade_in_level") is not None else None,
         fade_out_level=float(item["fade_out_level"]) if item.get("fade_out_level") is not None else None,
         gain=float(item["gain"]) if item.get("gain") is not None else None,
+        loudness=_clip_loudness(item.get("loudness"), ctx, errors),
         mute=mute,
         boomerang=boomerang,
         boomerang_trim_hold=boomerang_trim_hold,
@@ -1450,6 +1472,25 @@ def _parse_transition(
     return AffineTransitionSpec(track_a=track_a, track_b=track_b, start=start, end=end, style=style)
 
 
+def _evened_gain(meter, project_target, placement, track_type, bin_clip, in_frame, out_frame, speed, speed_ramp, fps):
+    """`gain:`, times what takes the clip to its `loudness:` target (the
+    project's, or its own) - see loudness.py. Only a clip with sound on
+    an audio track: a video track's never sounds (xmlgen hides it)."""
+    target = project_target if placement.loudness is None else placement.loudness
+    if target is None or target is False or track_type != "audio" or placement.mute or bin_clip.kind not in ("video", "audio"):
+        return placement.gain
+    # the stretch of the file it plays - or, played at another speed
+    # (in/out then aren't the file's own seconds), the whole file
+    if (speed is None or speed == 1.0) and speed_ramp is None:
+        stretch = (fps.frames_to_seconds(in_frame), fps.frames_to_seconds(out_frame + 1))
+    else:
+        stretch = (None, None)
+    measured = meter.measure(bin_clip.path, *stretch)
+    if measured is None:
+        return placement.gain
+    return loudness_mod.gain(measured, target) * (placement.gain if placement.gain is not None else 1.0)
+
+
 def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
     errors: list[str] = []
     fps = resolve_fps(doc.project.fps)
@@ -1554,6 +1595,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
 
     # --- tracks: resolve in/out/duration and check for overlaps ------------
     resolved_tracks: list[ResolvedTrack] = []
+    meter = loudness_mod.Meter(doc.source_path.parent)
     for t_idx, track in enumerate(doc.tracks):
         placements: list[ResolvedPlacement] = []
         track_clips = _trim_boomerang_holds(track.clips, resolved_bin, fps, boomerang_cache_dir, errors)
@@ -1833,7 +1875,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     fade_out_frames=fps.seconds_to_frames(fade_out_s),
                     fade_in_level=fade_in_level,
                     fade_out_level=fade_out_level,
-                    gain=placement.gain,
+                    gain=_evened_gain(meter, doc.project.loudness, placement, track.type, bin_clip, in_frame,
+                                      max(out_frame, in_frame), speed, speed_ramp, fps),
                     mute=placement.mute,
                     speed=speed,
                     preserve_pitch=placement.preserve_pitch,
@@ -1909,6 +1952,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 audio_muted=track.audio_muted,
             )
         )
+
+    meter.save()
 
     # dust drawn as dots or as pictures is one choice for the whole render
     # (melt's data folder, see mltdata.py), not per clip

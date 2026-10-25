@@ -517,6 +517,23 @@ The shaders are bundled (MIT, two BSD; see
 `src/video_as_code/gltransitions_data/LICENSE`). See
 `docs/project-yaml.md`.
 
+### Even loudness: `loudness:`
+
+```yaml
+project: {id: trip, title: Trip, fps: 25, width: 1920, height: 1080, loudness: -16}
+```
+
+brings every clip with sound on an audio track to -16 LUFS: each is
+measured (EBU R128, over the stretch of its file it plays) and given the
+fixed gain that takes it there - a quiet phone video and a loud song end
+up alike. It's a `volume` filter like `gain:`'s, so kdenlive shows it,
+and a clip's own `gain:` applies on top. Within a clip, loud and quiet
+parts keep their difference: it isn't a compressor. A clip whose peak
+would go over -1 dBTP, or that needs more than 20 dB, stays quieter
+than the target rather than clipping or turning hiss up. A clip can say
+its own target (`loudness: -20`) or stay out (`loudness: false`).
+Measurements are cached in `.render_cache/loudness.json`.
+
 ### Presets: `presets:`, `use:` and `presets_file:`
 
 A set of keys used again and again - a transition with its duration, a

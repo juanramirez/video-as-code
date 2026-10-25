@@ -260,6 +260,7 @@ def build(reference: str) -> dict:
         "height": _number(1, integer=True),
         "colorspace": _number(1, integer=True),
         "default_image_duration": _number(above=0),
+        "loudness": _number(maximum=0, above=-70),
         "notes": STRING,
         "sources": _ref("sources"),
     }, project_docs, required=("id", "title", "fps", "width", "height"))
@@ -361,6 +362,7 @@ def build(reference: str) -> dict:
         "fade_in_level": UNIT,
         "fade_out_level": UNIT,
         "gain": NUMBER,
+        "loudness": {"oneOf": [_number(maximum=0, above=-70), {"const": False}]},
         "mute": BOOL,
         "crop": {"type": "object", "additionalProperties": False, "properties": {
             k: _number(0) for k in ("top", "right", "bottom", "left")}},
