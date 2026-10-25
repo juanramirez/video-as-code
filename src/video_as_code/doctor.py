@@ -98,8 +98,8 @@ def _modules(melt: str) -> list[Check]:
 
 def _plugins(melt: Optional[str]) -> list[Check]:
     """This project's own frei0r plugins (gltransitions.py, glfilters.py)."""
-    compiler = shutil.which("cc") or shutil.which("gcc")
-    fix = msg("doctor.fix_gl") + ("" if compiler else " " + msg("doctor.fix_gl_compiler"))
+    # (the headers can be missing with a compiler there: always said)
+    fix = msg("doctor.fix_gl") + " " + msg("doctor.fix_gl_compiler")
     checks = []
     for plugin, service, what in ((gltransitions.PLUGIN, gltransitions.SERVICE, "doctor.gl"),
                                   (glfilters.PLUGIN, "frei0r.glfilter", "doctor.glsl")):
