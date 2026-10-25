@@ -11,7 +11,7 @@ from typing import Optional
 
 import yaml
 
-from . import autoprune, timecode, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, osp, parts, watch, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import autoprune, doctor, timecode, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, osp, parts, watch, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -423,6 +423,10 @@ def cmd_render(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(args: argparse.Namespace) -> int:
+    return doctor.run()
+
+
 def cmd_reconstruct(args: argparse.Namespace) -> int:
     video_path = Path(args.video)
     assets_dir = Path(args.assets_dir)
@@ -612,6 +616,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_schema = sub.add_parser("schema", help=msg("cli.help.schema"))
     p_schema.add_argument("-o", "--output", metavar="FILE", help=msg("cli.help.schema_output"))
     p_schema.set_defaults(func=cmd_schema)
+    p_doctor = sub.add_parser("doctor", help=msg("cli.help.doctor"))
+    p_doctor.set_defaults(func=cmd_doctor)
 
     p_gallery = sub.add_parser("gallery", help=msg("cli.help.gallery"))
     p_gallery.add_argument("--with", dest="with_file", metavar="FILE", help=msg("cli.help.gallery_with"))

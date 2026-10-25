@@ -1427,3 +1427,13 @@ whole video can be built from a fresh checkout anywhere.
   it, the two at its ends cut to it, so the inner ones are shared with
   its cache (which a stretch doesn't clean). Checked against the whole
   render's same frames (PSNR over 40 dB, ~24 a frame off).
+- **`video-as-code doctor`** — **implemented** (2026-10-25, `doctor.py`,
+  `tests/test_doctor.py`): melt and ffmpeg/ffprobe with their versions;
+  the MLT modules each feature needs, asked of that melt in the
+  environment it renders in (`kdenlivetitle`, `qtblend`, `timewarp`,
+  frei0r, `avfilter.lut3d`, `deshake`, `glaxnimate`) - a missing one
+  doesn't stop melt, what uses it just renders as nothing; this
+  project's own plugins, built and loaded; and the optional tools
+  (libopenshot, Real-ESRGAN, a player for `watch`, the memory cap for
+  `--split`, kdenlive, the `reconstruct` extra). Each missing one with
+  how to get it; exit 1 only for melt, ffmpeg or ffprobe.
