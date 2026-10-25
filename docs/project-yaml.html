@@ -99,6 +99,10 @@ walk-through instead, see <a href="making-a-video.html"><code>docs/making-a-vide
 <code>[r, g, b, a]</code>, 0-255. A key left out takes its default; an unknown key
 where only known ones make sense (the top level, <code>derive:</code>) is an error,
 so a typo doesn't go unnoticed there.</p>
+<p>An editor can check all this as you type, with the project file's JSON
+Schema - see README's <em>Writing the YAML in an editor</em>:</p>
+<pre><code class="language-yaml"># yaml-language-server: $schema=https://video-as-code.juan-ramirez.es/project.schema.json
+</code></pre>
 <pre><code class="language-yaml">project: {...}       # required: canvas, frame rate, where sources come from
 bin: [...]           # the files (and titles) the video uses
 timeline:
@@ -1182,7 +1186,7 @@ vec4 effect(vec2 uv) {
 <pre><code class="language-yaml">- {clip: beach, start: 0, duration: 4, glsl: {shader: looks/warm.glsl, params: {amount: 0.1}}}
 </code></pre>
 </main>
-<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-10-24, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-10-25, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
 <script>
 // a link here to a row opens nothing more, but shows it: scrolled to, below the bar
 if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }

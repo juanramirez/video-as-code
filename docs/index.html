@@ -92,11 +92,14 @@ a.to-doc { color: var(--accent); }
 <nav class="site"><span class="pages"><a href="index.html" aria-current=page>video-as-code</a><button class="menu" type="button" aria-label="Sections" aria-expanded="false" onclick="this.setAttribute('aria-expanded', this.closest('nav').classList.toggle('open'))"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg></button><span class="more"><a href="making-a-video.html">How to make a video</a><a href="project-yaml.html">Project YAML reference</a><a href="reconstructing.html">How to recover a YAML</a><a href="../gallery/index.html">Gallery</a></span></span><span class="out"><a class="author" href="https://juan-ramirez.es/">by Juan Ramírez</a><a class="repo" href="https://github.com/juanramirez/video-as-code"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>GitHub</a></span></nav>
 <main>
 <h1 id="video-as-code"><img src="docs/logo.svg" alt="" width="48" height="48" align="absmiddle"/> video-as-code</h1>
-<p>Programmatic generator for <a href="https://kdenlive.org">kdenlive</a> projects from a
-declarative YAML description, meant for versioning videos with a VCS (like
-Git): the <code>.yaml</code> is what you check in; the <code>.kdenlive</code> (XML/MLT) is
-regenerated deterministically with <code>video-as-code build</code> and doesn't need to live
-in the repo.</p>
+<p>Describe a video in a YAML file and render it straight to video with
+<code>video-as-code render</code> - through melt, the MLT engine
+<a href="https://kdenlive.org">kdenlive</a> renders with. The YAML is what you
+check into a VCS (like Git), so <code>git diff</code> shows what changed in the
+edit. To keep editing by hand, <code>video-as-code build</code> gives a <code>.kdenlive</code>
+to open in kdenlive (see <em>What you see in kdenlive</em> in
+<a href="making-a-video.html#what-you-see-in-kdenlive">How to make a video</a>),
+and <code>video-as-code import</code> turns a <code>.kdenlive</code> back into a YAML.</p>
 <p>These docs, with a gallery where each effect and transition plays, are
 also at <a href="https://video-as-code.juan-ramirez.es/">https://video-as-code.juan-ramirez.es/</a>.</p>
 <h2 id="install">Install</h2>
@@ -112,12 +115,15 @@ also at <a href="https://video-as-code.juan-ramirez.es/">https://video-as-code.j
 <code>reconstruct.py</code> is imported lazily, so skipping this extra doesn't affect
 anything else.</p>
 <h2 id="usage">Usage</h2>
-<pre><code class="language-bash">video-as-code build project.yaml [-o output.kdenlive]   # generate the .kdenlive
-video-as-code validate project.yaml                     # validate without building
+<pre><code class="language-bash">video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # render straight to video via melt
+video-as-code watch project.yaml [--proxy WxH]          # a preview again on every save, played from what changed
+video-as-code validate project.yaml                     # validate without rendering
+video-as-code build project.yaml [-o output.kdenlive]   # a .kdenlive, to open in kdenlive
+video-as-code build project.yaml --format openshot      # an OpenShot project (.osp) instead
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -&gt; YAML
-video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # build + render straight to video via melt
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
+video-as-code schema [-o schema.json]                   # the YAML's JSON Schema, for an editor
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
 video-as-code docs [--with photo.jpg] [--public DIR]    # this documentation as a local web, the gallery in it
 video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
@@ -172,6 +178,42 @@ and a title clip): <code>video-as-code build examples/simple/project.yaml</code>
 <p>See <a href="making-a-video.html"><code>docs/making-a-video.md</code></a> for a short step-by-step howto of this
 whole flow, and <a href="project-yaml.html"><code>docs/project-yaml.md</code></a> for every key a project file
 accepts.</p>
+<h3 id="video-as-code-watch-a-preview-on-every-save"><code>video-as-code watch</code>: a preview on every save</h3>
+<pre><code class="language-bash">video-as-code watch project.yaml
+</code></pre>
+<p>renders a light preview (from 480x270 copies of the videos, as
+<code>--proxy</code>), opens it in a player, and does it again every time the YAML
+- or any other YAML file in its folder, its parts and presets - is
+saved: the player opens again a second before the first frame that
+changed. Only what changed is rendered again: the preview is rendered
+in short segments (8 s at most), each cached by what it plays, as
+<code>render --split</code> does, so after the first time an edit costs the few
+seconds of video it touches. Where in them the picture actually changed
+is found frame by frame, comparing them with the last render.</p>
+<p>A save that doesn't validate is reported, and the last preview stays.
+<code>--proxy WxH</code> sets the copies' size, <code>--full</code> uses the original files,
+<code>--part P</code> watches one part of a project in several files and
+<code>--no-play</code> only renders (and says where it changed). The player is the
+first of mpv, vlc and ffplay found, or a command of your own in
+<code>VIDEO_AS_CODE_PLAYER</code> - <code>{file}</code> and <code>{start}</code> (seconds) replaced:
+<code>VIDEO_AS_CODE_PLAYER="mplayer -ss {start} {file}"</code>. Its cache
+is its own (<code>.render_cache/watch/</code>), apart from a full render's.</p>
+<h3 id="writing-the-yaml-in-an-editor-video-as-code-schema">Writing the YAML in an editor: <code>video-as-code schema</code></h3>
+<p>The project file has a JSON Schema: an editor that knows it completes
+keys and values as you type, shows what each key means (the text of
+<a href="project-yaml.html"><code>docs/project-yaml.md</code></a>) and underlines a typo - <code>fade_inn</code>, <code>reveal:
+irs</code>, a gl-transition's parameter past its range - as you write it, not
+when <code>validate</code> runs. In VS Code, install Red Hat's <em>YAML</em> extension and
+start the project file with this line (any editor with
+yaml-language-server reads it too):</p>
+<pre><code class="language-yaml"># yaml-language-server: $schema=https://video-as-code.juan-ramirez.es/project.schema.json
+</code></pre>
+<p><code>video-as-code schema -o schema.json</code> writes the schema of the installed
+version, for a line that points at that file instead (offline, or to
+match an older version). It checks each key as it's written; whether a
+file exists, a clip fits its source or two clips overlap is still
+<code>validate</code>'s - and so are melt's services and libopenshot's effects,
+which depend on what's installed.</p>
 <h3 id="-proxy-light-previews-of-only-the-parts-used"><code>--proxy</code>: light previews of only the parts used</h3>
 <p>Full-resolution phone videos (HEVC, 1080p and up) are what makes <code>melt</code>
 run out of memory on a laptop - it builds every clip's producer at load -
@@ -510,6 +552,29 @@ refused, saying why: <code>Caption</code> draws nothing outside OpenShot's own
 editor (a title clip does that), and <code>Mask</code> needs a mask picture it
 can't be given here. See <a href="project-yaml.html"><code>docs/project-yaml.md</code></a>; <code>video-as-code gallery</code>
 shows each one, over the sample video or sound.</p>
+<h3 id="an-openshot-project-build-format-openshot">An OpenShot project: <code>build --format openshot</code></h3>
+<p><code>video-as-code build project.yaml --format openshot</code> (or <code>-o
+project.osp</code>) writes the timeline as an <a href="https://www.openshot.org">OpenShot</a>
+project instead of a <code>.kdenlive</code>, to finish the video by hand there. It
+needs <code>python3-openshot</code> too: the project is written by libopenshot
+itself, so it's in the shape the installed OpenShot expects.</p>
+<p>What carries over: the files; each track as a layer (the last track on
+top); each clip's trim and place; fades, as the clip's opacity (picture)
+or volume (sound), with <code>gain</code> and <code>mute</code>; dissolves; wipes, as
+OpenShot's own transition - a mask over the same grayscale picture,
+darker parts first, either way and <code>reverse</code>d, <code>softness</code> as its
+contrast (approximately) - with <code>luma: openshot/&lt;name&gt;</code> using OpenShot's
+own file; and guides, as markers. A <code>derive:</code> of libopenshot's effects
+alone (<code>openshot:</code>, no other operation) arrives as its input with the
+effects on it, editable in OpenShot - the reverse of kdenlive, where it's
+the generated file.</p>
+<p>The rest has no counterpart in OpenShot and is left out, each thing
+named in a warning: melt's own effects and transitions (<code>melt:</code>,
+<code>glsl:</code>, <code>transition: gl</code>, <code>affine</code>, <code>film_*</code>, <code>color_grade</code>,
+<code>ken_burns</code>...), <code>speed</code>, position and size, title clips, Lottie
+animations and parts. Checked by playing the result with libopenshot's
+own timeline - what OpenShot plays and exports with - against melt's
+render (<code>tests/test_osp.py</code>).</p>
 <h3 id="video-as-code-gallery-every-transition-and-effect-in-the-browser"><code>video-as-code gallery</code>: every transition and effect, in the browser</h3>
 <p>Opens a page with everything a project YAML can ask for - the
 transitions between clips, the wipe shapes, the clip effects, the
@@ -701,7 +766,7 @@ own licenses, run as they are, not bundled: melt/MLT (LGPL), kdenlive
 realesrgan-ncnn-vulkan (MIT; its models BSD-3-Clause), which <code>fetch</code>
 offers to download from its own releases.</p>
 </main>
-<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-10-24, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-10-25, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
 <script>
 // a link here to a row opens nothing more, but shows it: scrolled to, below the bar
 if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }
