@@ -103,3 +103,14 @@ def test_a_melt_without_glaxnimate_is_said_so(tmp_path: Path, assets_dir: Path, 
     with pytest.raises(ValidationErrors) as exc:
         load_and_resolve(_project(tmp_path, assets_dir))
     assert "glaxnimate" in str(exc.value)
+
+
+def test_the_type_said_outright(tmp_path: Path, assets_dir: Path):
+    # (a Lottie file whose extension says nothing: the type says it)
+    box(tmp_path / "box.json").rename(tmp_path / "box.lottie-json")
+    path = _project(tmp_path, assets_dir)
+    path.write_text(path.read_text(encoding="utf-8").replace("{id: box, path: box.json}",
+                                                             "{id: box, path: box.lottie-json, type: animation}"),
+                    encoding="utf-8")
+    (clip,) = [c for c in load_and_resolve(path).bin_clips if c.id == "box"]
+    assert clip.kind == "animation" and clip.duration_frames == 50

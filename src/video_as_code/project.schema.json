@@ -1072,6 +1072,7 @@
       "video",
       "audio",
       "image",
+      "animation",
       "title"
      ],
      "description": "`video`, `audio`, `image`, `animation` or `title`. Only needed to override the guess, or for titles.\n\nDefault: from the extension",
