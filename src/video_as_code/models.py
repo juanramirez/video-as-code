@@ -9,7 +9,7 @@ from typing import Any, Optional
 from .timecode import FrameRate
 
 VALID_TRACK_TYPES = ("video", "audio")
-VALID_CLIP_TYPES = ("video", "audio", "image", "title")
+VALID_CLIP_TYPES = ("video", "audio", "image", "animation", "title")
 
 
 # ---------------------------------------------------------------------------
