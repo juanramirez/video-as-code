@@ -1418,3 +1418,12 @@ whole video can be built from a fresh checkout anywhere.
   in them, found by the frames' md5s against the last render's. A save
   that doesn't validate keeps the last preview. mpv, vlc or ffplay, or
   `VIDEO_AS_CODE_PLAYER`.
+- **Rendering just a stretch: `render --from 1:20 --to 1:35`** —
+  **implemented** (2026-10-25, `cli._stretch`, `timecode.parse_clock`,
+  `tests/test_render_stretch.py`): only those frames, at full quality,
+  to `project_1m20s-1m35s.mp4`. melt gets a copy trimmed to the clips
+  the stretch plays (`splitrender.trim`) with the whole render's
+  `in=`/`out=`; with `--split`, the whole render's segments that touch
+  it, the two at its ends cut to it, so the inner ones are shared with
+  its cache (which a stretch doesn't clean). Checked against the whole
+  render's same frames (PSNR over 40 dB, ~24 a frame off).

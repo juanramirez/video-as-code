@@ -524,32 +524,43 @@ def render(
     max_frames: int = MAX_FRAMES,
     rendered: Optional[list[Segment]] = None,
     report_cached: bool = True,
+    stretch: Optional[tuple[int, int]] = None,
 ) -> list[Segment]:
     """Renders `kdenlive_path` to `output` in segments (see the module
     docstring); returns the plan used, and adds to `rendered` the
-    segments that weren't in the cache. Raises SplitRenderError."""
+    segments that weren't in the cache. Raises SplitRenderError.
+
+    With `stretch` (first, last frame), only those frames: the whole
+    project's segments that touch it, the two at its ends cut to it - so
+    the ones inside are the same as a whole render's, cached for it."""
     root = ET.parse(kdenlive_path).getroot()
     base = Path(root.get("root") or kdenlive_path.parent)
     budget = budget_mb or default_budget_mb()
     segments = plan(total_frames, _timeline_entries(root), producer_costs(root, base), baseline_mb(root), budget, max_frames)
+    first_frame, last_frame = stretch or (0, total_frames - 1)
+    if stretch:
+        segments = [Segment(max(s.first, first_frame), min(s.last, last_frame), s.est_mb)
+                    for s in segments if s.last >= first_frame and s.first <= last_frame]
+    frames = last_frame - first_frame + 1
     over = [s for s in segments if s.est_mb > budget]
     if over:
         report(msg("split.over_budget", n=len(over), budget=budget))
-    report(msg("split.plan", n=len(segments), frames=total_frames, budget=budget))
+    report(msg("split.plan", n=len(segments), frames=frames, budget=budget))
     use_scope = _scope_available() if memory_cap is None else memory_cap
     # the cap leaves room for the estimate being low; it's there so that
     # running out kills melt, not the session
     cap = (lambda est: max(int(est * 1.5), est + 512)) if use_scope else (lambda est: None)
     env = env or probe.melt_env()
     cache_dir.mkdir(parents=True, exist_ok=True)
-    progress = Progress(output, total_frames)
+    progress = Progress(output, frames)
 
     with tempfile.TemporaryDirectory(dir=cache_dir) as tmp_name:
         tmp = Path(tmp_name)
         # sound: one run over the whole length, alongside the picture
-        audio_root = trim(root, 0, total_frames - 1, audio_only=True)
-        audio = cache_dir / f"{_SEGMENT_PREFIX}audio.wav"
-        audio_key = segment_key(audio_root, base, [f"0-{total_frames - 1}", "audio pcm_s16le"], audio=True)
+        audio_root = trim(root, first_frame, last_frame, audio_only=True)
+        audio = cache_dir / (f"{_SEGMENT_PREFIX}audio_{first_frame:06d}_{last_frame:06d}.wav" if stretch
+                             else f"{_SEGMENT_PREFIX}audio.wav")
+        audio_key = segment_key(audio_root, base, [f"{first_frame}-{last_frame}", "audio pcm_s16le"], audio=True)
         audio_proc = None
         if audio.exists() and _read(audio.with_suffix(".key")) == audio_key:
             report(msg("split.audio_cached"))
@@ -562,7 +573,7 @@ def render(
                 _melt_command(
                     melt,
                     [str(audio_xml), "-consumer", f"avformat:{tmp / 'audio.wav'}", "vn=1", "acodec=pcm_s16le",
-                     "in=0", f"out={total_frames - 1}"],
+                     f"in={first_frame}", f"out={last_frame}"],
                     cap(1024),
                 ),
                 stdout=audio_log, stderr=subprocess.STDOUT, env=env,
@@ -619,9 +630,10 @@ def render(
             shutil.move(str(tmp / "audio.wav"), audio)
             audio.with_suffix(".key").write_text(audio_key, encoding="utf-8")
 
-        # segments of an earlier plan (the project changed, or the budget)
+        # segments of an earlier plan (the project changed, or the budget) -
+        # not after a stretch: the whole render's others are still good
         wanted = {p.name for p in parts} | {p.with_suffix(".key").name for p in parts} | {audio.name, audio.with_suffix(".key").name}
-        for old in cache_dir.glob(f"{_SEGMENT_PREFIX}*"):
+        for old in [] if stretch else cache_dir.glob(f"{_SEGMENT_PREFIX}*"):
             if old.name not in wanted and old.is_file():
                 old.unlink()
 

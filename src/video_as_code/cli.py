@@ -5,12 +5,13 @@ import contextlib
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
-from . import autoprune, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, osp, parts, watch, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import autoprune, timecode, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, osp, parts, watch, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -307,6 +308,27 @@ def melt_env_for(resolved, melt: str) -> Optional[dict[str, str]]:
     return probe.melt_env(mlt_data=mlt_data)
 
 
+def _stretch(args: argparse.Namespace, resolved) -> Optional[tuple[int, int, str]]:
+    """--from/--to as (first, last) frames and a name for the file (`1m20s-1m35s`)
+    - None for the whole video. KdenliveAsCodeError if they aren't times within it."""
+    start, end = getattr(args, "start", None), getattr(args, "end", None)
+    if start is None and end is None:
+        return None
+    total = resolved.total_frames
+    length = watch.clock(resolved.fps.frames_to_seconds(total))
+    try:
+        start_s = timecode.parse_clock(start) if start is not None else 0.0
+        end_s = timecode.parse_clock(end) if end is not None else None
+    except ValueError as exc:
+        raise KdenliveAsCodeError(msg("cli.stretch_bad_time", time=exc)) from None
+    first = resolved.fps.seconds_to_frames(start_s)
+    last = resolved.fps.seconds_to_frames(end_s) - 1 if end_s is not None else total - 1
+    if first >= total or last >= total or first > last:
+        raise KdenliveAsCodeError(msg("cli.stretch_outside", start=start or "0", end=end or length, length=length))
+    end_s = resolved.fps.frames_to_seconds(total) if end_s is None else end_s
+    return first, last, f"{timecode.clock_name(start_s)}-{timecode.clock_name(end_s)}"
+
+
 def cmd_render(args: argparse.Namespace) -> int:
     yaml_path = Path(args.project)
     output = _output(yaml_path, args, ".mp4")
@@ -315,9 +337,14 @@ def cmd_render(args: argparse.Namespace) -> int:
 
     try:
         resolved = load_and_resolve(yaml_path, part=args.part)
+        stretch_and_name = _stretch(args, resolved)
     except KdenliveAsCodeError as exc:
         print(str(exc), file=sys.stderr)
         return 1
+    stretch = stretch_and_name[:2] if stretch_and_name else None
+    if stretch_and_name and not args.output:  # (not over the whole video's file)
+        output = output.with_name(f"{output.stem}_{stretch_and_name[2]}{output.suffix}")
+    frames = stretch[1] - stretch[0] + 1 if stretch else resolved.total_frames
 
     melt = probe.find_melt()
     if melt is None:
@@ -362,16 +389,26 @@ def cmd_render(args: argparse.Namespace) -> int:
                     budget_mb=args.max_mem,
                     report=lambda text: print(text, file=sys.stderr),
                     env=env,
+                    stretch=stretch,
                 )
             except (KdenliveAsCodeError, OSError) as exc:
                 print(str(exc), file=sys.stderr)
                 return 1
-            print(msg("cli.render_done", output=output, frames=resolved.total_frames, fps=resolved.fps.fps))
+            print(msg("cli.render_done", output=output, frames=frames, fps=resolved.fps.fps))
             if args.keep_kdenlive:
                 print(msg("cli.render_kept_kdenlive", path=kdenlive_path))
             return 0
+        source, limits = kdenlive_path, []
+        if stretch:
+            # melt loads every clip in the file it's given: a copy with
+            # only those the stretch plays (splitrender.trim), rendered
+            # with the same in=/out= as in the whole
+            source = Path(stack.enter_context(tempfile.TemporaryDirectory())) / kdenlive_path.name
+            root = ET.parse(kdenlive_path).getroot()
+            ET.ElementTree(splitrender.trim(root, *stretch)).write(source, encoding="utf-8", xml_declaration=True)
+            limits = [f"in={stretch[0]}", f"out={stretch[1]}"]
         result = subprocess.run(
-            [melt, str(kdenlive_path), "-consumer", f"avformat:{output}"],
+            [melt, str(source), "-consumer", f"avformat:{output}", *limits],
             capture_output=True,
             text=True,
             env=env,
@@ -380,7 +417,7 @@ def cmd_render(args: argparse.Namespace) -> int:
             print(msg("cli.render_failed", path=output, stderr=result.stderr.strip()), file=sys.stderr)
             return 1
 
-    print(msg("cli.render_done", output=output, frames=resolved.total_frames, fps=resolved.fps.fps))
+    print(msg("cli.render_done", output=output, frames=frames, fps=resolved.fps.fps))
     if args.keep_kdenlive:
         print(msg("cli.render_kept_kdenlive", path=kdenlive_path))
     return 0
@@ -545,6 +582,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_render.add_argument("--proxy", metavar="WxH", help=msg("cli.help.proxy"))
     p_render.add_argument("--part", metavar="PATH", help=msg("cli.help.part"))
     p_render.add_argument("--no-prune", action="store_true", help=msg("cli.help.no_prune"))
+    p_render.add_argument("--from", dest="start", metavar="TIME", help=msg("cli.help.render_from"))
+    p_render.add_argument("--to", dest="end", metavar="TIME", help=msg("cli.help.render_to"))
     p_render.set_defaults(func=cmd_render)
 
     p_fetch = sub.add_parser("fetch", help=msg("cli.help.fetch"))

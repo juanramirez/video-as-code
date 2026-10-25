@@ -52,3 +52,31 @@ def resolve_fps(fps: float | int | str) -> FrameRate:
     # Fallback: approximate with denominator 1001 if it looks like NTSC, else as a simple fraction.
     frac = Fraction(fps).limit_denominator(100000)
     return FrameRate(frac.numerator, frac.denominator)
+
+
+def parse_clock(text: str) -> float:
+    """Seconds from `80`, `80.5`, `1:20`, `1:20.5` or `1:02:03`. ValueError
+    if it's none of them."""
+    fields = text.strip().split(":")
+    if not 1 <= len(fields) <= 3 or any(not f for f in fields):
+        raise ValueError(text)
+    *whole, last = fields
+    try:
+        seconds = float(last)
+    except ValueError:
+        raise ValueError(text) from None
+    if not math.isfinite(seconds) or seconds < 0 or (whole and seconds >= 60):
+        raise ValueError(text)
+    total = 0
+    for i, field in enumerate(whole):
+        if not field.isdigit() or (i > 0 and int(field) >= 60):
+            raise ValueError(text)
+        total = total * 60 + int(field)
+    return total * 60 + seconds
+
+
+def clock_name(seconds: float) -> str:
+    """For a file name: `1m20s`, `1m20.5s`, `45s`."""
+    minutes, rest = divmod(round(seconds, 2), 60)
+    rest_text = f"{rest:g}s"
+    return f"{int(minutes)}m{rest_text}" if minutes else rest_text

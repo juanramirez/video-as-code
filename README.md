@@ -36,6 +36,7 @@ anything else.
 
 ```bash
 video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # render straight to video via melt
+video-as-code render project.yaml --from 1:20 --to 1:35  # just that stretch, to project_1m20s-1m35s.mp4
 video-as-code watch project.yaml [--proxy WxH]          # a preview again on every save, played from what changed
 video-as-code validate project.yaml                     # validate without rendering
 video-as-code build project.yaml [-o output.kdenlive]   # a .kdenlive, to open in kdenlive
@@ -129,6 +130,24 @@ first of mpv, vlc and ffplay found, or a command of your own in
 `VIDEO_AS_CODE_PLAYER` - `{file}` and `{start}` (seconds) replaced:
 `VIDEO_AS_CODE_PLAYER="mplayer -ss {start} {file}"`. Its cache
 is its own (`.render_cache/watch/`), apart from a full render's.
+
+### Rendering just a stretch: `--from` and `--to`
+
+```bash
+video-as-code render project.yaml --from 1:20 --to 1:35
+```
+
+renders only those 15 seconds, at full quality - to look at a transition
+or a cut as the final video will have it, without rendering all of it.
+Times are seconds (`80`, `80.5`) or minutes:seconds (`1:20`, `1:20.5`,
+`1:02:03` with hours); either may be left out (from the start, to the
+end). The file is `project_1m20s-1m35s.mp4`, so as not to replace the
+whole video's (`-o` names it). melt is given a copy of the project with
+only the clips that stretch plays, so it starts as fast as a short
+project does; with `--split`, the segments inside the stretch are the
+whole render's own, shared with its cache. The frames are the ones the
+whole render has there; the sound, though, starts at the stretch, so an
+effect that builds up over time (an echo, a compressor) starts afresh.
 
 ### Writing the YAML in an editor: `video-as-code schema`
 
