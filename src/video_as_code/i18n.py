@@ -419,9 +419,18 @@ _EN: dict[str, str] = {
         "inside {output} (review them by hand; nothing was guessed)."
     ),
     "cli.help.description": "kdenlive project generator from YAML",
-    "cli.help.build": "Generates a .kdenlive from a YAML",
+    "cli.help.build": "Generates a .kdenlive (or an OpenShot project) from a YAML",
+    "cli.help.build_format": "kdenlive (the default) or openshot: an OpenShot project (.osp) - also chosen by -o's extension",
+    "osp.needs_openshot": "An OpenShot project needs libopenshot's Python bindings (python3-openshot, which openshot-qt brings) - run with the system's Python, or set {env}",
+    "osp.write_failed": "Couldn't write the OpenShot project {path}: {error}",
+    "osp.invert_failed": "ffmpeg couldn't turn round the levels of {path} (for a reversed wipe): {error}",
+    "osp.left_out": "Left out of the OpenShot project (no counterpart there): `{what}` - {where}",
+    "osp.and_more": " and {n} more",
+    "osp.where_clip": "{clip} at {at}s on {track}",
+    "osp.where_track": "track {track}",
+    "osp.where_at": "at {at}s",
     "cli.help.project_path": "Path to the project's .yaml file",
-    "cli.help.build_output": "Output path (default: same name with .kdenlive extension)",
+    "cli.help.build_output": "Output path (default: same name with .kdenlive extension, .osp with --format openshot)",
     "cli.help.pack_tracks": (
         "Repacks the generated project onto the fewest tracks possible "
         "(fewer parallel lines when opened in the Kdenlive app), preserving "
@@ -1011,9 +1020,18 @@ _ES: dict[str, str] = {
         "dentro de {output} (revísalos a mano; no se ha adivinado nada)."
     ),
     "cli.help.description": "Generador de proyectos kdenlive a partir de YAML",
-    "cli.help.build": "Genera un .kdenlive a partir de un YAML",
+    "cli.help.build": "Genera un .kdenlive (o un proyecto de OpenShot) a partir de un YAML",
+    "cli.help.build_format": "kdenlive (por defecto) u openshot: un proyecto de OpenShot (.osp); también lo elige la extensión de -o",
+    "osp.needs_openshot": "Un proyecto de OpenShot necesita los bindings de Python de libopenshot (python3-openshot, que trae openshot-qt): ejecútalo con el Python del sistema, o define {env}",
+    "osp.write_failed": "No se pudo escribir el proyecto de OpenShot {path}: {error}",
+    "osp.invert_failed": "ffmpeg no pudo invertir los niveles de {path} (para un wipe al revés): {error}",
+    "osp.left_out": "Fuera del proyecto de OpenShot (no tiene equivalente allí): `{what}` - {where}",
+    "osp.and_more": " y {n} más",
+    "osp.where_clip": "{clip} en {at}s en {track}",
+    "osp.where_track": "pista {track}",
+    "osp.where_at": "en {at}s",
     "cli.help.project_path": "Ruta al archivo .yaml del proyecto",
-    "cli.help.build_output": "Ruta de salida (por defecto: mismo nombre con extensión .kdenlive)",
+    "cli.help.build_output": "Ruta de salida (por defecto: mismo nombre con extensión .kdenlive, .osp con --format openshot)",
     "cli.help.pack_tracks": (
         "Reempaqueta el proyecto generado en el menor número de pistas posible "
         "(menos líneas paralelas al abrirlo en la app de Kdenlive), conservando "

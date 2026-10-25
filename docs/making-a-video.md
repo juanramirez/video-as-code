@@ -76,6 +76,9 @@ The `.kdenlive` is a build artifact, not something to commit - it's
 regenerated deterministically from the YAML every time (see the
 `.gitignore` this repo ships with).
 
+For OpenShot instead: `video-as-code build project.yaml --format openshot`
+gives a `.osp` - see `README.md`'s *An OpenShot project*.
+
 ### What you see in kdenlive
 
 Most of a project opens in kdenlive as if it had been made there: clips,

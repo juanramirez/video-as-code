@@ -721,6 +721,12 @@ def _parse_derive(
     )
 
 
+def _only_openshot(spec: DeriveSpec) -> bool:
+    """Whether a derive: does nothing but apply libopenshot's effects to
+    its input (`intra` only changes how the file is encoded)."""
+    return replace(spec, source=None, path=None, clip=None, openshot=(), intra=False) == DeriveSpec()
+
+
 def derive_input_path(clip: BinClipSpec, sources_root: Path, by_id: dict[str, BinClipSpec]) -> Path | None:
     """Where a derived clip's input file lives (None for an unknown or
     unresolved `clip:` reference)."""
@@ -1528,6 +1534,9 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             except probe.ProbeError as exc:
                 errors.append(str(exc))
                 continue
+        openshot_input = None
+        if clip.derive is not None and clip.derive.openshot and _only_openshot(clip.derive):
+            openshot_input = derive_input_path(clip, doc.source_path.parent / doc.project.sources_dir, bin_by_id)
         resolved_bin[clip_id] = ResolvedBinClip(
             id=clip_id,
             numeric_id=numeric_id,
@@ -1536,6 +1545,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             duration_frames=fps.seconds_to_frames(duration_seconds),
             folder=clip.folder,
             sequence=clip.sequence,
+            openshot_input=openshot_input,
+            openshot_effects=clip.derive.openshot if openshot_input is not None else (),
         )
 
     if errors:

@@ -38,6 +38,7 @@ anything else.
 video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # render straight to video via melt
 video-as-code validate project.yaml                     # validate without rendering
 video-as-code build project.yaml [-o output.kdenlive]   # a .kdenlive, to open in kdenlive
+video-as-code build project.yaml --format openshot      # an OpenShot project (.osp) instead
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code transitions                               # every wipe shape a luma: can name
@@ -513,6 +514,33 @@ refused, saying why: `Caption` draws nothing outside OpenShot's own
 editor (a title clip does that), and `Mask` needs a mask picture it
 can't be given here. See `docs/project-yaml.md`; `video-as-code gallery`
 shows each one, over the sample video or sound.
+
+### An OpenShot project: `build --format openshot`
+
+`video-as-code build project.yaml --format openshot` (or `-o
+project.osp`) writes the timeline as an [OpenShot](https://www.openshot.org)
+project instead of a `.kdenlive`, to finish the video by hand there. It
+needs `python3-openshot` too: the project is written by libopenshot
+itself, so it's in the shape the installed OpenShot expects.
+
+What carries over: the files; each track as a layer (the last track on
+top); each clip's trim and place; fades, as the clip's opacity (picture)
+or volume (sound), with `gain` and `mute`; dissolves; wipes, as
+OpenShot's own transition - a mask over the same grayscale picture,
+darker parts first, either way and `reverse`d, `softness` as its
+contrast (approximately) - with `luma: openshot/<name>` using OpenShot's
+own file; and guides, as markers. A `derive:` of libopenshot's effects
+alone (`openshot:`, no other operation) arrives as its input with the
+effects on it, editable in OpenShot - the reverse of kdenlive, where it's
+the generated file.
+
+The rest has no counterpart in OpenShot and is left out, each thing
+named in a warning: melt's own effects and transitions (`melt:`,
+`glsl:`, `transition: gl`, `affine`, `film_*`, `color_grade`,
+`ken_burns`...), `speed`, position and size, title clips, Lottie
+animations and parts. Checked by playing the result with libopenshot's
+own timeline - what OpenShot plays and exports with - against melt's
+render (`tests/test_osp.py`).
 
 ### `video-as-code gallery`: every transition and effect, in the browser
 
