@@ -1447,3 +1447,15 @@ whole video can be built from a fresh checkout anywhere.
   `loudness:` overrides the target, or `false` leaves it out; `gain:`
   multiplies on top. Checked on a real render: tones at about -30 and
   -12 LUFS both at -20 ± 0.5.
+- **`freeze_at:` after an `in:`** — **fixed** (2026-10-29, `xmlgen.py`,
+  `reverse.py`; `tests/test_melt_validation.py::test_melt_respects_freeze_at_after_in`,
+  `tests/test_reverse.py`): MLT's `freeze` filter takes its `frame` as a
+  position in the source - on a playlist entry its `+ producer's in`
+  adds nothing - and compares it with the source position for
+  `freeze_before`/`freeze_after`. Written clip-relative, a clip with an
+  `in:` froze a frame counted from the source's start (seen in a remake:
+  a held last frame came out as one from the video's first seconds), and
+  `freeze_before`/`freeze_after` froze all of it or nothing. Now the
+  entry's `in` is added (kdenlive stores its "Freeze" position the same
+  way) and `reverse` takes it off again. Checked by rendering a grey-ramp
+  source, whose brightness tells which frame shows.

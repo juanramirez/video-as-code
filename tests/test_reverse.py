@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pytest
@@ -809,6 +810,44 @@ timeline:
     assert clip["freeze_at"] == 0.52  # 0.5s @ 25fps rounds to frame 13, back to 0.52s
     assert clip["freeze_after"] is True
     assert "freeze_before" not in clip
+
+
+def test_freeze_frame_is_written_from_the_source_and_round_trips_with_in(tmp_path: Path, assets_dir: Path):
+    """With an `in:`, MLT's `freeze` filter needs the frame as a position
+    in the source (the entry's in + the clip-relative frame, as kdenlive
+    writes it); `reverse` takes the entry's in off again, so `freeze_at:`
+    still reads as seconds from the clip's first visible frame."""
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, in: 1.0, duration: 1.0, freeze_at: 0.4}}
+""",
+        encoding="utf-8",
+    )
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive_path)
+
+    frames = [
+        p.text
+        for f in ET.parse(kdenlive_path).iter("filter")
+        if any(q.get("name") == "mlt_service" and q.text == "freeze" for q in f.iter("property"))
+        for p in f.iter("property")
+        if p.get("name") == "frame"
+    ]
+    assert frames == ["35"], frames  # in 1.0 s = frame 25, + 0.4 s = 10 frames
+
+    result = reverse.import_kdenlive(kdenlive_path)
+    assert result.raw_items == [], f"there should be no unrecognized items: {result.raw_items}"
+    clip = result.data["timeline"]["tracks"][0]["clips"][0]
+    assert clip["freeze_at"] == 0.4
 
 
 def test_round_trip_preserves_old_film_flags(tmp_path: Path, assets_dir: Path):
