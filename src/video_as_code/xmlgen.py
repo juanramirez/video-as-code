@@ -678,13 +678,19 @@ def _add_freeze_filter(ids: _IdCounters, entry: ET.Element, placement: ResolvedP
     holds frame N's content from the start and plays normally from N
     onward - confirmed against MLT's own filter source,
     `~/dev/mlt/src/modules/kdenlive/filter_freeze.c`'s `do_freeze`
-    condition, not just the XML effect definition. `frame` is 0-based
-    from this clip's own first visible frame (its `in`/`out` trim
-    already applied), matching MLT's own `pos = frame-property +
-    producer's in`."""
+    condition, not just the XML effect definition. `freeze_at_frame` is
+    0-based from this clip's own first visible frame, but the filter's
+    `frame` is a position in the *source*: on a playlist entry MLT's
+    `pos = frame + producer's in` adds nothing (the original producer's
+    in is 0) and the before/after test compares against the source
+    position too - so the entry's own `in` is added here (kdenlive
+    stores its "Freeze" position the same way). Without it a clip with
+    an `in:` froze a frame counted from the source's start, and
+    `freeze_before`/`freeze_after` froze all or nothing (measured
+    against a grey-ramp source, test_melt_respects_freeze_at_after_in)."""
     f = ET.SubElement(entry, "filter", {"id": ids.next("filter")})
     _prop(f, "mlt_service", "freeze")
-    _prop(f, "frame", placement.freeze_at_frame)
+    _prop(f, "frame", placement.in_frame + placement.freeze_at_frame)
     if placement.freeze_before:
         _prop(f, "freeze_before", 1)
     if placement.freeze_after:

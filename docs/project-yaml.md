@@ -184,7 +184,7 @@ required.
 | `speed_ramp_image_mode` | `nearest` | `nearest` (repeat frames) or `blend` (mix neighbouring frames) when slowed down. |
 | `boomerang` | `false` | Play the stretch forward and then backward, as two placements (the backward one muted, starting with a hard cut). Needs `out`, `duration` or `source_in`+`source_out`; not with `speed_ramp`. |
 | `boomerang_trim_hold` | `true` | With `boomerang`: if the source holds its last frame (a gif's long last delay), shorten both halves so the turnaround doesn't stall. |
-| `freeze_at` | - | Freeze the picture at this second of the clip (counted from its first visible frame). Alone, the whole clip shows that frame. |
+| `freeze_at` | - | Freeze the picture at this second of the clip (counted from its first visible frame, so after `in:`). Alone, the whole clip shows that frame. |
 | `freeze_before` / `freeze_after` | `false` | With `freeze_at`: play normally on one side and freeze only before / after it. |
 
 **Fades and sound**

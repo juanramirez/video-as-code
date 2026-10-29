@@ -1377,8 +1377,8 @@
     "freeze_at": {
      "type": "number",
      "minimum": 0,
-     "description": "Freeze the picture at this second of the clip (counted from its first visible frame). Alone, the whole clip shows that frame.",
-     "markdownDescription": "Freeze the picture at this second of the clip (counted from its first visible frame). Alone, the whole clip shows that frame."
+     "description": "Freeze the picture at this second of the clip (counted from its first visible frame, so after `in:`). Alone, the whole clip shows that frame.",
+     "markdownDescription": "Freeze the picture at this second of the clip (counted from its first visible frame, so after `in:`). Alone, the whole clip shows that frame."
     },
     "freeze_before": {
      "type": "boolean",

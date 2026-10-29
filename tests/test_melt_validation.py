@@ -16,6 +16,7 @@ import os
 import subprocess
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from video_as_code import probe, xmlgen
@@ -2624,6 +2625,67 @@ timeline:
 
     r2, g2, b2 = _mean_rgb(rendered, timestamp=1.9)
     assert r2 > g2 + 50 and r2 > b2 + 50, f"expected red still held near the end, got {(r2, g2, b2)}"
+
+
+def test_melt_respects_freeze_at_after_in(tmp_path: Path, melt):
+    """`freeze_at:` on a placement with an `in:` holds the frame counted
+    from the clip's first visible frame - not from the source's start -
+    and `freeze_before`/`freeze_after` switch at that frame. The source is
+    a grey ramp (each frame one level brighter), so a rendered frame's
+    brightness says which source frame it is: with `in: 2.0` (frame 50)
+    and `freeze_at: 0.4` (10 frames), frame 60 is the one held."""
+    if not probe.ffprobe_available():
+        pytest.skip("ffprobe not available: can't inspect the rendered output")
+    source = tmp_path / "ramp.mp4"
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:size=64x48:rate=25:duration=4",
+         "-vf", "geq=lum='16+2*N':cb=128:cr=128", "-pix_fmt", "yuv420p", "-crf", "0", "-c:v", "libx264", str(source)],
+        check=True,
+    )
+
+    def source_frames(path: Path) -> list[float]:
+        raw = subprocess.run(
+            ["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+            capture_output=True, check=True,
+        ).stdout
+        return [float(x) * 219 / 255 / 2 for x in np.frombuffer(raw, np.uint8).reshape(-1, 48 * 64).mean(axis=1)]
+
+    def render(extra: str) -> list[float]:
+        yaml_path = tmp_path / "project.yaml"
+        yaml_path.write_text(
+            f"""
+project: {{id: p1, title: T, fps: 25, width: 64, height: 48}}
+bin:
+  - id: clip
+    path: {source}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, in: 2.0, duration: 1.0, freeze_at: 0.4{extra}}}
+""",
+            encoding="utf-8",
+        )
+        kdenlive_path = tmp_path / "project.kdenlive"
+        xmlgen.write(load_and_resolve(yaml_path), kdenlive_path)
+        rendered = tmp_path / "rendered.mp4"
+        result = _run_melt(melt, [str(kdenlive_path), "-consumer", f"avformat:{rendered}", "vcodec=libx264", "crf=0"])
+        _assert_no_fatal_load_error(result)
+        return source_frames(rendered)
+
+    def near(got: float, want: int) -> bool:
+        return abs(got - want) <= 1.5
+
+    whole = render("")
+    assert all(near(f, 60) for f in whole), f"the whole clip should hold source frame 60, got {whole}"
+
+    after = render(", freeze_after: true")
+    assert near(after[0], 50) and near(after[5], 55), f"should play from frame 50 up to the freeze, got {after}"
+    assert all(near(f, 60) for f in after[10:]), f"should hold frame 60 from 0.4 s on, got {after}"
+
+    before = render(", freeze_before: true")
+    assert all(near(f, 60) for f in before[:10]), f"should hold frame 60 up to 0.4 s, got {before}"
+    assert near(before[15], 65) and near(before[-1], 74), f"should play on from frame 60 after it, got {before}"
 
 
 def test_melt_renders_a_real_title_clip(tmp_path: Path, melt):
