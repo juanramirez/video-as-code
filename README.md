@@ -28,6 +28,14 @@ pip install -e ".[dev,reconstruct]"
 `video-as-code docs` needs the optional `docs` extra (Python-Markdown):
 `pip install -e ".[docs]"`.
 
+Then `video-as-code doctor` says what this machine has of what
+video-as-code uses - melt, ffmpeg, each MLT module a feature needs
+(titles, compositing, frei0r, Lottie, stabilization...), the plugins it
+builds and the optional tools - and, for what's missing, how to get it.
+A module missing from melt doesn't stop it: what uses it renders as
+nothing, silently, so it's worth running on a new machine. It exits 1
+only when something nothing renders without is missing.
+
 The rest of `video-as-code` (`build`/`validate`/`import`) only ever needs PyYAML —
 `reconstruct.py` is imported lazily, so skipping this extra doesn't affect
 anything else.
@@ -48,6 +56,7 @@ video-as-code schema [-o schema.json]                   # the YAML's JSON Schema
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
 video-as-code docs [--with photo.jpg] [--public DIR]    # this documentation as a local web, the gallery in it
 video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
+video-as-code doctor                                    # what's installed of what it uses, and how to get the rest
 ```
 
 `build` and `render` also take `--fetch`, to run `fetch` first, and
