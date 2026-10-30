@@ -136,7 +136,7 @@ timeline:
   tracks:
     - type: video
       clips:
-        - {{clip: photo, start: 0, duration: 1, position: [300, 0], size: [100, 100]}}
+        - {{clip: photo, start: 0, duration: 1, position: [330, 0], size: [100, 100]}}
 """
     path = _write_yaml(tmp_path, yaml_text)
     with pytest.raises(ValidationErrors) as exc:
@@ -1222,6 +1222,27 @@ timeline:
     assert "position_keyframes" in str(exc.value)
 
 
+def test_position_and_keyframes_partly_off_the_canvas_accepted(tmp_path: Path, assets_dir: Path):
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: photo
+    path: {assets_dir / "photo.png"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1, position: [-50, 200], size: [100, 100]}}
+        - clip: photo
+          start: 1
+          duration: 1.0
+          position_keyframes:
+            - {{at: 0, position: [0, -200], size: [320, 240]}}
+            - {{at: 1, position: [0, 200], size: [320, 240]}}
+"""
+    load_and_resolve(_write_yaml(tmp_path, yaml_text))
+
+
 def test_position_keyframes_out_of_bounds_rejected(tmp_path: Path, assets_dir: Path):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
@@ -1236,7 +1257,7 @@ timeline:
           start: 0
           duration: 1.0
           position_keyframes:
-            - {{at: 0, position: [300, 0], size: [100, 100]}}
+            - {{at: 0, position: [0, -110], size: [100, 100]}}
 """
     path = _write_yaml(tmp_path, yaml_text)
     with pytest.raises(ValidationErrors) as exc:

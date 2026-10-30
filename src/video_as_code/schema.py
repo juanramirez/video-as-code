@@ -721,6 +721,13 @@ def _parse_derive(
     )
 
 
+def _overlaps_canvas(x: float, y: float, w: float, h: float, project) -> bool:
+    """Whether a placed picture shows at all: it may run past the canvas's
+    edges (a picture sliding in from off screen, a big one panned across),
+    but one wholly outside it is surely a mistake."""
+    return x < project.width and y < project.height and x + w > 0 and y + h > 0
+
+
 def _only_openshot(spec: DeriveSpec) -> bool:
     """Whether a derive: does nothing but apply libopenshot's effects to
     its input (`intra` only changes how the file is encoded)."""
@@ -1768,7 +1775,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                 w, h = placement.size or (float(doc.project.width), float(doc.project.height))
                 if w <= 0 or h <= 0:
                     errors.append(msg("validation.pip_size_invalid", ctx=ctx, w=w, h=h))
-                elif x < 0 or y < 0 or x + w > doc.project.width + 1e-6 or y + h > doc.project.height + 1e-6:
+                elif not _overlaps_canvas(x, y, w, h, doc.project):
                     errors.append(
                         msg(
                             "validation.pip_out_of_bounds",
@@ -1782,7 +1789,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
             position_keyframes = placement.position_keyframes
             if position_keyframes is not None:
                 for i, (_at, x, y, w, h) in enumerate(position_keyframes):
-                    if x < 0 or y < 0 or x + w > doc.project.width + 1e-6 or y + h > doc.project.height + 1e-6:
+                    if not _overlaps_canvas(x, y, w, h, doc.project):
                         errors.append(
                             msg(
                                 "validation.position_keyframes_out_of_bounds",

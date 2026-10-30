@@ -124,8 +124,8 @@ _EN: dict[str, str] = {
     "validation.colorspace_invalid": "project.colorspace must be greater than 0, got {colorspace}",
     "validation.pip_size_invalid": "{ctx}: position/size must have a positive width and height, got w={w:g} h={h:g}",
     "validation.pip_out_of_bounds": (
-        "{ctx}: position/size ([{x:g}, {y:g}] {w:g}x{h:g}) falls outside "
-        "the project canvas ({width}x{height})"
+        "{ctx}: position/size ([{x:g}, {y:g}] {w:g}x{h:g}) falls wholly outside "
+        "the project canvas ({width}x{height}): nothing of it would show"
     ),
     "validation.position_keyframes_conflicts": "{ctx}: 'position_keyframes' cannot be combined with 'position'/'size' - use one or the other",
     "validation.position_keyframes_invalid": "{ctx}: 'position_keyframes' must be a non-empty list of {{at, position, size}} keyframes",
@@ -133,8 +133,8 @@ _EN: dict[str, str] = {
     "validation.position_keyframes_must_start_at_zero": "{ctx}: 'position_keyframes''s first keyframe must have 'at: 0'",
     "validation.position_keyframes_not_sorted": "{ctx}: 'position_keyframes' keyframes must have strictly increasing 'at' values",
     "validation.position_keyframes_out_of_bounds": (
-        "{ctx}: 'position_keyframes[{idx}]' ([{x:g}, {y:g}] {w:g}x{h:g}) falls outside "
-        "the project canvas ({width}x{height})"
+        "{ctx}: 'position_keyframes[{idx}]' ([{x:g}, {y:g}] {w:g}x{h:g}) falls wholly outside "
+        "the project canvas ({width}x{height}): nothing of it would show"
     ),
     "validation.crop_conflicts": "{ctx}: 'crop' cannot be combined with 'position'/'size'/'position_keyframes' - use one or the other",
     "validation.crop_invalid": "{ctx}: 'crop' must be a mapping with 'top'/'right'/'bottom'/'left'",
@@ -738,8 +738,8 @@ _ES: dict[str, str] = {
     "validation.colorspace_invalid": "project.colorspace debe ser mayor que 0, se recibió {colorspace}",
     "validation.pip_size_invalid": "{ctx}: position/size debe tener ancho y alto positivos, se recibió w={w:g} h={h:g}",
     "validation.pip_out_of_bounds": (
-        "{ctx}: position/size ([{x:g}, {y:g}] {w:g}x{h:g}) queda fuera "
-        "del lienzo del proyecto ({width}x{height})"
+        "{ctx}: position/size ([{x:g}, {y:g}] {w:g}x{h:g}) queda entero fuera "
+        "del lienzo del proyecto ({width}x{height}): no se vería nada"
     ),
     "validation.position_keyframes_conflicts": "{ctx}: 'position_keyframes' no se puede combinar con 'position'/'size' - usa uno u otro",
     "validation.position_keyframes_invalid": "{ctx}: 'position_keyframes' debe ser una lista no vacía de keyframes {{at, position, size}}",
@@ -747,8 +747,8 @@ _ES: dict[str, str] = {
     "validation.position_keyframes_must_start_at_zero": "{ctx}: el primer keyframe de 'position_keyframes' debe tener 'at: 0'",
     "validation.position_keyframes_not_sorted": "{ctx}: los keyframes de 'position_keyframes' deben tener valores 'at' estrictamente crecientes",
     "validation.position_keyframes_out_of_bounds": (
-        "{ctx}: 'position_keyframes[{idx}]' ([{x:g}, {y:g}] {w:g}x{h:g}) queda fuera "
-        "del lienzo del proyecto ({width}x{height})"
+        "{ctx}: 'position_keyframes[{idx}]' ([{x:g}, {y:g}] {w:g}x{h:g}) queda entero fuera "
+        "del lienzo del proyecto ({width}x{height}): no se vería nada"
     ),
     "validation.crop_conflicts": "{ctx}: 'crop' no se puede combinar con 'position'/'size'/'position_keyframes' - usa uno u otro",
     "validation.crop_invalid": "{ctx}: 'crop' debe ser un mapeo con 'top'/'right'/'bottom'/'left'",

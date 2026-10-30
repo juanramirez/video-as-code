@@ -201,8 +201,8 @@ required.
 | Key | Meaning |
 |---|---|
 | `crop` | Margins removed from the picture - `{top: 0, bottom: 316}`: any of `top`, `right`, `bottom`, `left`, in pixels of the source file - and the rest scaled to fill the frame. Not together with `position`/`size`/`position_keyframes`. |
-| `position`, `size` | Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. |
-| `position_keyframes` | Animated picture-in-picture: `[{at: 0, position: [x, y], size: [w, h]}, ...]`, first at `0`. Not together with `position`/`size`. |
+| `position`, `size` | Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it. |
+| `position_keyframes` | Animated picture-in-picture: `[{at: 0, position: [x, y], size: [w, h]}, ...]`, first at `0`. Each keyframe, like `position`/`size`, may run past the canvas's edges - a full-frame card sliding in from above starts at a negative `y`. Not together with `position`/`size`. |
 | `ken_burns_from`, `ken_burns_to` | Pan and zoom from one rectangle to another over the clip: `[x%, y%, w%, h%]` of the frame. Both or neither. |
 
 **Effects**

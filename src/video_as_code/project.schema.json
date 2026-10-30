@@ -1455,8 +1455,8 @@
      },
      "minItems": 2,
      "maxItems": 2,
-     "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels.",
-     "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels."
+     "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it.",
+     "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it."
     },
     "size": {
      "type": "array",
@@ -1465,8 +1465,8 @@
      },
      "minItems": 2,
      "maxItems": 2,
-     "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels.",
-     "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels."
+     "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it.",
+     "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it."
     },
     "position_keyframes": {
      "type": "array",
@@ -1501,8 +1501,8 @@
       }
      },
      "minItems": 1,
-     "description": "Animated picture-in-picture: `[{at: 0, position: [x, y], size: [w, h]}, ...]`, first at `0`. Not together with `position`/`size`.",
-     "markdownDescription": "Animated picture-in-picture: `[{at: 0, position: [x, y], size: [w, h]}, ...]`, first at `0`. Not together with `position`/`size`."
+     "description": "Animated picture-in-picture: `[{at: 0, position: [x, y], size: [w, h]}, ...]`, first at `0`. Each keyframe, like `position`/`size`, may run past the canvas's edges - a full-frame card sliding in from above starts at a negative `y`. Not together with `position`/`size`.",
+     "markdownDescription": "Animated picture-in-picture: `[{at: 0, position: [x, y], size: [w, h]}, ...]`, first at `0`. Each keyframe, like `position`/`size`, may run past the canvas's edges - a full-frame card sliding in from above starts at a negative `y`. Not together with `position`/`size`."
     },
     "ken_burns_from": {
      "type": "array",
@@ -5925,8 +5925,8 @@
        },
        "minItems": 2,
        "maxItems": 2,
-       "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels.",
-       "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels."
+       "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it.",
+       "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it."
       },
       "size": {
        "type": "array",
@@ -5935,8 +5935,8 @@
        },
        "minItems": 2,
        "maxItems": 2,
-       "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels.",
-       "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels."
+       "description": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it.",
+       "markdownDescription": "Picture-in-picture: `[x, y]` and `[w, h]` in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it."
       },
       "chroma_key": {
        "type": "string",
