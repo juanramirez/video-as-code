@@ -98,6 +98,8 @@ def test_derive_from_another_clip_follows_it(tmp_path: Path):
         (["{id: d, derive: {path: a.mp4, fps: 0}}"], "derive.fps"),
         (["{id: d, derive: {path: a.mp4, reverse: maybe}}"], "derive.reverse"),
         (["{id: d, derive: {path: a.mp4, intra: 1}}"], "derive.intra"),
+        (["{id: d, derive: {path: a.mp4, fps: 30, interpolate: yes please}}"], "derive.interpolate"),
+        (["{id: d, derive: {path: a.mp4, trim: [0, 1], interpolate: true}}"], "derive.fps"),
         (["{id: d, derive: {path: a.mp4, volume: -1}}"], "derive.volume"),
         (["{id: d, derive: {path: a.mp4, rotate: 45}}"], "derive.rotate"),
         (["{id: d, derive: {path: a.mp4, rotate: -90}}"], "derive.rotate"),
@@ -250,6 +252,39 @@ def test_derive_crop_scale_fps_on_a_silent_video(tmp_path: Path, assets_dir: Pat
     (video,) = info["streams"]  # no audio stream invented for a silent input
     assert (video["width"], video["height"]) == (100, 50)
     assert video["r_frame_rate"] == "10/1"
+
+
+def _frame_steps(path: Path) -> list[float]:
+    """How much each frame differs from the one before (mean absolute difference, grey)."""
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+                         capture_output=True, check=True).stdout
+    (video,) = [s for s in _probe(path)["streams"] if s["codec_type"] == "video"]
+    size = video["width"] * video["height"]
+    frames = [raw[i:i + size] for i in range(0, len(raw), size)]
+    return [sum(abs(x - y) for x, y in zip(a, b)) / size for a, b in zip(frames, frames[1:])]
+
+
+def test_derive_interpolate_makes_new_frames_instead_of_repeating_them(tmp_path: Path):
+    # a bar sweeping across at 25 fps, re-timed to 30: plain `fps` repeats a
+    # frame in every five (a step of 0); `interpolate` moves it every frame
+    moving = tmp_path / "moving.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=64x48:r=25:d=1", "-f", "lavfi", "-i",
+         "color=c=white:s=8x48:r=25:d=1", "-filter_complex", "[0][1]overlay=x='t*50':y=0",
+         "-c:v", "libx264", "-pix_fmt", "yuv420p", str(moving)],
+        check=True,
+    )
+    project = _project(tmp_path, [
+        f"{{id: plain, derive: {{path: {moving}, fps: 30}}}}",
+        f"{{id: smooth, derive: {{path: {moving}, fps: 30, interpolate: true}}}}",
+    ])
+    load_and_resolve(project)
+    clips = _bin(project)
+    assert clips["plain"].path != clips["smooth"].path
+    assert _probe(clips["smooth"].path)["streams"][0]["r_frame_rate"] == "30/1"
+    plain, smooth = _frame_steps(clips["plain"].path), _frame_steps(clips["smooth"].path)
+    assert sum(step < 0.5 for step in plain) >= 4
+    assert min(smooth[:-1]) > 0.5
 
 
 def test_derive_scale_to_another_shape_stretches_it(tmp_path: Path, assets_dir: Path):
