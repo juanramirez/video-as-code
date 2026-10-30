@@ -1009,8 +1009,13 @@
     "fps": {
      "type": "number",
      "exclusiveMinimum": 0,
-     "description": "Re-time to this frame rate.\n\nExample: `30`",
-     "markdownDescription": "Re-time to this frame rate.\n\nExample: `30`"
+     "description": "Re-time to this frame rate (frames dropped or repeated: a 25 fps video at 30 repeats one in five).\n\nExample: `30`",
+     "markdownDescription": "Re-time to this frame rate (frames dropped or repeated: a 25 fps video at 30 repeats one in five).\n\nExample: `30`"
+    },
+    "interpolate": {
+     "type": "boolean",
+     "description": "With `fps`: make the in-between frames by motion interpolation instead (ffmpeg's `minterpolate`), so a video at another frame rate doesn't judder. Slow: for short clips.\n\nExample: `true`",
+     "markdownDescription": "With `fps`: make the in-between frames by motion interpolation instead (ffmpeg's `minterpolate`), so a video at another frame rate doesn't judder. Slow: for short clips.\n\nExample: `true`"
     },
     "reverse": {
      "type": "boolean",

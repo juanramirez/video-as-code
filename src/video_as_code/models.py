@@ -115,6 +115,10 @@ class DeriveSpec:
     feather: Optional[int] = None  # px
     vignette: Optional[float] = None
     fps: Optional[float] = None
+    # `interpolate` (with `fps`): re-time by motion interpolation (ffmpeg's
+    # minterpolate) instead of dropping or repeating frames - a 25 fps video at
+    # 30 fps otherwise repeats one frame in five, a visible judder on slow motion
+    interpolate: bool = False
     reverse: bool = False
     volume: Optional[float] = None
     upscale: Optional[int] = None
