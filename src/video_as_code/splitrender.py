@@ -372,6 +372,25 @@ def producer_costs(root: ET.Element, base: Path) -> dict[str, float]:
     return costs
 
 
+def frame_rate(root: ET.Element) -> tuple[int, int]:
+    """The profile's frame rate as (num, den) - 30/1 if it says nothing."""
+    profile = root.find("profile")
+    if profile is None:
+        return 30, 1
+    return int(profile.get("frame_rate_num", 30)), int(profile.get("frame_rate_den", 1)) or 1
+
+
+def concat_list(parts: list[Path], segments: list["Segment"], fps: tuple[int, int]) -> str:
+    """The concat demuxer's list, each segment with its exact length
+    (frames / fps). Without it the demuxer takes each file's own duration,
+    which Matroska stores in milliseconds: a 10-frame segment at 30 fps is
+    0.333 s instead of 0.3333..., so every join pulls the rest of the
+    picture earlier - on a 567-segment render, 0.19 s against the sound by
+    the end (2026-11-04)."""
+    num, den = fps
+    return "".join(f"file '{p.resolve()}'\nduration {seg.frames * den / num:.9f}\n" for p, seg in zip(parts, segments))
+
+
 def baseline_mb(root: ET.Element) -> float:
     profile = root.find("profile")
     px = int(profile.get("width", 1920)) * int(profile.get("height", 1080)) if profile is not None else 1920 * 1080
@@ -639,12 +658,13 @@ def render(
 
         progress.phase("join")
         report(msg("split.concat"))
-        concat_list = tmp / "concat.txt"
-        # absolute paths: the concat demuxer resolves relative ones against the list's own directory
-        concat_list.write_text("".join(f"file '{p.resolve()}'\n" for p in parts), encoding="utf-8")
+        list_path = tmp / "concat.txt"
+        # absolute paths: the concat demuxer resolves relative ones against the list's own directory;
+        # each with its exact length (see concat_list)
+        list_path.write_text(concat_list(parts, segments, frame_rate(root)), encoding="utf-8")
         # picture from the segments (their own sound ignored), sound from the one-pass render
         run = subprocess.run(
-            ["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(concat_list), "-i", str(audio),
+            ["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(list_path), "-i", str(audio),
              "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest",
              "-movflags", "+faststart", str(output)],
             capture_output=True, text=True,
