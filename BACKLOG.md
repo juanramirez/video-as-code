@@ -106,6 +106,33 @@ plumbed in `xmlgen.py`/`models.py`. Roughly smallest to largest lift.
   inpainting model (LaMa did it well by hand for 2014/15: a mask over the
   digits, 1024 px windows), and ask; kept as a `derive:` operation too
   (`remove_date_stamp`, or a general `inpaint: {mask}`).
+  Lessons from rebuilding the 2018/19 video, where the measuring half was
+  done by hand (a per-shot script plus a test sheet):
+  - *How much a shot is enlarged* is output pixels per source pixel of
+    the crop actually shown, not of the whole original: a 1920x1080
+    video zoomed in to its middle half needs enlarging x1.8. Sort by
+    that factor; x1.5 and up was where the gain showed, below it hardly.
+  - *Videos too*: `upscale:` only takes stills and gifs, yet the worst
+    assets were 640x352 WhatsApp clips shown full screen (x3.2+). Upscale
+    a video frame by frame, but only the trimmed stretch the timeline
+    plays, re-encoded at the source's frame rate (one 16 s clip, 418
+    frames at x4: ~25 min on an integrated GPU).
+  - *Crop first, then upscale*: only the pixels that will show go through
+    the model - faster, and the result can be placed with a plain
+    `scale:`.
+  - *The model depends on the kind of source*: Real-ESRGAN's photo model
+    (x4plus) for photos, its video model (animevideov3) for video. The
+    video model turned faces in a small photo into dark blots; the photo
+    model made WhatsApp video frames look painted and invented detail.
+    A heavily compressed clip (an app's 1080x810 export) barely gained
+    from either: offer "keep the original" prominently.
+  - *Memory*: run the model with tiles (`-t 128`) and never beside a
+    render - on a 7 GB machine untiled x4 next to a melt render ran out
+    of memory and the OOM killer took everything. `upscale.py` runs it
+    untiled today.
+  - *A shot nobody can find* can still be cut out of the old edit itself
+    and enlarged; when the edit is already 1080p that only denoises a
+    little - say so in the sheet.
 
 ## Creative transitions beyond kdenlive's own set
 
