@@ -266,6 +266,11 @@ class Api:
         return bool(reply.get("items"))
 
 
+def _privacy_name(privacy: str) -> str:
+    """How YouTube calls it in the user's language ("unlisted" is "Oculto" in Spanish)."""
+    return msg(f"youtube.privacy_{privacy}")
+
+
 def _resource(spec: YouTubeSpec) -> dict:
     snippet = {"title": spec.title, "description": spec.description, "categoryId": spec.category}
     if spec.tags:
@@ -334,7 +339,7 @@ def publish(
     docstring); returns the video's id - None on a dry run, or when the
     user says no."""
     step = plan(spec, video, project_dir, replace)
-    report(msg(f"youtube.plan_{step.action}", title=spec.title, privacy=spec.privacy, path=video,
+    report(msg(f"youtube.plan_{step.action}", title=spec.title, privacy=_privacy_name(spec.privacy), path=video,
                mb=round(step.size / 2**20), id=step.video_id))
     for playlist in spec.playlists:
         report(msg("youtube.plan_playlist", playlist=playlist))
@@ -349,7 +354,7 @@ def publish(
         api.call("PUT", "videos", {"part": "snippet,status"}, {"id": video_id, **_resource(spec)})
         report(msg("youtube.updated", id=video_id))
     else:
-        question = msg("youtube.confirm", title=spec.title, channel=channel_title, privacy=spec.privacy)
+        question = msg("youtube.confirm", title=spec.title, channel=channel_title, privacy=_privacy_name(spec.privacy))
         if not yes and ask(question).strip().lower() not in ("y", "yes", "s", "si", "sí"):
             report(msg("youtube.cancelled"))
             return None
@@ -375,5 +380,5 @@ def publish(
     got = api.privacy_of(video_id)
     if spec.privacy != "private" and got == "private":
         # an API project Google hasn't audited: its uploads stay private
-        report(msg("youtube.locked_private", want=spec.privacy, url=STUDIO_URL.format(id=video_id)))
+        report(msg("youtube.locked_private", want=_privacy_name(spec.privacy), url=STUDIO_URL.format(id=video_id)))
     return video_id
