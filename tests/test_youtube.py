@@ -246,3 +246,12 @@ def test_privacy_is_said_as_youtube_says_it_in_that_language(tmp_path: Path, yt:
     finally:
         i18n.set_locale(original)
     assert said[0].endswith(shown)
+
+
+def test_with_no_terminal_to_ask_in_nothing_is_uploaded(tmp_path: Path, yt: FakeYouTube):
+    def no_terminal(question: str) -> str:
+        raise EOFError
+
+    said = []
+    assert youtube.publish(SPEC, _video(tmp_path), tmp_path, said.append, ask=no_terminal) is None
+    assert not yt.uploads and "--yes" in said[-1]
