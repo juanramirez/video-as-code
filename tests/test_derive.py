@@ -624,3 +624,103 @@ def test_derive_fit_card_on_a_video_keeps_its_shape_on_every_frame(tmp_path: Pat
         assert px[o + 22 * w + 72] < 200                         # outside the rounded corner
         assert 100 < px[o + 100 * w + 3] < 160                   # the dimmed copy
         assert px[o + 100 * w + 68] < px[o + 100 * w + 3] - 8    # the shadow
+
+
+class _Overlap:
+    """A stand-in for derive.generate that takes a while and notes how many
+    ran at once, and in what order each started and finished."""
+
+    def __init__(self, seconds: float = 0.2):
+        import threading
+
+        self.seconds, self.lock = seconds, threading.Lock()
+        self.running = self.most = 0
+        self.events: list[str] = []
+
+    def __call__(self, clip_id, spec, input_path, output, on_progress=None):
+        import time
+
+        with self.lock:
+            self.running += 1
+            self.most = max(self.most, self.running)
+            self.events.append(f"start {clip_id}")
+        time.sleep(self.seconds)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"x")
+        with self.lock:
+            self.running -= 1
+            self.events.append(f"end {clip_id}")
+
+
+def _cuts(tmp_path: Path, assets_dir: Path, n: int, extra: str = "") -> list:
+    entries = [f"{{id: c{i}, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0, {i + 1}]{extra}}}}}" for i in range(n)]
+    return load_yaml(_project(tmp_path, entries)).bin
+
+
+def test_ensure_all_generates_several_at_once(tmp_path: Path, assets_dir: Path, monkeypatch):
+    fake = _Overlap()
+    monkeypatch.setattr(derive, "generate", fake)
+    errors: list[str] = []
+    assert derive.ensure_all(_cuts(tmp_path, assets_dir, 4), tmp_path, errors, jobs=4) == ["c0", "c1", "c2", "c3"]
+    assert not errors and fake.most == 4
+
+
+def test_ensure_all_one_job_goes_one_at_a_time(tmp_path: Path, assets_dir: Path, monkeypatch):
+    fake = _Overlap(0.05)
+    monkeypatch.setattr(derive, "generate", fake)
+    derive.ensure_all(_cuts(tmp_path, assets_dir, 3), tmp_path, [], jobs=1)
+    assert fake.most == 1
+
+
+def test_ensure_all_a_clip_waits_for_its_derived_input(tmp_path: Path, assets_dir: Path, monkeypatch):
+    fake = _Overlap()
+    monkeypatch.setattr(derive, "generate", fake)
+    project = _project(
+        tmp_path,
+        [
+            "{id: loud, derive: {clip: cut, volume: 2}}",
+            f"{{id: cut, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0, 1]}}}}",
+            f"{{id: other, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0, 2]}}}}",
+        ],
+    )
+    assert derive.ensure_all(load_yaml(project).bin, tmp_path, [], jobs=4) == ["cut", "loud", "other"]
+    assert fake.events.index("start loud") > fake.events.index("end cut")
+    assert fake.most == 2  # "other" alongside, not waiting
+
+
+def test_ensure_all_upscales_one_at_a_time(tmp_path: Path, assets_dir: Path, monkeypatch):
+    fake = _Overlap(0.05)
+    monkeypatch.setattr(derive, "generate", fake)
+    project = _project(
+        tmp_path, [f"{{id: u{i}, derive: {{path: {assets_dir / 'photo.png'}, upscale: 4}}}}" for i in range(3)]
+    )
+    derive.ensure_all(load_yaml(project).bin, tmp_path, [], jobs=4)
+    assert fake.most == 1
+
+
+def test_ensure_all_reports_errors_in_bin_order(tmp_path: Path, assets_dir: Path, monkeypatch):
+    def failing(clip_id, *args, **kwargs):
+        raise derive.DeriveError(f"broke {clip_id}")
+
+    monkeypatch.setattr(derive, "generate", failing)
+    errors: list[str] = []
+    assert derive.ensure_all(_cuts(tmp_path, assets_dir, 3), tmp_path, errors, jobs=3) == []
+    assert errors == ["broke c0", "broke c1", "broke c2"]
+
+
+def test_default_jobs_fit_in_the_memory_available(monkeypatch):
+    monkeypatch.setattr(derive.os, "cpu_count", lambda: 8)
+    monkeypatch.setattr(derive, "_available_memory", lambda: 100 * derive.JOB_MEMORY)
+    assert derive.default_jobs() == derive.JOBS  # no more than JOBS
+    monkeypatch.setattr(derive, "_available_memory", lambda: int(2.5 * derive.JOB_MEMORY))
+    assert derive.default_jobs() == 2
+    monkeypatch.setattr(derive, "_available_memory", lambda: derive.JOB_MEMORY // 2)
+    assert derive.default_jobs() == 1  # always one, however little there is
+    monkeypatch.setattr(derive, "_available_memory", lambda: None)
+    monkeypatch.setattr(derive.os, "cpu_count", lambda: 2)
+    assert derive.default_jobs() == 2  # nor more than the cores
+
+
+def test_available_memory_reads_meminfo():
+    free = derive._available_memory()
+    assert free is None or free > 0
