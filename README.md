@@ -84,7 +84,11 @@ starts), and each melt runs in a memory-capped `systemd-run --user
 --scope` when available, so a wrong estimate kills that melt, not the
 session. Every segment's render is cached in `.render_cache/` next to the
 YAML, keyed by its trimmed project and the files it reads: after an edit
-only the segments it touches are rendered again.
+only the segments it touches are rendered again. Each segment's frames and
+the sound's length are checked: one that comes out short (frames lost with
+the machine overloaded) is rendered once more, and a second short one stops
+the render rather than join a video with frames missing; a segment cached
+short is rendered again.
 
 `video-as-code import` recognizes everything this generator knows how to produce
 (video/audio tracks, trimmed clips, fade to/from black, volume fades,
