@@ -562,7 +562,7 @@ def _parse_derive(
         errors.append(msg("validation.derive_not_a_map", id=clip_id, value=data))
         return None
     n_errors = len(errors)
-    known = {"source", "path", "clip", "motion", "rotate", "trim", "cut", "crop", "scale", "devignette", "fit", "feather", "vignette", "fps", "reverse", "volume", "upscale", "intra", "openshot"}
+    known = {"source", "path", "clip", "motion", "rotate", "trim", "cut", "crop", "scale", "devignette", "fit", "feather", "vignette", "fps", "interpolate", "reverse", "volume", "upscale", "intra", "openshot"}
     unknown = set(data) - known
     if unknown:
         errors.append(msg("validation.derive_unknown_keys", id=clip_id, keys=", ".join(sorted(unknown))))
@@ -665,6 +665,11 @@ def _parse_derive(
     fps = data.get("fps")
     if fps is not None and (isinstance(fps, bool) or not isinstance(fps, (int, float)) or fps <= 0):
         errors.append(msg("validation.derive_fps_invalid", id=clip_id, value=fps))
+    interpolate = data.get("interpolate", False)
+    if not isinstance(interpolate, bool):
+        errors.append(msg("validation.derive_interpolate_invalid", id=clip_id, value=interpolate))
+    elif interpolate and fps is None:
+        errors.append(msg("validation.derive_interpolate_needs_fps", id=clip_id))
     reverse = data.get("reverse", False)
     if not isinstance(reverse, bool):
         errors.append(msg("validation.derive_reverse_invalid", id=clip_id, value=reverse))
@@ -712,6 +717,7 @@ def _parse_derive(
         feather=feather,
         vignette=float(vignette) if vignette is not None else None,
         fps=float(fps) if fps is not None else None,
+        interpolate=interpolate,
         reverse=reverse,
         volume=float(volume) if volume is not None else None,
         upscale=int(upscale) if upscale is not None else None,

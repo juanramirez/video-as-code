@@ -57,6 +57,8 @@ def spec_key(spec: DeriveSpec, input_ref: str) -> str:
         canonical["cut"] = [list(r) for r in spec.cut]
     if spec.upscale:
         canonical["upscale"] = spec.upscale
+    if spec.interpolate:
+        canonical["interpolate"] = True
     if spec.openshot:
         canonical["openshot"] = list(spec.openshot)
     if spec.intra:
@@ -392,7 +394,11 @@ def build_command(
         # the same lens falloff as devignette's, applied forward
         angle = math.acos(spec.vignette ** 0.25)
         vf.append(f"vignette=angle={angle:.6f}")
-    if spec.fps:
+    if spec.fps and spec.interpolate:
+        # motion-compensated (bidirectional, overlapped blocks): new frames in
+        # between instead of repeated ones
+        vf.append(f"minterpolate=fps={spec.fps:g}:mi_mode=mci:mc_mode=aobmc:me_mode=bidir:vsbmc=1")
+    elif spec.fps:
         vf.append(f"fps={spec.fps:g}")
     if spec.reverse:
         vf.append("reverse")

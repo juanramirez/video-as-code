@@ -296,6 +296,7 @@ def build(reference: str) -> dict:
         "feather": _number(1, integer=True),
         "vignette": _number(above=0, below=1),
         "fps": _number(above=0),
+        "interpolate": BOOL,
         "reverse": BOOL,
         "volume": _number(0),
         "intra": BOOL,
