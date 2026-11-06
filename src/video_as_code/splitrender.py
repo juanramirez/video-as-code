@@ -588,15 +588,13 @@ def render(
             audio_xml = tmp / "audio.kdenlive"
             ET.ElementTree(audio_root).write(audio_xml, encoding="utf-8", xml_declaration=True)
             audio_log = (tmp / "audio.log").open("wb")
-            audio_proc = subprocess.Popen(
-                _melt_command(
-                    melt,
-                    [str(audio_xml), "-consumer", f"avformat:{tmp / 'audio.wav'}", "vn=1", "acodec=pcm_s16le",
-                     f"in={first_frame}", f"out={last_frame}"],
-                    cap(1024),
-                ),
-                stdout=audio_log, stderr=subprocess.STDOUT, env=env,
+            audio_cmd = _melt_command(
+                melt,
+                [str(audio_xml), "-consumer", f"avformat:{tmp / 'audio.wav'}", "vn=1", "acodec=pcm_s16le",
+                 f"in={first_frame}", f"out={last_frame}"],
+                cap(1024),
             )
+            audio_proc = subprocess.Popen(audio_cmd, stdout=audio_log, stderr=subprocess.STDOUT, env=env)
 
         parts = []
         try:
@@ -606,7 +604,8 @@ def render(
                 key = segment_key(seg_root, base, [f"{seg.first}-{seg.last}", " ".join(_ENCODE)])
                 parts.append(part)
                 done_before = sum(s.frames for s in segments[:n - 1])
-                if part.exists() and _read(part.with_suffix(".key")) == key:
+                # (a segment cached short - before lengths were checked - is rendered again)
+                if part.exists() and _read(part.with_suffix(".key")) == key and not _short(video_frames(part), seg.frames):
                     if report_cached:
                         report(msg("split.segment_cached", n=n, total=len(segments), first=seg.first, last=seg.last))
                     progress.update(done_before + seg.frames, n, len(segments))
@@ -616,18 +615,27 @@ def render(
                 seg_xml = tmp / "segment.kdenlive"
                 ET.ElementTree(seg_root).write(seg_xml, encoding="utf-8", xml_declaration=True)
                 rendered_part = tmp / part.name
-                returncode, stderr = _run_melt_with_progress(
-                    _melt_command(
-                        melt,
-                        [str(seg_xml), "-consumer", f"avformat:{rendered_part}", *_ENCODE, f"in={seg.first}", f"out={seg.last}"],
-                        cap(seg.est_mb),
-                    ),
-                    env,
-                    lambda frame: progress.update(done_before + max(0, min(frame - seg.first, seg.frames)), n, len(segments)),
-                )
-                if returncode != 0 or not rendered_part.exists():
-                    detail = (stderr.strip().splitlines() or [f"exit {returncode}"])[-1]
-                    raise SplitRenderError(msg("split.segment_failed", first=seg.first, last=seg.last, detail=detail))
+                # a segment that comes out short (frames lost with the machine overloaded) is rendered
+                # once more; still short, the render stops rather than join a video with frames missing
+                for attempt in (1, 2):
+                    returncode, stderr = _run_melt_with_progress(
+                        _melt_command(
+                            melt,
+                            [str(seg_xml), "-consumer", f"avformat:{rendered_part}", *_ENCODE, f"in={seg.first}", f"out={seg.last}"],
+                            cap(seg.est_mb),
+                        ),
+                        env,
+                        lambda frame: progress.update(done_before + max(0, min(frame - seg.first, seg.frames)), n, len(segments)),
+                    )
+                    if returncode != 0 or not rendered_part.exists():
+                        detail = (stderr.strip().splitlines() or [f"exit {returncode}"])[-1]
+                        raise SplitRenderError(msg("split.segment_failed", first=seg.first, last=seg.last, detail=detail))
+                    got = video_frames(rendered_part)
+                    if not _short(got, seg.frames):
+                        break
+                    if attempt == 2:
+                        raise SplitRenderError(msg("split.segment_short", first=seg.first, last=seg.last, got=got, want=seg.frames))
+                    report(msg("split.segment_retry", first=seg.first, last=seg.last, got=got, want=seg.frames))
                 # only a finished segment enters the cache
                 shutil.move(str(rendered_part), part)
                 part.with_suffix(".key").write_text(key, encoding="utf-8")
@@ -646,6 +654,18 @@ def render(
                 detail = (tmp / "audio.log").read_text(errors="replace").strip()[-300:]
                 progress.finish("failed")
                 raise SplitRenderError(msg("split.audio_failed", detail=detail))
+            # the join's -shortest would cut the picture to a short sound: rendered once more, then an error
+            num, den = frame_rate(root)
+            wanted_s = (frames - 0.5) * den / num  # (half a frame's leeway for the audio's own rounding)
+            got_s = audio_seconds(tmp / "audio.wav")
+            if got_s is not None and got_s < wanted_s:
+                report(msg("split.audio_retry", got=round(got_s, 3), want=round(frames * den / num, 3)))
+                with (tmp / "audio.log").open("wb") as again:
+                    subprocess.run(audio_cmd, stdout=again, stderr=subprocess.STDOUT, env=env)
+                got_s = audio_seconds(tmp / "audio.wav")
+                if got_s is None or got_s < wanted_s:
+                    progress.finish("failed")
+                    raise SplitRenderError(msg("split.audio_short", got=got_s, want=round(frames * den / num, 3)))
             shutil.move(str(tmp / "audio.wav"), audio)
             audio.with_suffix(".key").write_text(audio_key, encoding="utf-8")
 
@@ -674,6 +694,37 @@ def render(
             raise SplitRenderError(msg("split.concat_failed", detail=run.stderr.strip()[-300:]))
     progress.finish()
     return segments
+
+
+def video_frames(path: Path) -> Optional[int]:
+    """How many frames `path`'s picture has (ffprobe, counting packets);
+    None if it can't tell."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-count_packets", "-select_streams", "v:0", "-show_entries",
+             "stream=nb_read_packets", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=120,
+        ).stdout.strip()
+        return int(out)
+    except (ValueError, subprocess.SubprocessError, OSError):
+        return None
+
+
+def audio_seconds(path: Path) -> Optional[float]:
+    """How long `path`'s sound lasts (ffprobe); None if it can't tell."""
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=120,
+        ).stdout.strip()
+        return float(out)
+    except (ValueError, subprocess.SubprocessError, OSError):
+        return None
+
+
+def _short(frames: Optional[int], wanted: int) -> bool:
+    # (only short is wrong: a longer segment is cut to its length when joined - concat_list)
+    return frames is not None and frames < wanted
 
 
 def _read(path: Path) -> Optional[str]:

@@ -173,6 +173,98 @@ timeline:
     assert _frames(output) == 75
 
 
+@pytest.fixture
+def split_project(tmp_path: Path, assets_dir: Path, melt, monkeypatch) -> Path:
+    """The end-to-end test's project (3 s, 8 segments at --max-mem 1), with the real melt."""
+    exe, extra_env = melt
+    monkeypatch.setattr(probe, "find_melt", lambda: exe)
+    for k, v in extra_env.items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.setenv("VIDEO_AS_CODE_NO_SCOPE", "1")
+    monkeypatch.setattr(splitrender, "PROGRESS_FILE", tmp_path / "render-progress.json")
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - {{id: photo, path: {assets_dir / "photo.png"}}}
+  - {{id: clip, path: {assets_dir / "clip.mp4"}}}
+  - {{id: tone, path: {assets_dir / "tone.mp3"}}}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: photo, start: 0, duration: 1}}
+        - {{clip: clip, start: 1, source_in: 0, source_out: 2}}
+    - type: audio
+      clips:
+        - {{clip: tone, start: 0, source_in: 0, source_out: 3}}
+""",
+        encoding="utf-8",
+    )
+    return yaml_path
+
+
+def _render_split(yaml_path: Path) -> int:
+    return cli.main(["render", str(yaml_path), "-o", str(yaml_path.parent / "out.mp4"), "--split", "--max-mem", "1"])
+
+
+def _short_once(monkeypatch, name: str, short_value, times: int = 1) -> list[Path]:
+    """splitrender.<name> (video_frames / audio_seconds) reports `short_value`
+    for the first `times` files measured, then the truth; returns those files."""
+    real, seen = getattr(splitrender, name), []
+
+    def measure(path: Path):
+        if len(seen) < times:
+            seen.append(path)
+            return short_value
+        return real(path)
+
+    monkeypatch.setattr(splitrender, name, measure)
+    return seen
+
+
+def test_short_only_below_the_frames_wanted():
+    assert splitrender._short(9, 10) and not splitrender._short(10, 10) and not splitrender._short(11, 10)
+    assert not splitrender._short(None, 10)  # (unmeasurable: not taken as short)
+
+
+def test_a_segment_that_comes_out_short_is_rendered_again(split_project: Path, monkeypatch, capsys):
+    _short_once(monkeypatch, "video_frames", 3)
+    assert _render_split(split_project) == 0
+    assert _frames(split_project.parent / "out.mp4") == 75
+    assert "came out short (3 of" in capsys.readouterr().err
+
+
+def test_a_segment_short_twice_stops_the_render(split_project: Path, monkeypatch, capsys):
+    _short_once(monkeypatch, "video_frames", 3, times=2)
+    assert _render_split(split_project) != 0
+    assert "short twice" in capsys.readouterr().err
+    assert not list((split_project.parent / ".render_cache").rglob("split_000000_*.mkv"))  # nothing short cached
+
+
+def test_a_segment_cached_short_is_rendered_again(split_project: Path, monkeypatch, capsys):
+    assert _render_split(split_project) == 0
+    capsys.readouterr()
+    _short_once(monkeypatch, "video_frames", 3)  # the first cached segment, as if it had been cached short
+    assert _render_split(split_project) == 0
+    assert capsys.readouterr().err.count("unchanged") == 8  # 7 segments + the sound; the short one rendered again
+    assert _frames(split_project.parent / "out.mp4") == 75
+
+
+def test_a_sound_that_comes_out_short_is_rendered_again(split_project: Path, monkeypatch, capsys):
+    _short_once(monkeypatch, "audio_seconds", 2.0)
+    assert _render_split(split_project) == 0
+    assert _frames(split_project.parent / "out.mp4") == 75  # -shortest didn't cut the picture to 2 s
+    assert "sound came out short (2.0 s of 3.0 s)" in capsys.readouterr().err
+
+
+def test_a_sound_short_twice_stops_the_render(split_project: Path, monkeypatch, capsys):
+    _short_once(monkeypatch, "audio_seconds", 2.0, times=2)
+    assert _render_split(split_project) != 0
+    assert "sound came out short twice" in capsys.readouterr().err
+
+
 def test_melt_progress_reaches_the_callback():
     # melt reports "Current Frame: N, percentage: P" on stderr, \r-separated
     script = (
