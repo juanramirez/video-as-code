@@ -355,9 +355,15 @@ def publish(
         report(msg("youtube.updated", id=video_id))
     else:
         question = msg("youtube.confirm", title=spec.title, channel=channel_title, privacy=_privacy_name(spec.privacy))
-        if not yes and ask(question).strip().lower() not in ("y", "yes", "s", "si", "sí"):
-            report(msg("youtube.cancelled"))
-            return None
+        if not yes:
+            try:
+                answer = ask(question)
+            except EOFError:  # (no terminal to ask in: nothing uploaded without --yes)
+                report(msg("youtube.cannot_ask"))
+                return None
+            if answer.strip().lower() not in ("y", "yes", "s", "si", "sí"):
+                report(msg("youtube.cancelled"))
+                return None
         shown = [-1]
 
         def progress(sent: int, total: int) -> None:
