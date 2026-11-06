@@ -209,6 +209,35 @@ def test_fetch_records_files_already_on_disk(tmp_path: Path, monkeypatch):
     assert _lock(tmp_path)["a.jpg"]["sha256"] == hashlib.sha256(b"AAA").hexdigest()
 
 
+def test_fetch_records_the_album_item_of_a_file_put_there_by_hand(tmp_path: Path, monkeypatch):
+    album = FakeAlbum({"a.jpg": b"AAA"})
+    album.install(monkeypatch)
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "a.jpg").write_bytes(b"AAA")
+    project = _project(tmp_path, ["a.jpg"])
+    result = fetch.fetch(project)
+    assert result.renamed == ["a.jpg"] and album.downloads == 0
+    assert _lock(tmp_path)["a.jpg"] == {
+        "media_id": "m0", "size": 3, "sha256": hashlib.sha256(b"AAA").hexdigest(), "taken": "1970-01-01T00:00:00",
+    }
+    assert (tmp_path / "assets" / "19700101_c0.jpg").read_bytes() == b"AAA"
+    assert not (tmp_path / "assets" / "a.jpg").exists()
+    album.listings = album.lookups = 0
+    assert fetch.fetch(project).up_to_date == ["a.jpg"]
+    assert (album.listings, album.lookups) == (0, 0)
+
+
+def test_fetch_keeps_a_file_put_there_by_hand_when_the_album_cant_be_listed(tmp_path: Path, monkeypatch):
+    def broken(url, on_progress=None):
+        raise gphotos.GPhotosError("offline")
+
+    monkeypatch.setattr(gphotos, "list_album", broken)
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "assets" / "a.jpg").write_bytes(b"AAA")
+    assert fetch.fetch(_project(tmp_path, ["a.jpg"])).up_to_date == ["a.jpg"]
+    assert "media_id" not in _lock(tmp_path)["a.jpg"]
+
+
 def test_fetch_reports_names_missing_from_the_album(tmp_path: Path, monkeypatch):
     FakeAlbum({"a.jpg": b"AAA"}).install(monkeypatch)
     with pytest.raises(fetch.FetchError) as exc:

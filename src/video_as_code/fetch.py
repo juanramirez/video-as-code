@@ -356,7 +356,9 @@ def _download(
     lock predates it. A file that's already on disk under another name
     (its bin id changed, or it was fetched before its date was known) is
     renamed - or copied, if that other name is still wanted too - rather
-    than downloaded again."""
+    than downloaded again. One put there by hand gets its album item
+    recorded (media_id, taken) - and so its dated name - if the album has
+    an item by that name."""
     entries = sources_lock.read(base_dir)
     index = _AlbumIndex(doc.project.album_url, base_dir / _NAMES_CACHE, report, doc.project.album_name)
 
@@ -375,25 +377,38 @@ def _download(
                 break  # no album: the dates stay unknown; the jobs below report it
             if item is not None:
                 entries[name] = {**entry, "taken": sources_lock.taken_local(item.taken_ms, item.tz_offset_ms)}
+
+    def move(name: str, existing: Path, dest: Path) -> None:
+        # (recomputed: a download earlier in this run may have just
+        # settled another job's date, and with it its local name)
+        if existing in {dest_of(*job) for job in jobs}:
+            shutil.copy2(existing, dest)
+        else:
+            existing.replace(dest)
+        report(msg("fetch.renamed", old=existing.name, new=dest.name))
+        result.renamed.append(name)
+
     failed: dict[str, str] = {}
     for n, (name, clip_id, override) in enumerate(jobs, start=1):
         entry = entries.get(name) or {}
         dest = dest_of(name, clip_id, override)
         if dest.exists() and _matches(dest, entry, verify):
             if not entry.get("sha256"):  # on disk before the lock knew it: record it
-                entries[name] = {**entry, "size": dest.stat().st_size, "sha256": gphotos.sha256_of(dest)}
+                entry = entries[name] = {**entry, "size": dest.stat().st_size, "sha256": gphotos.sha256_of(dest)}
+            if not entry.get("media_id"):  # and which album item it is, so it can be had again from there
+                item = _find_quietly(index, name)
+                if item is not None:
+                    taken = sources_lock.taken_local(item.taken_ms, item.tz_offset_ms)
+                    entries[name] = {**entry, "media_id": item.media_id, "taken": taken}
+                    dated = dest_of(name, clip_id, override)  # now that the date is known
+                    if dated != dest and not dated.exists():
+                        move(name, dest, dated)
+                        continue
             result.up_to_date.append(name)
             continue
         existing = _local_copy(sources_root, name, entry, dest)
         if existing is not None:
-            # (recomputed: a download earlier in this run may have just
-            # settled another job's date, and with it its local name)
-            if existing in {dest_of(*job) for job in jobs}:
-                shutil.copy2(existing, dest)
-            else:
-                existing.replace(dest)
-            report(msg("fetch.renamed", old=existing.name, new=dest.name))
-            result.renamed.append(name)
+            move(name, existing, dest)
             continue
         if name in failed:
             continue  # another clip with the same source already failed it
@@ -526,6 +541,16 @@ def _local_copy(sources_root: Path, name: str, entry: dict, dest: Path) -> Optio
         if gphotos.sha256_of(path) == entry["sha256"]:
             return path
     return None
+
+
+def _find_quietly(index: _AlbumIndex, name: str) -> Optional[gphotos.AlbumItem]:
+    """The album item `name` names, or None if it isn't there or the album
+    can't be listed - for a file that's already on disk, which needs
+    neither."""
+    try:
+        return index.find(name)
+    except gphotos.GPhotosError:
+        return None
 
 
 def _matches(path: Path, entry: dict, verify: bool) -> bool:
