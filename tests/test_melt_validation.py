@@ -1690,6 +1690,64 @@ timeline:
     assert late[2] > 250 and late[3] > 170, f"expected the PiP box near the bottom-right near the end, got {late}"
 
 
+def test_position_keyframes_slide_a_picture_in_from_off_the_canvas(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
+    """A picture may start (or end) partly past the canvas's edges: a full-
+    frame blue card sliding down from y=-180 to y=120 shows only its part on
+    the canvas - a blue band at the top first, the lower half later - which
+    is how a full-frame title card slides in from above."""
+    bg = tmp_path / "bg.png"
+    fg = tmp_path / "fg.png"
+    for path, colour in ((bg, "red"), (fg, "blue")):
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", f"color=c={colour}:size=320x240", "-frames:v", "1", str(path)],
+            check=True,
+        )
+    yaml_path = tmp_path / "project.yaml"
+    yaml_path.write_text(
+        f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: bg
+    path: {bg}
+  - id: fg
+    path: {fg}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: bg, start: 0, duration: 2}}
+    - type: video
+      clips:
+        - clip: fg
+          start: 0
+          duration: 2
+          position_keyframes:
+            - {{at: 0, position: [0, -180], size: [320, 240]}}
+            - {{at: 1, position: [0, 120], size: [320, 240]}}
+""",
+        encoding="utf-8",
+    )
+    kdenlive_path = tmp_path / "project.kdenlive"
+    xmlgen.write(load_and_resolve(yaml_path), kdenlive_path)
+    rendered = tmp_path / "rendered.mp4"
+    result = _run_melt(melt_with_qtblend, [str(kdenlive_path), "-consumer", f"avformat:{rendered}"])
+    _assert_no_fatal_load_error(result)
+
+    def blue_rows(t: float) -> tuple[int, int]:
+        data = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(t), "-i", str(rendered), "-frames:v", "1",
+             "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            capture_output=True, timeout=30, check=True,
+        ).stdout
+        rows = [y for y in range(240) if data[(y * 320 + 160) * 3 + 2] > 150 and data[(y * 320 + 160) * 3] < 100]
+        return min(rows), max(rows)
+
+    top, bottom = blue_rows(0.0)
+    assert top <= 2 and 50 <= bottom <= 70, f"expected a ~60 px blue band at the top at first, got rows {top}-{bottom}"
+    top, bottom = blue_rows(1.5)
+    assert 110 <= top <= 130 and bottom >= 237, f"expected blue from ~120 down at the end, got rows {top}-{bottom}"
+
+
 def test_ken_burns_produces_a_real_pan_zoom(tmp_path: Path, assets_dir: Path, melt_with_qtblend):
     """Empirical check for `ken_burns_from:`/`ken_burns_to:` (v0.6's
     headline feature): a single-clip `affine` filter with a keyframed
