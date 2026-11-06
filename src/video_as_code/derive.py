@@ -550,6 +550,7 @@ def generate(
     input_path: Path,
     output: Path,
     on_progress: Optional[Callable[[str], None]] = None,
+    owner: Optional[str] = None,
 ) -> None:
     """Generates `output` from `input_path` in up to four passes - a
     motion photo's video taken out first (`motion`), then `trim` +
@@ -558,7 +559,11 @@ def generate(
     (Real-ESRGAN) - into a temporary file next to `output`, renamed into
     place only once complete (an interrupted run never leaves a file that
     looks finished). Then records the input's identity for is_current and
-    removes this clip's older generations (other spec hashes)."""
+    removes this clip's older generations (other spec hashes) - only those
+    `owner` (the project file that asked for it) made: several YAMLs
+    sharing a sources folder (a video's variants) can each have a clip by
+    that id, and would otherwise delete each other's. Generations recorded
+    with no owner (made before owners were) go as before."""
     if not probe.ffmpeg_available():
         raise DeriveError(msg("derive.ffmpeg_unavailable", id=clip_id))
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -610,15 +615,29 @@ def generate(
             path.unlink(missing_ok=True)
     tmp.replace(output)
     _sidecar(output).write_text(
-        json.dumps({"input": input_path.name, **_identity(input_path), "sha256": _sha256(input_path)}),
+        json.dumps({"input": input_path.name, **_identity(input_path), "sha256": _sha256(input_path),
+                    **({"project": owner} if owner else {})}),
         encoding="utf-8",
     )
     # (matched on the exact "<id>-<10 hex>." shape, so clip "a" never
     # touches clip "a-b"'s files)
     own = re.compile(rf"{re.escape(clip_id)}-[0-9a-f]{{10}}\.")
     for old in output.parent.iterdir():
-        if own.match(old.name) and old.name not in (output.name, _sidecar(output).name):
+        if own.match(old.name) and old.name not in (output.name, _sidecar(output).name) and _made_by(old, owner):
             old.unlink(missing_ok=True)
+
+
+def _made_by(path: Path, owner: Optional[str]) -> bool:
+    """Whether `path` (a generation, or its sidecar) may be replaced by
+    `owner`'s: it was made by that project, or by no one in particular."""
+    if owner is None:
+        return True
+    sidecar = path if path.name.endswith(".input.json") else _sidecar(path)
+    try:
+        made_by = json.loads(sidecar.read_text(encoding="utf-8")).get("project")
+    except (OSError, ValueError):
+        return True  # (no sidecar, or unreadable: as before)
+    return made_by in (None, owner)
 
 
 # derived clips generated at once, at most: ffmpeg's motion interpolation
@@ -664,6 +683,7 @@ def ensure_all(
     on_progress: Optional[Callable[[str], None]] = None,
     locked_sha256: Optional[dict[str, str]] = None,
     jobs: Optional[int] = None,
+    owner: Optional[str] = None,
 ) -> list[str]:
     """Generates every derived clip whose file is missing or stale, up to
     `jobs` (default_jobs()) at once - inputs first (a `clip:` input may
@@ -672,7 +692,8 @@ def ensure_all(
     and so is an ffmpeg failure; everything else still gets generated.
     `locked_sha256` (album name -> sha256, from the lock) lets an output
     whose album input was pruned count as current (is_current_by_record).
-    Returns the ids generated, inputs first."""
+    `owner`: the project file asking, so it replaces only its own older
+    generations (see generate). Returns the ids generated, inputs first."""
     by_id = {c.id: c for c in bin_clips}
     order: list[BinClipSpec] = []  # the derived clips, each after its derived input
     seen: set[str] = set()
@@ -718,9 +739,9 @@ def ensure_all(
             try:
                 if spec.upscale or spec.openshot:
                     with _ONE_AT_A_TIME:
-                        generate(clip.id, spec, input_path, clip.path, on_progress)
+                        generate(clip.id, spec, input_path, clip.path, on_progress, owner)
                 else:
-                    generate(clip.id, spec, input_path, clip.path, on_progress)
+                    generate(clip.id, spec, input_path, clip.path, on_progress, owner)
             except DeriveError as exc:
                 clip_errors[clip.id] = str(exc)
                 return False

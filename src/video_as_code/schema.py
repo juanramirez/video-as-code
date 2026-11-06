@@ -1517,6 +1517,7 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
         doc.source_path.parent / doc.project.sources_dir,
         errors,
         locked_sha256={name: entry["sha256"] for name, entry in lock.items() if entry.get("sha256")},
+        owner=str(doc.source_path.resolve()),
     )
     bin_by_id: dict[str, BinClipSpec] = {}
     for clip in doc.bin:
