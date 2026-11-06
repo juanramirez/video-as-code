@@ -637,7 +637,7 @@ class _Overlap:
         self.running = self.most = 0
         self.events: list[str] = []
 
-    def __call__(self, clip_id, spec, input_path, output, on_progress=None):
+    def __call__(self, clip_id, spec, input_path, output, on_progress=None, owner=None):
         import time
 
         with self.lock:
@@ -724,3 +724,47 @@ def test_default_jobs_fit_in_the_memory_available(monkeypatch):
 def test_available_memory_reads_meminfo():
     free = derive._available_memory()
     assert free is None or free > 0
+
+
+def _variant(tmp_path: Path, name: str, assets_dir: Path, end: float) -> Path:
+    """A project file `name` in tmp_path - the same sources folder as the others - with a clip "cut"."""
+    path = tmp_path / name
+    path.write_text(
+        f"""
+project: {{id: {path.stem}, title: T, fps: 25, width: 320, height: 240, sources: {ALBUM}}}
+bin:
+  - {{id: cut, derive: {{path: {assets_dir / 'av.mp4'}, trim: [0, {end}]}}}}
+timeline:
+  tracks:
+    - type: video
+      clips: []
+""",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_variants_sharing_a_clip_id_keep_each_their_derived_file(tmp_path: Path, assets_dir: Path):
+    a, b = _variant(tmp_path, "a.yaml", assets_dir, 1.0), _variant(tmp_path, "b.yaml", assets_dir, 2.0)
+    load_and_resolve(a)
+    load_and_resolve(b)
+    a_cut, b_cut = _bin(a)["cut"].path, _bin(b)["cut"].path
+    assert a_cut != b_cut and a_cut.exists() and b_cut.exists()  # b didn't delete a's
+    assert json.loads(derive._sidecar(a_cut).read_text())["project"] == str(a.resolve())
+
+    _variant(tmp_path, "a.yaml", assets_dir, 1.5)  # a's spec changes: its old generation goes, b's stays
+    load_and_resolve(a)
+    assert not a_cut.exists() and _bin(a)["cut"].path.exists() and b_cut.exists()
+
+
+def test_a_generation_with_no_owner_is_replaced_as_before(tmp_path: Path, assets_dir: Path):
+    a = _variant(tmp_path, "a.yaml", assets_dir, 1.0)
+    load_and_resolve(a)
+    old = _bin(a)["cut"].path
+    sidecar = derive._sidecar(old)
+    record = json.loads(sidecar.read_text())
+    del record["project"]  # as made before owners were recorded
+    sidecar.write_text(json.dumps(record))
+    _variant(tmp_path, "b.yaml", assets_dir, 2.0)
+    load_and_resolve(tmp_path / "b.yaml")
+    assert not old.exists()

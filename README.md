@@ -411,7 +411,10 @@ input is on disk (and again only if the spec or the input itself
 changes), and `fetch` downloads album inputs and generates right away. An
 album item used only as a `derive:` input is still downloaded, under its
 own name; one that a plain `source:` clip also uses is the same file,
-downloaded once. The cache can always be deleted and rebuilt, so
+downloaded once. A new generation replaces the clip's older ones - only
+those its own YAML made: several YAMLs sharing a sources folder (a video's
+variants) can each have a clip by the same id without deleting each
+other's. The cache can always be deleted and rebuilt, so
 `<dir>/.derived/` belongs in your `.gitignore` too.
 
 Up to four derived clips are generated at once - fewer on a machine with

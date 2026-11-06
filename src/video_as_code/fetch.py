@@ -255,6 +255,7 @@ def fetch(
             on_generate=lambda clip_id: report(msg("fetch.deriving", id=clip_id)),
             on_progress=report,
             locked_sha256=locked,
+            owner=str(yaml_path.resolve()),
         )
         # a derive: clip whose album input is missing was already reported above
         not_downloaded = {
