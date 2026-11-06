@@ -187,3 +187,42 @@ def test_melt_progress_reaches_the_callback():
     assert seen and seen[-1] == 12 and seen == sorted(seen)
     assert tail.strip().endswith("oops at the end")
 
+
+
+# --- joining the segments ---------------------------------------------------------
+
+
+def test_the_concat_list_gives_each_segment_its_exact_length(tmp_path: Path):
+    parts = [tmp_path / "a.mkv", tmp_path / "b.mkv"]
+    text = splitrender.concat_list(parts, [Segment(0, 9, 1.0), Segment(10, 49, 1.0)], (30, 1))
+    assert text.splitlines() == [f"file '{parts[0].resolve()}'", "duration 0.333333333",
+                                 f"file '{parts[1].resolve()}'", "duration 1.333333333"]
+
+
+def test_frame_rate_comes_from_the_profile():
+    root = ET.fromstring('<mlt><profile frame_rate_num="30000" frame_rate_den="1001"/></mlt>')
+    assert splitrender.frame_rate(root) == (30000, 1001)
+    assert splitrender.frame_rate(ET.fromstring("<mlt/>")) == (30, 1)
+
+
+@pytest.mark.skipif(not probe.ffmpeg_available(), reason="needs ffmpeg")
+def test_many_short_segments_join_without_drifting(tmp_path: Path):
+    """Matroska keeps milliseconds: 30 segments of 10 frames at 30 fps
+    joined by their own durations would end 10 ms early (0.333 s each);
+    with the list's exact lengths the last frame is where it belongs."""
+    parts, segments = [], []
+    for k in range(30):
+        part = tmp_path / f"s{k:02d}.mkv"
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=32x18:rate=30", "-frames:v", "10",
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", str(part)], check=True, capture_output=True)
+        parts.append(part)
+        segments.append(Segment(k * 10, k * 10 + 9, 1.0))
+    listing = tmp_path / "concat.txt"
+    listing.write_text(splitrender.concat_list(parts, segments, (30, 1)), encoding="utf-8")
+    out = tmp_path / "joined.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", str(listing), "-c:v", "copy", str(out)],
+                   check=True, capture_output=True)
+    times = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "frame=pts_time", "-of", "csv=p=0",
+                            str(out)], capture_output=True, text=True).stdout.split()
+    assert len(times) == 300
+    assert abs(float(times[-1]) - 299 / 30) < 0.002  # (without the durations: 9.957 - 10 ms early)
