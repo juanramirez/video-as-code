@@ -122,6 +122,95 @@ def test_install_refuses_a_download_with_the_wrong_checksum(tmp_path: Path, monk
     assert not upscale.install_dir().exists()
 
 
+def _release_zip(with_binary: bool = True) -> bytes:
+    """A stand-in for the release archive: the binary (or not) in a folder, with its models."""
+    import zipfile
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        if with_binary:
+            zf.writestr("realesrgan-ncnn-vulkan-20220424-ubuntu/realesrgan-ncnn-vulkan", b"#!/bin/sh\n")
+        zf.writestr("realesrgan-ncnn-vulkan-20220424-ubuntu/models/realesrgan-x4plus.param", b"model")
+    return buf.getvalue()
+
+
+def _serve(monkeypatch, body: bytes) -> None:
+    import hashlib
+
+    monkeypatch.setattr(upscale, "can_install", lambda: True)
+    monkeypatch.setattr(upscale, "_RELEASE_SHA256", hashlib.sha256(body).hexdigest())
+    monkeypatch.setattr(upscale.urllib.request, "urlopen", lambda url, timeout: io.BytesIO(body))
+
+
+def test_install_unpacks_the_release_with_its_models(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    _serve(monkeypatch, _release_zip())
+    said = []
+    binary = upscale.install(said.append)
+    assert binary == upscale.install_dir() / "realesrgan-ncnn-vulkan"
+    assert binary.stat().st_mode & 0o111  # executable
+    assert (upscale.install_dir() / "models" / "realesrgan-x4plus.param").is_file()
+    assert any("realesrgan" in line for line in said)
+
+
+def test_install_replaces_an_earlier_one(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    stale = upscale.install_dir() / "leftover"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("old")
+    _serve(monkeypatch, _release_zip())
+    upscale.install()
+    assert not stale.exists() and (upscale.install_dir() / "realesrgan-ncnn-vulkan").is_file()
+
+
+def test_install_refuses_an_archive_without_the_binary(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    _serve(monkeypatch, _release_zip(with_binary=False))
+    with pytest.raises(upscale.UpscaleError):
+        upscale.install()
+    assert not upscale.install_dir().exists()
+
+
+def test_install_reports_a_failed_download(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.setattr(upscale, "can_install", lambda: True)
+
+    def offline(url, timeout):
+        raise OSError("no network")
+
+    monkeypatch.setattr(upscale.urllib.request, "urlopen", offline)
+    with pytest.raises(upscale.UpscaleError, match="no network"):
+        upscale.install()
+    assert not upscale.install_dir().exists()
+
+
+def test_install_only_where_there_is_a_build(monkeypatch):
+    monkeypatch.setattr(upscale.platform, "system", lambda: "Darwin")
+    assert not upscale.can_install()
+    with pytest.raises(upscale.UpscaleError, match="Darwin"):
+        upscale.install()
+    monkeypatch.setattr(upscale.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(upscale.platform, "machine", lambda: "x86_64")
+    assert upscale.can_install()
+
+
+def test_the_binary_is_looked_for_in_the_variable_then_installed_then_path(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.delenv("VIDEO_AS_CODE_REALESRGAN", raising=False)
+    monkeypatch.setattr(upscale.shutil, "which", lambda name: "/usr/bin/" + name)
+    assert upscale.find_binary() == Path("/usr/bin/realesrgan-ncnn-vulkan")
+    installed = upscale.install_dir() / "realesrgan-ncnn-vulkan"
+    installed.parent.mkdir(parents=True)
+    installed.write_text("")
+    assert upscale.find_binary() == installed
+    monkeypatch.setenv("VIDEO_AS_CODE_REALESRGAN", "~/my-esrgan")
+    assert upscale.find_binary() == Path("~/my-esrgan").expanduser()
+    monkeypatch.delenv("VIDEO_AS_CODE_REALESRGAN")
+    installed.unlink()
+    monkeypatch.setattr(upscale.shutil, "which", lambda name: None)
+    assert upscale.find_binary() is None
+
+
 def test_fetch_offers_to_install_it_and_respects_a_no(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(upscale, "find_binary", lambda: None)
     monkeypatch.setattr(upscale, "can_install", lambda: True)
