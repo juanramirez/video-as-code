@@ -725,6 +725,105 @@
    },
    "additionalProperties": false
   },
+  "youtube": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "title": {
+     "type": "string",
+     "description": "The video's title on YouTube (at most 100 characters).\n\nDefault: the project's `title`",
+     "markdownDescription": "The video's title on YouTube (at most 100 characters).\n\nDefault: the project's `title`"
+    },
+    "description": {
+     "type": "string",
+     "description": "Its description.",
+     "markdownDescription": "Its description."
+    },
+    "privacy": {
+     "enum": [
+      "private",
+      "unlisted",
+      "public"
+     ],
+     "description": "`private`, `unlisted` or `public`. Uploads from an API project Google hasn't audited stay private whatever this says: `publish` tells you, and how to change it by hand.\n\nDefault: `private`",
+     "markdownDescription": "`private`, `unlisted` or `public`. Uploads from an API project Google hasn't audited stay private whatever this says: `publish` tells you, and how to change it by hand.\n\nDefault: `private`"
+    },
+    "playlists": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     ],
+     "description": "Playlist ids (`PL...`) to add it to.",
+     "markdownDescription": "Playlist ids (`PL...`) to add it to."
+    },
+    "tags": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "array",
+       "items": {
+        "type": "string"
+       }
+      }
+     ],
+     "description": "Its tags.",
+     "markdownDescription": "Its tags."
+    },
+    "channel": {
+     "type": "string",
+     "description": "The channel id (`UC...`) it must go to: checked against the signed-in account, so nothing goes to the wrong one.",
+     "markdownDescription": "The channel id (`UC...`) it must go to: checked against the signed-in account, so nothing goes to the wrong one."
+    },
+    "category": {
+     "anyOf": [
+      {
+       "type": "integer",
+       "minimum": 1
+      },
+      {
+       "type": "string"
+      }
+     ],
+     "description": "YouTube's category number (`22` People & Blogs, `10` Music, `19` Travel & Events...).\n\nDefault: `22`",
+     "markdownDescription": "YouTube's category number (`22` People & Blogs, `10` Music, `19` Travel & Events...).\n\nDefault: `22`"
+    },
+    "made_for_kids": {
+     "type": "boolean",
+     "description": "Whether it's made for kids, as YouTube asks of every video.\n\nDefault: `false`",
+     "markdownDescription": "Whether it's made for kids, as YouTube asks of every video.\n\nDefault: `false`"
+    }
+   },
+   "additionalProperties": false
+  },
+  "publish": {
+   "type": "object",
+   "properties": {
+    "use": {
+     "$ref": "#/definitions/use"
+    },
+    "youtube": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/youtube"
+      }
+     ],
+     "description": "What `publish` uploads to YouTube.",
+     "markdownDescription": "What `publish` uploads to YouTube."
+    }
+   },
+   "additionalProperties": false
+  },
   "project": {
    "type": "object",
    "properties": {
@@ -797,6 +896,15 @@
      ],
      "description": "Where clips come from and how the downloaded files are kept (below).",
      "markdownDescription": "Where clips come from and how the downloaded files are kept (below)."
+    },
+    "publish": {
+     "allOf": [
+      {
+       "$ref": "#/definitions/publish"
+      }
+     ],
+     "description": "Where `video-as-code publish` puts the rendered video: for now `youtube:` (below).",
+     "markdownDescription": "Where `video-as-code publish` puts the rendered video: for now `youtube:` (below)."
     }
    },
    "additionalProperties": false,

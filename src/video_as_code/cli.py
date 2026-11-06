@@ -157,6 +157,23 @@ def cmd_fetch(args: argparse.Namespace) -> int:
     return 0 if _run_fetch(Path(args.project), verify=args.verify, prune=args.prune) else 1
 
 
+def cmd_publish(args: argparse.Namespace) -> int:
+    from . import youtube  # (only `publish` needs it)
+
+    yaml_path = Path(args.project)
+    try:
+        spec = load_yaml(yaml_path).project.youtube
+        if spec is None:
+            print(msg("youtube.not_configured", path=yaml_path), file=sys.stderr)
+            return 1
+        youtube.publish(spec, Path(args.video), yaml_path.parent, lambda text: print(text, file=sys.stderr),
+                        dry_run=args.dry_run, replace=args.replace, yes=args.yes)
+    except KdenliveAsCodeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    return 0
+
+
 def cmd_build(args: argparse.Namespace) -> int:
     yaml_path = Path(args.project)
     fmt = args.format or ("openshot" if args.output and Path(args.output).suffix.lower() == ".osp" else "kdenlive")
@@ -595,6 +612,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_fetch.add_argument("--verify", action="store_true", help=msg("cli.help.fetch_verify"))
     p_fetch.add_argument("--prune", action="store_true", help=msg("cli.help.fetch_prune"))
     p_fetch.set_defaults(func=cmd_fetch)
+
+    p_publish = sub.add_parser("publish", help=msg("cli.help.publish"))
+    p_publish.add_argument("project", help=msg("cli.help.project_path"))
+    p_publish.add_argument("video", help=msg("cli.help.publish_video"))
+    p_publish.add_argument("--dry-run", action="store_true", help=msg("cli.help.publish_dry_run"))
+    p_publish.add_argument("--replace", action="store_true", help=msg("cli.help.publish_replace"))
+    p_publish.add_argument("--yes", "-y", action="store_true", help=msg("cli.help.publish_yes"))
+    p_publish.set_defaults(func=cmd_publish)
 
     p_upscaler = sub.add_parser("install-upscaler", help=msg("cli.help.install_upscaler"))
     p_upscaler.set_defaults(func=cmd_install_upscaler)
