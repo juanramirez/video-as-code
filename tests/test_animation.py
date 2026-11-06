@@ -76,7 +76,7 @@ def test_rendered_over_the_track_below(tmp_path: Path, assets_dir: Path, melt):
     if probe.find_melt():  # (a from-source melt may lack the module the distribution's has)
         candidates.append((probe.find_melt(), probe.melt_env()))
     for exe, env in candidates:
-        if "glaxnimate" in subprocess.run([exe, "-query", "producers"], env=env, capture_output=True, text=True).stdout:
+        if "glaxnimate" in subprocess.run([exe, "-query", "producers"], env=env, capture_output=True, text=True, timeout=60).stdout:
             break
     else:
         pytest.skip("no melt here has the glaxnimate module")

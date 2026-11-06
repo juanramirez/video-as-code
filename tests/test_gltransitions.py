@@ -158,8 +158,12 @@ def _render(path: Path, tmp_path: Path) -> Path:
     kdenlive_path = tmp_path / "project.kdenlive"
     xmlgen.write(load_and_resolve(path), kdenlive_path)
     out = tmp_path / "out.mp4"
-    result = subprocess.run([melt, str(kdenlive_path), "-consumer", f"avformat:{out}"], env=probe.melt_env(),
-                            capture_output=True, text=True)
+    try:
+        result = subprocess.run([melt, str(kdenlive_path), "-consumer", f"avformat:{out}"], env=probe.melt_env(),
+                                capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        # (melt with GL has hung for good with the GPU busy: fail, rather than hold up the whole suite)
+        pytest.fail("melt didn't finish in 300 s")
     if "no EGL context" in result.stderr:
         pytest.skip("no EGL context with GLES 3 here")
     assert result.returncode == 0, result.stderr[-500:]
