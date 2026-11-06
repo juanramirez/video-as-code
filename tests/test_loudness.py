@@ -62,7 +62,7 @@ def test_rendered_at_one_loudness(tmp_path, melt):
     xmlgen.write(load_and_resolve(path), kdenlive)
     exe, extra_env = melt
     subprocess.run([exe, str(kdenlive), "-consumer", f"avformat:{video}"], env={**os.environ, **extra_env, "LC_ALL": "C"},
-                   capture_output=True, check=True)
+                   capture_output=True, check=True, timeout=300)
     assert _measure(tmp_path / "quiet.wav", 0, 3) < -27 and _measure(tmp_path / "loud.wav", 0, 3) > -15
     assert _measure(video, 0.5, 2) == pytest.approx(-20, abs=0.5)
     assert _measure(video, 3.5, 2) == pytest.approx(-20, abs=0.5)
