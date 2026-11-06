@@ -1437,3 +1437,13 @@ whole video can be built from a fresh checkout anywhere.
   (libopenshot, Real-ESRGAN, a player for `watch`, the memory cap for
   `--split`, kdenlive, the `reconstruct` extra). Each missing one with
   how to get it; exit 1 only for melt, ffmpeg or ffprobe.
+- **Even loudness: `loudness:`** — **implemented** (2026-10-25,
+  `loudness.py`, `tests/test_loudness.py`): `project.loudness: -16`
+  (LUFS) brings each clip with sound on an audio track there by a fixed
+  gain (`volume`, as `gain:`'s - kdenlive shows it), from its own
+  integrated loudness measured by ffmpeg's `ebur128` over the stretch it
+  plays (the whole file at another speed), cached by file and stretch.
+  The gain stops at a -1 dBTP peak and a 20 dB boost. A clip's own
+  `loudness:` overrides the target, or `false` leaves it out; `gain:`
+  multiplies on top. Checked on a real render: tones at about -30 and
+  -12 LUFS both at -20 ± 0.5.
