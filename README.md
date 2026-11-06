@@ -406,6 +406,13 @@ own name; one that a plain `source:` clip also uses is the same file,
 downloaded once. The cache can always be deleted and rebuilt, so
 `<dir>/.derived/` belongs in your `.gitignore` too.
 
+Up to four derived clips are generated at once - fewer on a machine with
+fewer cores, or with less than ~1.5 GB of free memory for each: ffmpeg's motion interpolation and many of its filters use
+about one core each, so several side by side finish sooner. A clip made
+from another (`clip:`) waits for it; `upscale` and `openshot` ones,
+which take the GPU or most of the memory on their own, go one at a
+time.
+
 `fetch --prune` then deletes the album items used only as `derive:`
 inputs once everything made from them is generated - often big originals
 of which a few seconds are used. The output's record of its input's

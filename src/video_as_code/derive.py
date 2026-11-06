@@ -21,8 +21,11 @@ import dataclasses
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
+import threading
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -612,6 +615,41 @@ def generate(
             old.unlink(missing_ok=True)
 
 
+# derived clips generated at once, at most: ffmpeg's motion interpolation
+# and many of its filters use about one core, so one clip at a time leaves
+# the rest idle (see default_jobs())
+JOBS = 4
+# what one 1080p job may hold (motion interpolation's frames: up to ~1.5 GB)
+JOB_MEMORY = 1536 * 1024 * 1024
+
+
+def _available_memory() -> Optional[int]:
+    """MemAvailable, in bytes (Linux); None where there's no /proc/meminfo."""
+    try:
+        with open("/proc/meminfo", encoding="ascii") as meminfo:
+            for line in meminfo:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def default_jobs() -> int:
+    """How many derived clips to generate at once: JOBS, but no more than
+    the cores there are, nor than fit in the memory available now
+    (JOB_MEMORY each) - four interpolations at once on a 6 GB laptop got
+    the render killed for lack of memory. At least one."""
+    n = min(JOBS, os.cpu_count() or 1)
+    free = _available_memory()
+    if free is not None:
+        n = min(n, free // JOB_MEMORY)
+    return max(1, n)
+# Real-ESRGAN and libopenshot take the GPU's memory or most of the
+# machine's on their own: those run one at a time
+_ONE_AT_A_TIME = threading.Lock()
+
+
 def ensure_all(
     bin_clips: list[BinClipSpec],
     sources_root: Path,
@@ -619,28 +657,41 @@ def ensure_all(
     on_generate: Optional[Callable[[str], None]] = None,
     on_progress: Optional[Callable[[str], None]] = None,
     locked_sha256: Optional[dict[str, str]] = None,
+    jobs: Optional[int] = None,
 ) -> list[str]:
-    """Generates every derived clip whose file is missing or stale, inputs
-    first (a `clip:` input may itself be derived). A missing input is
+    """Generates every derived clip whose file is missing or stale, up to
+    `jobs` (default_jobs()) at once - inputs first (a `clip:` input may
+    itself be derived: what's made from it waits for it). A missing input is
     appended to `errors` - pointing at `fetch` when it's an album item -
     and so is an ffmpeg failure; everything else still gets generated.
     `locked_sha256` (album name -> sha256, from the lock) lets an output
     whose album input was pruned count as current (is_current_by_record).
-    Returns the ids generated."""
+    Returns the ids generated, inputs first."""
     by_id = {c.id: c for c in bin_clips}
-    done: dict[str, bool] = {}  # id -> its file is ready
-    generated: list[str] = []
+    order: list[BinClipSpec] = []  # the derived clips, each after its derived input
+    seen: set[str] = set()
 
-    def ready(clip: BinClipSpec) -> bool:
-        if clip.derive is None:
-            return True
-        if clip.id in done:
-            return done[clip.id]
-        done[clip.id] = False  # (cycles were already rejected at parse time)
+    def visit(clip: BinClipSpec) -> None:
+        if clip.derive is None or clip.id in seen:
+            return
+        seen.add(clip.id)  # (cycles were already rejected at parse time)
+        if clip.derive.clip is not None:
+            visit(by_id[clip.derive.clip])
+        order.append(clip)
+
+    for clip in bin_clips:
+        visit(clip)
+    futures: dict[str, Future] = {}
+    clip_errors: dict[str, str] = {}
+    generated: set[str] = set()
+
+    def make(clip: BinClipSpec) -> bool:
+        """Whether `clip`'s file is ready, generating it if need be."""
         spec = clip.derive
         if spec.clip is not None:
             ref = by_id[spec.clip]
-            if not ready(ref):
+            # (submitted before this one, so already running or done)
+            if ref.derive is not None and not futures[ref.id].result():
                 return False
             input_path = ref.path
         elif spec.source is not None:
@@ -649,25 +700,32 @@ def ensure_all(
             input_path = spec.path
         if not input_path.exists():
             if spec.source is not None and is_current_by_record(clip.path, (locked_sha256 or {}).get(spec.source)):
-                done[clip.id] = True  # its input was pruned; the album still has it unchanged
-                return True
+                return True  # its input was pruned; the album still has it unchanged
             if spec.source is not None:
-                errors.append(msg("validation.derive_input_not_fetched", id=clip.id, path=input_path))
+                clip_errors[clip.id] = msg("validation.derive_input_not_fetched", id=clip.id, path=input_path)
             elif spec.clip is None:
-                errors.append(msg("validation.derive_input_missing", id=clip.id, path=input_path))
+                clip_errors[clip.id] = msg("validation.derive_input_missing", id=clip.id, path=input_path)
             return False
         if not is_current(clip.path, input_path):
             if on_generate:
                 on_generate(clip.id)
             try:
-                generate(clip.id, spec, input_path, clip.path, on_progress)
+                if spec.upscale or spec.openshot:
+                    with _ONE_AT_A_TIME:
+                        generate(clip.id, spec, input_path, clip.path, on_progress)
+                else:
+                    generate(clip.id, spec, input_path, clip.path, on_progress)
             except DeriveError as exc:
-                errors.append(str(exc))
+                clip_errors[clip.id] = str(exc)
                 return False
-            generated.append(clip.id)
-        done[clip.id] = True
+            generated.add(clip.id)
         return True
 
-    for clip in bin_clips:
-        ready(clip)
-    return generated
+    with ThreadPoolExecutor(max_workers=max(1, jobs or default_jobs())) as pool:
+        for clip in order:  # (a pool takes its jobs in order: an input starts before what waits for it)
+            futures[clip.id] = pool.submit(make, clip)
+    for clip in order:
+        futures[clip.id].result()  # anything but a DeriveError is raised as before
+        if clip.id in clip_errors:
+            errors.append(clip_errors[clip.id])
+    return [clip.id for clip in order if clip.id in generated]
