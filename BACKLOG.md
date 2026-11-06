@@ -409,9 +409,50 @@ long chain of crossfades, previewed at 480x270 on a 4-core laptop with
   NVENC/NVDEC on NVIDIA): much faster for long inputs (light copies,
   60 fps phone videos), at some quality cost - so for preview copies
   rather than final outputs, and only when the device supports it.
-- **Generating several `derive:` clips at once**: ffmpeg already uses
-  every core for most encodes, so on a 4-core machine with little RAM
-  the gain is small (maybe x1.5); last in line.
+- **Longer `render --split` segments and a faster codec for them**: on a
+  7 GB laptop most segments are 10 frames, each a fresh melt that loads
+  the project again; and they're encoded at x264's default preset only to
+  be joined. Measure where a render's time goes first (melt start-up,
+  compositing, encoding), then: segments sized by measured rather than
+  estimated memory, and a fast or near-lossless codec for the
+  intermediates (the joined file is the only one kept).
+
+## Asked for, not started (2026-11-06)
+
+- **`video-as-code publish`: upload to YouTube from the YAML.** A
+  `project.publish.youtube` block - `channel` (the account, so nothing
+  goes to the wrong one), `title`, `description` (a template: the date,
+  the song and its link), `privacy` (`private` by default), `playlists`,
+  `tags`, `thumbnail` (a file or a frame, `{at: 12.5}`), `chapters: true`
+  (from the YAML's guides). A command of its own, never a side effect of
+  `render`; `--dry-run` shows what it would do, and it asks before
+  uploading.
+  - YouTube Data API v3 with OAuth (the browser the first time; the token
+    in `~/.config/video-as-code/`, never in the YAML). Upload ~1600 of
+    the 10 000 daily quota units: ~6 a day.
+  - An API project Google hasn't audited gets its uploads locked to
+    private whatever `privacy` says: the tool says so, and walks the user
+    through changing it by hand in YouTube Studio, step by step (the
+    user, 2026-11-06: acceptable).
+  - A lock of what was published (video id, date, the file's sha256), as
+    `sources.lock.yaml`: the second time only the metadata is updated; a
+    changed video is reported, and uploaded again only with `--replace`
+    (YouTube can't swap a video's file).
+  - Tests with the API faked; nothing touches YouTube.
+- **One `.derived/` per project**: a project's variants (`project.yaml`,
+  `project_blurfill.yaml`, `project_blurfill_frame.yaml`) share clip ids
+  and the sources folder, and `derive` deletes a clip's other generations
+  - so each variant deletes the others' derived files, and every render of
+  another variant redoes them (twenty interpolations: ~30 min each time).
+  Keep the generations apart per project file, or delete only those of
+  the same project.
+- **Finding a shot's original by image, as a command**: given an old
+  video and an album (or a library scan), each shot's frame matched
+  against the candidates by image (ORB + homography), never by capture
+  time alone - same-second siblings (bursts, a photographer's colour and
+  black-and-white pairs) fooled the time-based search in White Christmas
+  2017/18 six times. And measuring each shot's framing (crop and place)
+  the same way. Both now live as scripts in the White Christmas projects.
 
 ## Ideas from a brainstorm (2026-10-24)
 
