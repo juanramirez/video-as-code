@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from video_as_code import cli, youtube
+from video_as_code import cli, i18n, youtube
 from video_as_code.errors import ValidationErrors
 from video_as_code.models import YouTubeSpec
 from video_as_code.schema import load_yaml
@@ -233,3 +233,16 @@ def test_cli_publish_without_a_block(tmp_path: Path, capsys):
     project = _project(tmp_path, "")
     assert cli.main(["publish", str(project), str(_video(tmp_path))]) == 1
     assert "project.publish.youtube" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("lang, privacy, shown", [("es", "unlisted", "oculto"), ("es", "private", "privado"),
+                                                  ("es", "public", "público"), ("en", "unlisted", "unlisted")])
+def test_privacy_is_said_as_youtube_says_it_in_that_language(tmp_path: Path, yt: FakeYouTube, lang, privacy, shown):
+    original = i18n.LOCALE
+    i18n.set_locale(lang)
+    try:
+        said = []
+        _publish(tmp_path, YouTubeSpec(title="T", privacy=privacy), said=said, dry_run=True)
+    finally:
+        i18n.set_locale(original)
+    assert said[0].endswith(shown)
