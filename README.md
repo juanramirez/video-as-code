@@ -230,7 +230,11 @@ quality, as `<capture date>_<id><ext>` (`20250830_slide.mp4` above; set
 `sources.lock.yaml` next to the YAML (album item id, size, sha256,
 capture time - machine-written, meant to be committed, never edited by
 hand) so later fetches go straight to it. Renaming a clip's `id` renames
-its local file on the next `fetch` instead of downloading it again. `build`/`render`
+its local file on the next `fetch` instead of downloading it again. A file
+copied into `dir` by hand under its original name is kept as it is (no
+download), but looked up in the album all the same: its item id and capture
+time are recorded and it's renamed to its dated name, so a fresh checkout
+can download it too. `build`/`render`
 never download on their own: a `source:` clip that isn't on disk yet is a
 validation error pointing at `fetch` (or `--fetch`). Add `.fetch_cache/`
 (file names already looked up in the album) to your `.gitignore`.
