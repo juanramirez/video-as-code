@@ -31,6 +31,7 @@ from . import gltransitions, glfilters, lumas, meltpass
 from . import openshot_effects as openshot_mod
 from . import presets as presets_mod
 from .models import (
+    YouTubeSpec,
     AFFINE_STYLES,
     LUT_INTERPS,
     LUT_SUFFIXES,
@@ -345,6 +346,7 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
     if loudness is not None and not _loudness_ok(loudness):
         errors.append(msg("validation.loudness_invalid", ctx="project", value=loudness))
         loudness = None
+    youtube = _parse_publish(data.get("publish"), str(data["title"]), errors)
     return ProjectSpec(
         id=str(data["id"]),
         title=str(data["title"]),
@@ -361,6 +363,70 @@ def _parse_project(data: dict, errors: list[str]) -> ProjectSpec:
         sources_dir=str(sources.get("dir", "assets")),
         prune_after_days=float(prune_days),
         loudness=float(loudness) if loudness is not None else None,
+        youtube=youtube,
+    )
+
+
+YOUTUBE_PRIVACY = ("private", "unlisted", "public")
+_YOUTUBE_KEYS = ("title", "description", "privacy", "playlists", "tags", "channel", "category", "made_for_kids")
+
+
+def _parse_publish(value: Any, project_title: str, errors: list[str]) -> Optional[YouTubeSpec]:
+    """`project.publish`: for now only `youtube:` (YouTubeSpec), its title
+    the project's unless it says another."""
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) - {"youtube"} or not isinstance(value.get("youtube"), dict):
+        errors.append(msg("validation.publish_invalid", value=value))
+        return None
+    yt = value["youtube"]
+    for key in yt:
+        if key not in _YOUTUBE_KEYS:
+            errors.append(msg("validation.youtube_key_unknown", field=key, known=", ".join(_YOUTUBE_KEYS)))
+
+    def bad(key: str, why: str, got: Any) -> None:
+        errors.append(msg("validation.youtube_value_invalid", field=key, why=why, value=got))
+
+    def text(key: str, default: Optional[str]) -> Optional[str]:
+        got = yt.get(key, default)
+        if got is not None and not isinstance(got, str):
+            bad(key, "text", got)
+            return default
+        return got
+
+    def texts(key: str) -> tuple[str, ...]:
+        got = yt.get(key, [])
+        if isinstance(got, str):
+            got = [got]
+        if not isinstance(got, list) or not all(isinstance(x, str) and x for x in got):
+            bad(key, "a list of texts", got)
+            return ()
+        return tuple(got)
+
+    privacy = yt.get("privacy", "private")
+    if privacy not in YOUTUBE_PRIVACY:
+        bad("privacy", " / ".join(YOUTUBE_PRIVACY), privacy)
+        privacy = "private"
+    kids = yt.get("made_for_kids", False)
+    if not isinstance(kids, bool):
+        bad("made_for_kids", "true / false", kids)
+        kids = False
+    category = yt.get("category", 22)
+    if isinstance(category, bool) or not isinstance(category, (int, str)) or not str(category).isdigit():
+        bad("category", "a YouTube category number", category)
+        category = 22
+    title = text("title", project_title) or project_title
+    if len(title) > 100:
+        bad("title", "at most 100 characters", title)
+    return YouTubeSpec(
+        title=title,
+        description=text("description", "") or "",
+        privacy=privacy,
+        playlists=texts("playlists"),
+        tags=texts("tags"),
+        channel=text("channel", None),
+        category=str(category),
+        made_for_kids=kids,
     )
 
 

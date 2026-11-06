@@ -251,6 +251,17 @@ def build(reference: str) -> dict:
         "dir": STRING,
         "prune_after_days": _number(0),
     }, sources_docs)
+    definitions["youtube"] = _object({
+        "title": STRING,
+        "description": STRING,
+        "privacy": _enum(("private", "unlisted", "public")),
+        "playlists": {"anyOf": [STRING, _array(STRING)]},
+        "tags": {"anyOf": [STRING, _array(STRING)]},
+        "channel": STRING,
+        "category": {"anyOf": [_number(1, integer=True), STRING]},
+        "made_for_kids": BOOL,
+    }, docs.get("`project.publish.youtube:`", {}))
+    definitions["publish"] = _object({"youtube": _ref("youtube")}, {"youtube": "What `publish` uploads to YouTube."})
     project_docs = dict(docs.get("`project:`", {}))
     definitions["project"] = _object({
         "id": NAME,
@@ -263,6 +274,7 @@ def build(reference: str) -> dict:
         "loudness": _number(maximum=0, above=-70),
         "notes": STRING,
         "sources": _ref("sources"),
+        "publish": _ref("publish"),
     }, project_docs, required=("id", "title", "fps", "width", "height"))
 
     # bin:

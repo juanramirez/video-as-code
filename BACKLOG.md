@@ -419,26 +419,12 @@ long chain of crossfades, previewed at 480x270 on a 4-core laptop with
 
 ## Asked for, not started (2026-11-06)
 
-- **`video-as-code publish`: upload to YouTube from the YAML.** A
-  `project.publish.youtube` block - `channel` (the account, so nothing
-  goes to the wrong one), `title`, `description` (a template: the date,
-  the song and its link), `privacy` (`private` by default), `playlists`,
-  `tags`, `thumbnail` (a file or a frame, `{at: 12.5}`), `chapters: true`
-  (from the YAML's guides). A command of its own, never a side effect of
-  `render`; `--dry-run` shows what it would do, and it asks before
-  uploading.
-  - YouTube Data API v3 with OAuth (the browser the first time; the token
-    in `~/.config/video-as-code/`, never in the YAML). Upload ~1600 of
-    the 10 000 daily quota units: ~6 a day.
-  - An API project Google hasn't audited gets its uploads locked to
-    private whatever `privacy` says: the tool says so, and walks the user
-    through changing it by hand in YouTube Studio, step by step (the
-    user, 2026-11-06: acceptable).
-  - A lock of what was published (video id, date, the file's sha256), as
-    `sources.lock.yaml`: the second time only the metadata is updated; a
-    changed video is reported, and uploaded again only with `--replace`
-    (YouTube can't swap a video's file).
-  - Tests with the API faked; nothing touches YouTube.
+- **`video-as-code publish`, second step**: the upload itself is done
+  (`project.publish.youtube`, README); still to do: `thumbnail` (a file,
+  or a frame of the video, `{at: 12.5}`), `chapters: true` (the
+  description gets the YAML's guides as YouTube chapters - the first at
+  0:00, each at least 10 s), and `description` as a template (the date,
+  the song and its link).
 - **One `.derived/` per project**: a project's variants (`project.yaml`,
   `project_blurfill.yaml`, `project_blurfill_frame.yaml`) share clip ids
   and the sources folder, and `derive` deletes a clip's other generations

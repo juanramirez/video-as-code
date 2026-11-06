@@ -16,6 +16,23 @@ VALID_CLIP_TYPES = ("video", "audio", "image", "animation", "title")
 # As-is from the YAML (units: seconds, paths already resolved to Path)
 # ---------------------------------------------------------------------------
 
+@dataclass(frozen=True)
+class YouTubeSpec:
+    """`project.publish.youtube`: how `video-as-code publish` puts the
+    rendered video on YouTube (youtube.py). `privacy` is private,
+    unlisted or public; `playlists` and `channel` are YouTube ids
+    (`PL...`, `UC...`) - `channel`, when given, is checked against the
+    signed-in account so nothing goes to the wrong one."""
+    title: str
+    description: str = ""
+    privacy: str = "private"
+    playlists: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
+    channel: Optional[str] = None
+    category: str = "22"  # People & Blogs
+    made_for_kids: bool = False
+
+
 @dataclass
 class ProjectSpec:
     id: str
@@ -50,6 +67,8 @@ class ProjectSpec:
     # audio track is brought to by a static gain - see loudness.py. None:
     # left as they are.
     loudness: Optional[float] = None
+    # `project.publish.youtube` (see YouTubeSpec); None: not published.
+    youtube: Optional[YouTubeSpec] = None
 
 
 @dataclass(frozen=True)

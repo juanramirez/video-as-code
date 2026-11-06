@@ -51,6 +51,7 @@ video-as-code build project.yaml [-o output.kdenlive]   # a .kdenlive, to open i
 video-as-code build project.yaml --format openshot      # an OpenShot project (.osp) instead
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
+video-as-code publish project.yaml video.mp4 [--dry-run]  # upload it to YouTube, as project.publish.youtube says
 video-as-code transitions                               # every wipe shape a luma: can name
 video-as-code schema [-o schema.json]                   # the YAML's JSON Schema, for an editor
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
@@ -451,6 +452,49 @@ the first time just starts counting, and a file only on this machine
 (one the lock doesn't know) is never touched. YAML files sharing a
 sources folder (a project and its preview) share that record. `render
 --no-prune` skips it once.
+
+### `video-as-code publish`: the video onto YouTube
+
+```yaml
+project:
+  id: xmas
+  title: "Christmas 2025"
+  fps: 30
+  width: 1920
+  height: 1080
+  publish:
+    youtube:
+      description: "The year in pictures"
+      privacy: unlisted               # private (the default), unlisted or public
+      playlists: [PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]
+      tags: [navidad]
+      channel: UCxxxxxxxxxxxxxxxxxxxxxx  # optional: checked against the account
+```
+
+```sh
+video-as-code publish project.yaml output/xmas.mp4 --dry-run  # what it would do
+video-as-code publish project.yaml output/xmas.mp4            # asks, then uploads
+```
+
+uploads the rendered video (the title is the project's unless `title:`
+says another), adds it to the playlists and records it in
+`publish.lock.yaml` next to the YAML - commit it. Run again with the same
+file and only the title, description, tags and privacy are updated; with
+a different file it stops, and `--replace` uploads it as a new video
+(YouTube can't swap a video's file; the old one stays until you delete
+it). It never uploads as a side effect of `render`, and asks first
+(`--yes` doesn't). All keys: `docs/project-yaml.md`.
+
+It signs in with **your own OAuth client** for the YouTube Data API,
+created once in Google Cloud: run `publish` without one and it says how,
+step by step; save its JSON as `~/.config/video-as-code/youtube_client.json`
+(or point `VIDEO_AS_CODE_YOUTUBE_CLIENT` at it). The first time opens the
+browser to sign in; the sign-in is kept in
+`~/.config/video-as-code/youtube_token.json`, readable only by you -
+never in the YAML. An upload costs ~1600 of the API's 10 000 daily quota
+units, so ~6 a day. Until Google audits your API project, YouTube keeps
+its uploads **private** whatever `privacy:` says: `publish` notices,
+and tells you how to change it in YouTube Studio.
 
 ### OpenShot's transitions: `luma: openshot/<name>`
 

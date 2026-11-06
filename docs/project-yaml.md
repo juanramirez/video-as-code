@@ -50,6 +50,7 @@ couldn't match, for a person to review).
 | `loudness` | - | Even loudness: every clip with sound on an audio track brought to this many LUFS (`-16`; `-14` is what YouTube plays at, `-23` broadcast) by a fixed gain, from its own measured loudness (EBU R128). Its peak kept under -1 dBTP and the boost under 20 dB, so a clip that can't reach it stays quieter. A clip's own `gain:` applies on top. |
 | `notes` | - | Free text, kept in the generated project. |
 | `sources` | - | Where clips come from and how the downloaded files are kept (below). |
+| `publish` | - | Where `video-as-code publish` puts the rendered video: for now `youtube:` (below). |
 
 ### `project.sources:`
 
@@ -59,6 +60,21 @@ couldn't match, for a person to review).
 | `reference` | - | The video this project remakes, for a project that rebuilds an old edit: a link, a list of links (tried in order, as a clip's `url:`), or a map `{url, path}` - `path` being where to keep it (default `reference/reference.mp4`). `fetch` downloads it whole (from YouTube: video and sound, as an mp4) if it isn't there yet. Its size and sha256 are locked (`reference:` in `sources.lock.yaml`), and a download that isn't that file is reported: YouTube re-encodes now and then, so while shots are cut from it, list an exact copy first (a Google Drive link to the file) and YouTube after it. Only needed to find and match the old video's material, or while the project still cuts shots out of it (`derive: {path: reference/...}`); a new video has none. Keep unlisted links out of public repos. |
 | `dir` | `assets` | Folder (relative to the YAML) where `fetch` puts downloads and `derive:` its outputs (in `<dir>/.derived/`). |
 | `prune_after_days` | `7` | Before each `render`, delete files the tool can bring back by itself (album items only `derive:` needs, stale generated files) that no `build`/`validate`/`render` has used for this many days. `0` = never. See README's *`video-as-code fetch`* section. |
+
+### `project.publish.youtube:`
+
+What `video-as-code publish project.yaml video.mp4` uploads to YouTube (see README's *`video-as-code publish`*).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `title` | the project's `title` | The video's title on YouTube (at most 100 characters). |
+| `description` | - | Its description. |
+| `privacy` | `private` | `private`, `unlisted` or `public`. Uploads from an API project Google hasn't audited stay private whatever this says: `publish` tells you, and how to change it by hand. |
+| `playlists` | - | Playlist ids (`PL...`) to add it to. |
+| `tags` | - | Its tags. |
+| `channel` | - | The channel id (`UC...`) it must go to: checked against the signed-in account, so nothing goes to the wrong one. |
+| `category` | `22` | YouTube's category number (`22` People & Blogs, `10` Music, `19` Travel & Events...). |
+| `made_for_kids` | `false` | Whether it's made for kids, as YouTube asks of every video. |
 
 ## `bin:`
 
