@@ -52,6 +52,8 @@ video-as-code build project.yaml --format openshot      # an OpenShot project (.
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -> YAML
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
 video-as-code publish project.yaml video.mp4 [--dry-run]  # upload it to YouTube, as project.publish.youtube says
+video-as-code clean project.yaml [PATH...] [--dry-run]  # delete regenerable files once their sources are checked
+video-as-code provenance project.yaml PATH --item/--url/...  # record what a generated file is made from
 video-as-code transitions                               # every wipe shape a luma: can name
 video-as-code schema [-o schema.json]                   # the YAML's JSON Schema, for an editor
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
@@ -452,6 +454,97 @@ the first time just starts counting, and a file only on this machine
 (one the lock doesn't know) is never touched. YAML files sharing a
 sources folder (a project and its preview) share that record. `render
 --no-prune` skips it once.
+
+### `video-as-code clean`: delete what can be regenerated, once its sources are checked
+
+Generated files pile up: `.derived/` and `.proxies/`, and the `.work/`
+folder of a project's own scripts (frames, thumbnails, copies of album
+videos...). `clean` deletes them - but only a file whose origin is
+**recorded** and whose sources **answer right now**; anything it can't
+check stays, with the reason on screen. Start with `--dry-run`:
+
+```bash
+video-as-code clean project.yaml --dry-run              # check everything, delete nothing
+video-as-code clean project.yaml .work/enhance          # only that file or folder; asks you to type a phrase first
+```
+
+```
+would delete  .work/invitados: 1 file(s), 1.60 GB
+kept          .work/escenario: 1 file(s), 1.80 GB
+    'MVI_0207.MOV' is no longer in the album
+not registered .work/shots: 41 file(s), 45.0 MB (kept: nothing says where they come from; ...)
+```
+
+**Where a file's origin is recorded** - `clean` reads all three:
+
+| What | Recorded in | Source it resolves to |
+|---|---|---|
+| `.derived/` and `.proxies/` files | their `<file>.input.json` sidecar (input name + sha256, written by `derive`) | the sha256 is looked up in `sources.lock.yaml`: an album item, a `url:` download or the reference video (a derived-from-a-derived follows the chain) |
+| Anything else - `.work/`, outputs of your scripts | `provenance.yaml`, next to the project YAML | what the entry lists |
+| Album items, links, the reference | `sources.lock.yaml` | (these are sources, never deleted by `clean`) |
+
+**`provenance.yaml`** is for what your own scripts make. It's plain YAML,
+meant to be committed; a script (or you) adds to it with
+`video-as-code provenance`, or by editing it:
+
+```yaml
+files:
+  - path: .work/invitados            # a file, or a folder (each file in it is judged on its own)
+    sources:                         # ALL of them must answer
+      - item: "{name}"               # the project's album item named like the file ({name} = its file name)
+    recipe: recipes/fetch_album_video.py   # a file that must exist in the project...
+    command: python recipes/fetch_album_video.py MVI_0209.MOV   # ...and/or the command line
+  - path: .work/enhance
+    sources:
+      - reference: true              # project.sources.reference, as the YAML spells it
+    recipe: recipes/enhance_missing.sh
+```
+
+```bash
+# the same from a script's last line (paths as you'd give them from where you run it):
+video-as-code provenance project.yaml .work/enhance --reference --recipe recipes/enhance_missing.sh
+video-as-code provenance project.yaml .work/escenario --item MVI_0207.MOV --command 'fetch_album_video.py ...'
+```
+
+A source is exactly one of: `item: NAME` (an item of the project's album,
+or of `album: URL`; `media_id:` pins one), `url: URL`, `reference: true`,
+`link: BIN_ID` (a `url:` clip, as the lock records it) or `file: PATH`
+(another file of the project; add `sha256:` to also require its content;
+if it is gone it counts only when it is itself regenerable - an entry or
+sidecar covers it and *its* sources answer - or it is the reference). A
+file needs a `recipe:` (that exists) or a `command:`, and at least one
+source. An entry deeper in the tree overrides its folder's. Paths outside
+the project's folder are refused.
+
+**What "answers" means**, per kind of source: an album item is still in
+the album and its download responds (its size matching the lock's, if
+locked); a Drive or http link responds with a file, not a page (size
+checked against the lock's, if there); a YouTube link is reachable with
+`yt-dlp --simulate`.
+
+**Limits - read these before deleting gigabytes:**
+
+- A passing check is a snapshot. The album may be unshared, the video
+  made private or removed, a link rot, or `yt-dlp` break **tomorrow**;
+  `clean` prints this warning every run. What it deletes is only as safe
+  as its sources are durable: keep your own copy of anything irreplaceable.
+- "Answers" is not "is the same bytes": YouTube (and a link with no
+  recorded size) is only checked for reachability, not against a hash.
+- It doesn't check that the recipe still works, or that its tools
+  (ffmpeg, Real-ESRGAN...) and time are at hand, only that it's recorded
+  and the file exists. Output of a CPU-only upscale can take days to redo.
+- Without network, or without `yt-dlp`, nothing can be verified, so
+  nothing is deleted.
+- Files nothing records (the rest of `.work/`) are never touched; `clean`
+  lists them per folder so you can register them. Fetched `assets/` and
+  `reference/` files are not `clean`'s job: that's `fetch --prune` and
+  `render`'s automatic pruning.
+- `clean` deletes for good (no trash). Without `--dry-run` it shows what
+  it found, warns in capitals that no copy of those files has been
+  located (only their sources were checked), and deletes only if you type
+  exactly `Yes, I am sure` (`Sí, estoy seguro` in a Spanish locale;
+  anything else cancels). Without a terminal it refuses to ask and deletes
+  nothing, unless you pass `--yes-i-am-sure` to skip the question (scripts).
 
 ### `video-as-code publish`: the video onto YouTube
 

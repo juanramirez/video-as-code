@@ -20,7 +20,7 @@ import yaml
 
 from . import (
     autoprune, doctor, fetch, fetch_resolve, gallery, gltransitions, gphotos,
-    i18n, lumas, mltdata, osp, parts, probe, proxies, reverse, sources_lock,
+    i18n, lumas, mltdata, osp, parts, probe, provenance, proxies, reverse, sources_lock,
     splitrender, timecode, trackpack, upscale, watch, xmlgen,
 )
 from .errors import KdenliveAsCodeError
@@ -448,6 +448,99 @@ def cmd_render(args: argparse.Namespace) -> int:
     print(msg("cli.render_done", output=output, frames=frames, fps=resolved.fps.fps))
     if args.keep_kdenlive:
         print(msg("cli.render_kept_kdenlive", path=kdenlive_path))
+    return 0
+
+
+def _megabytes(size: int) -> str:
+    return f"{size / 1e6:,.1f} MB" if size < 1e9 else f"{size / 1e9:,.2f} GB"
+
+
+def cmd_clean(args: argparse.Namespace) -> int:
+    yaml_path = Path(args.project)
+    if not yaml_path.exists():
+        print(msg("validation.yaml_missing", path=yaml_path), file=sys.stderr)
+        return 1
+    try:
+        report = provenance.clean(
+            yaml_path, only=args.paths or None, dry_run=True,
+            report_progress=lambda text: print(text, file=sys.stderr),
+        )
+    except KdenliveAsCodeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    groups: dict[tuple, list[provenance.Result]] = {}
+    for result in report.results:
+        groups.setdefault((result.candidate.group, result.ok, tuple(result.reasons)), []).append(result)
+    freed = 0
+    for (group, ok, reasons), results in groups.items():
+        size = sum(r.size for r in results)
+        if ok:
+            verb = "clean.would_remove"
+            freed += sum(r.size for r in results)
+        else:
+            verb = "clean.kept"
+        print(msg(verb, group=group, files=len(results), size=_megabytes(size)))
+        for reason in reasons:
+            print(f"    {reason}")
+    for folder, (files, size) in sorted(report.unregistered.items()):
+        print(msg("clean.unregistered", group=folder, files=files, size=_megabytes(size)))
+    if not report.results:
+        print(msg("clean.nothing"))
+        return 0
+    deletable = [r for r in report.results if r.ok]
+    print(msg("clean.total_dry" if args.dry_run else "clean.would_free", size=_megabytes(freed)))
+    print(msg("clean.warning"), file=sys.stderr)
+    if args.dry_run or not deletable:
+        return 0
+    if not args.yes_i_am_sure and not _confirm_clean(len(deletable), freed):
+        print(msg("clean.cancelled"), file=sys.stderr)
+        return 1
+    provenance.apply(report)
+    print(msg("clean.total", size=_megabytes(sum(r.size for r in deletable if r.removed))))
+    return 0
+
+
+def _confirm_clean(files: int, size: int) -> bool:
+    """Asks for the typed phrase (not a bare y/n) before deleting for good."""
+    if not sys.stdin.isatty():
+        print(msg("clean.not_interactive"), file=sys.stderr)
+        return False
+    print("\n" + msg("clean.confirm_banner", files=files, size=_megabytes(size)).upper(), file=sys.stderr)
+    phrase = msg("clean.confirm_phrase")
+    try:
+        answer = input(msg("clean.confirm_prompt", phrase=phrase) + " ")
+    except EOFError:
+        return False
+
+    def plain(text: str) -> str:
+        decomposed = unicodedata.normalize("NFD", text.strip().casefold())
+        return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
+
+    return plain(answer) == plain(phrase)
+
+
+def cmd_provenance(args: argparse.Namespace) -> int:
+    yaml_path = Path(args.project)
+    if not yaml_path.exists():
+        print(msg("validation.yaml_missing", path=yaml_path), file=sys.stderr)
+        return 1
+    sources: list[dict] = []
+    for name in args.item or []:
+        sources.append({"item": name, **({"album": args.album} if args.album else {})})
+    sources += [{"url": url} for url in args.url or []]
+    sources += [{"link": clip_id} for clip_id in args.link or []]
+    sources += [{"file": str(Path(path).resolve())} for path in args.source_file or []]
+    if args.reference:
+        sources.append({"reference": True})
+    try:
+        entry = provenance.register(
+            yaml_path.resolve().parent, Path(args.path).resolve(), sources,
+            str(Path(args.recipe).resolve()) if args.recipe else None, args.command, args.note,
+        )
+    except KdenliveAsCodeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(msg("provenance.registered", path=entry["path"], n=len(entry["sources"])))
     return 0
 
 
@@ -1146,6 +1239,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_docs.add_argument("--no-open", action="store_true", help=msg("cli.help.docs_no_open"))
     p_docs.add_argument("--public", metavar="FOLDER", help=msg("cli.help.docs_public"))
     p_docs.set_defaults(func=cmd_docs)
+
+    p_clean = sub.add_parser("clean", help=msg("cli.help.clean"))
+    p_clean.add_argument("project", help=msg("cli.help.project_path"))
+    p_clean.add_argument("paths", nargs="*", metavar="PATH", help=msg("cli.help.clean_paths"))
+    p_clean.add_argument("--dry-run", action="store_true", help=msg("cli.help.clean_dry_run"))
+    p_clean.add_argument("--yes-i-am-sure", action="store_true", help=msg("cli.help.clean_yes"))
+    p_clean.set_defaults(func=cmd_clean)
+
+    p_provenance = sub.add_parser("provenance", help=msg("cli.help.provenance"))
+    p_provenance.add_argument("project", help=msg("cli.help.project_path"))
+    p_provenance.add_argument("path", help=msg("cli.help.provenance_path"))
+    p_provenance.add_argument("--item", action="append", metavar="NAME", help=msg("cli.help.provenance_item"))
+    p_provenance.add_argument("--album", metavar="URL", help=msg("cli.help.provenance_album"))
+    p_provenance.add_argument("--url", action="append", help=msg("cli.help.provenance_url"))
+    p_provenance.add_argument("--reference", action="store_true", help=msg("cli.help.provenance_reference"))
+    p_provenance.add_argument("--link", action="append", metavar="BIN_ID", help=msg("cli.help.provenance_link"))
+    p_provenance.add_argument("--source-file", action="append", metavar="PATH", help=msg("cli.help.provenance_file"))
+    p_provenance.add_argument("--recipe", metavar="PATH", help=msg("cli.help.provenance_recipe"))
+    p_provenance.add_argument("--command", help=msg("cli.help.provenance_command"))
+    p_provenance.add_argument("--note", help=msg("cli.help.provenance_note"))
+    p_provenance.set_defaults(func=cmd_provenance)
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
     p_reconstruct.add_argument("video", help=msg("cli.help.reconstruct_video"))
