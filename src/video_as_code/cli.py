@@ -2,16 +2,27 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import datetime as dt
+import hashlib
+import json
+import os
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
+import unicodedata
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
 
 import yaml
 
-from . import autoprune, doctor, timecode, fetch, fetch_resolve, gallery, gltransitions, i18n, lumas, osp, parts, watch, mltdata, probe, proxies, reverse, splitrender, trackpack, upscale, xmlgen
+from . import (
+    autoprune, doctor, fetch, fetch_resolve, gallery, gltransitions, gphotos,
+    i18n, lumas, mltdata, osp, parts, probe, proxies, reverse, sources_lock,
+    splitrender, timecode, trackpack, upscale, watch, xmlgen,
+)
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .schema import load_and_resolve, load_yaml
@@ -444,31 +455,512 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     return doctor.run()
 
 
+def _persist_takeout_matches(
+    result,
+    output: Path,
+    entries: Optional[list[dict]] = None,
+    *,
+    move_incremental: bool = False,
+) -> Optional[Path]:
+    """Extract only matched Takeout ZIP members needed for local sources."""
+    selected = entries if entries is not None else result.data.get("bin", [])
+    selected = [entry for entry in selected if entry.get("path") in result.asset_candidates]
+    if not selected:
+        return None
+    required_bytes = 0
+    output_device = output.parent.stat().st_dev
+    for entry in selected:
+        candidate = result.asset_candidates[entry["path"]]
+        local_path = getattr(candidate, "local_path", None)
+        if not (move_incremental and local_path is not None and local_path.stat().st_dev == output_device):
+            required_bytes += candidate.size
+    free_bytes = shutil.disk_usage(output.parent).free
+    if required_bytes + 1024 * 1024 > free_bytes:
+        raise OSError(msg("cli.reconstruct_assets_space", needed=round(required_bytes / 1024 / 1024),
+                          free=round(free_bytes / 1024 / 1024), path=output.parent))
+    base = output.with_name(f"{output.stem}_assets")
+    asset_dir = base
+    suffix = 2
+    while asset_dir.exists():
+        asset_dir = base.with_name(f"{base.name}_{suffix}")
+        suffix += 1
+    asset_dir.mkdir(parents=True, exist_ok=False)
+    for entry in selected:
+        candidate = result.asset_candidates[entry["path"]]
+        local_path = getattr(candidate, "local_path", None)
+        if move_incremental and local_path is not None and local_path.stat().st_dev == output_device:
+            destination = asset_dir / local_path.name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            local_path.replace(destination)
+        else:
+            destination = candidate.copy_to(asset_dir)
+        entry["path"] = str(destination.resolve())
+    return asset_dir
+
+
+class _TakeoutSessionError(ValueError):
+    pass
+
+
+def _load_takeout_session(session_dir: Path, video_path: Path, takeout_module) -> list:
+    manifest_path = session_dir / "session.json"
+    if not manifest_path.exists():
+        return []
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if not isinstance(manifest, dict) or manifest.get("version") != 1:
+            raise ValueError("unsupported session format")
+    except (OSError, ValueError, TypeError) as exc:
+        raise ValueError(msg("cli.reconstruct_takeout_session_invalid", path=manifest_path, error=exc)) from exc
+    stat = video_path.stat()
+    video_state = manifest.get("video", {})
+    if not isinstance(video_state, dict):
+        raise _TakeoutSessionError(msg("cli.reconstruct_takeout_session_video", path=session_dir))
+    if (video_state.get("path") != str(video_path.resolve()) or video_state.get("size") != stat.st_size
+            or video_state.get("mtime_ns") != stat.st_mtime_ns):
+        raise _TakeoutSessionError(msg("cli.reconstruct_takeout_session_video", path=session_dir))
+    candidates = []
+    try:
+        for item in manifest["candidates"]:
+            path = session_dir / "assets" / item["path"]
+            if not path.is_file():
+                raise _TakeoutSessionError(msg("cli.reconstruct_takeout_session_missing", path=path))
+            candidates.append(takeout_module.LocalTakeoutAsset(
+                key=item["key"], display_name=item["display_name"], local_path=path,
+                size=path.stat().st_size, kind=item["kind"],
+                taken_date=dt.date.fromisoformat(item["taken_date"]) if item["taken_date"] else None,
+            ))
+    except _TakeoutSessionError:
+        raise
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        raise ValueError(msg("cli.reconstruct_takeout_session_invalid", path=manifest_path, error=exc)) from exc
+    return candidates
+
+
+def _save_takeout_session(session_dir: Path, video_path: Path, result, takeout_module) -> dict:
+    assets_dir = session_dir / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    needed_bytes = 0
+    for key, candidate in result.asset_candidates.items():
+        suffix = Path(candidate.display_name).suffix.lower() or ".media"
+        destination = assets_dir / (hashlib.sha256(key.encode("utf-8")).hexdigest()[:20] + suffix)
+        existing_size = destination.stat().st_size if destination.is_file() else 0
+        if existing_size != candidate.size:
+            needed_bytes += max(0, candidate.size - existing_size)
+    free_bytes = shutil.disk_usage(assets_dir).free
+    reserve_bytes = 1024 * 1024
+    if needed_bytes + reserve_bytes > free_bytes:
+        raise takeout_module.TakeoutError(msg(
+            "cli.reconstruct_takeout_session_space",
+            needed=round(needed_bytes / 1024 / 1024),
+            free=round(free_bytes / 1024 / 1024),
+            path=assets_dir,
+        ))
+    persisted = {}
+    candidate_rows = []
+    kept_paths = set()
+    for key, candidate in result.asset_candidates.items():
+        suffix = Path(candidate.display_name).suffix.lower() or ".media"
+        filename = hashlib.sha256(key.encode("utf-8")).hexdigest()[:20] + suffix
+        destination = assets_dir / filename
+        source_path = getattr(candidate, "local_path", None)
+        if not (destination.is_file() and destination.stat().st_size == candidate.size):
+            with candidate.open_stream() as source, destination.open("wb") as target:
+                shutil.copyfileobj(source, target, length=1024 * 1024)
+        kept_paths.add(filename)
+        row = {
+            "key": key, "display_name": candidate.display_name, "kind": candidate.kind,
+            "taken_date": candidate.taken_date.isoformat() if candidate.taken_date else None,
+            "path": filename,
+        }
+        candidate_rows.append(row)
+        persisted[key] = takeout_module.LocalTakeoutAsset(
+            key=key, display_name=candidate.display_name, local_path=destination,
+            size=destination.stat().st_size, kind=candidate.kind, taken_date=candidate.taken_date,
+        )
+    for path in assets_dir.iterdir():
+        if path.is_file() and path.name not in kept_paths:
+            path.unlink()
+    stat = video_path.stat()
+    manifest = {
+        "version": 1,
+        "video": {"path": str(video_path.resolve()), "size": stat.st_size, "mtime_ns": stat.st_mtime_ns},
+        "candidates": candidate_rows,
+    }
+    manifest_path = session_dir / "session.json"
+    temporary = manifest_path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(manifest_path)
+    return persisted
+
+
+def _reuse_takeout_session_assets(session_dir: Path, result, takeout_module) -> None:
+    """Reuse complete deterministic candidate copies left by an interrupted save."""
+    assets_dir = session_dir / "assets"
+    for key, candidate in list(result.asset_candidates.items()):
+        suffix = Path(candidate.display_name).suffix.lower() or ".media"
+        path = assets_dir / (hashlib.sha256(key.encode("utf-8")).hexdigest()[:20] + suffix)
+        if path.is_file() and path.stat().st_size == candidate.size:
+            result.asset_candidates[key] = takeout_module.LocalTakeoutAsset(
+                key=key, display_name=candidate.display_name, local_path=path,
+                size=candidate.size, kind=candidate.kind, taken_date=candidate.taken_date,
+            )
+
+
 def cmd_reconstruct(args: argparse.Namespace) -> int:
     video_path = Path(args.video)
-    assets_dir = Path(args.assets_dir)
+    takeout = getattr(args, "takeout", None)
+    takeout_part = getattr(args, "takeout_part", None)
+    takeout_session = getattr(args, "takeout_session", None)
+    takeout_final = getattr(args, "takeout_final", False)
+    publish_photos = getattr(args, "publish_to_photos", False)
+    if takeout == "":
+        print(msg("cli.reconstruct_takeout_guide"), file=sys.stderr)
+        return 0
+    assets_arg = takeout or args.assets_dir
+    assets_dir = Path(assets_arg) if assets_arg else None
     output = Path(args.output) if args.output else video_path.with_suffix(".yaml")
 
+    if publish_photos and not takeout:
+        if not takeout_part:
+            print(msg("cli.reconstruct_publish_needs_takeout"), file=sys.stderr)
+            return 2
+    if args.album and (assets_dir is not None or publish_photos):
+        print(msg("cli.reconstruct_choose_source"), file=sys.stderr)
+        return 2
+    if takeout and (args.assets_dir or takeout_part):
+        print(msg("cli.reconstruct_choose_source"), file=sys.stderr)
+        return 2
+    if takeout_part and (takeout_session is None or takeout or args.assets_dir or args.album):
+        print(msg("cli.reconstruct_takeout_incremental_usage"), file=sys.stderr)
+        return 2
+    if takeout_final and not takeout_part:
+        print(msg("cli.reconstruct_takeout_final_needs_part"), file=sys.stderr)
+        return 2
+    if takeout_session and not takeout_part:
+        print(msg("cli.reconstruct_takeout_incremental_usage"), file=sys.stderr)
+        return 2
+    if not args.album and assets_dir is None and not takeout_part:
+        print(msg("cli.reconstruct_assets_required", video=shlex.quote(str(video_path))), file=sys.stderr)
+        return 2
+    preferred_from = getattr(args, "takeout_from", None)
+    preferred_to = getattr(args, "takeout_to", None)
+    if (preferred_from or preferred_to) and not (takeout or takeout_part):
+        print(msg("cli.reconstruct_takeout_dates_need_zip"), file=sys.stderr)
+        return 2
+    if preferred_from and preferred_to and preferred_from > preferred_to:
+        print(msg("cli.reconstruct_takeout_date_order"), file=sys.stderr)
+        return 2
+
     try:
-        from . import reconstruct
+        from . import reconstruct, takeout as takeout_module
     except ImportError:
         print(msg("cli.reconstruct_missing_extra"), file=sys.stderr)
         return 1
 
+    if publish_photos and not takeout_part:
+        from . import photos_api
+        try:
+            photos_api.check_client()
+        except photos_api.PhotosApiError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+
     def _progress(text: str) -> None:
         print(text, file=sys.stderr)
 
+    zip_takeout = False
+    incremental_takeout = bool(takeout_part)
+    incremental_finalize = False
+    incremental_session_dir: Optional[Path] = None
     try:
-        result = reconstruct.reconstruct(video_path, assets_dir, on_progress=_progress)
-    except reconstruct.ReconstructError as exc:
+        if takeout_part:
+            part_path = Path(takeout_part).expanduser()
+            session_dir = Path(takeout_session).expanduser()
+            incremental_session_dir = session_dir
+            if not part_path.is_file():
+                raise takeout_module.TakeoutError(msg("cli.reconstruct_takeout_part_invalid", path=part_path))
+            if part_path.suffix.lower() != ".zip":
+                raise takeout_module.TakeoutError(msg("cli.reconstruct_takeout_part_zip", path=part_path))
+            session_dir.mkdir(parents=True, exist_ok=True)
+            previous = _load_takeout_session(session_dir, video_path, takeout_module)
+            current = takeout_module.scan_zip_folder(
+                part_path.parent, reconstruct.guess_kind, archive_paths=[part_path],
+                prefer_from=preferred_from, prefer_to=preferred_to,
+            )
+            if not current and not previous:
+                raise takeout_module.TakeoutError(msg("takeout.no_media"))
+            candidates = previous + current
+            if preferred_from or preferred_to:
+                lower = preferred_from or dt.date.min
+                upper = preferred_to or dt.date.max
+
+                def _incremental_priority(candidate):
+                    if candidate.taken_date is None:
+                        return (1, 0)
+                    if lower <= candidate.taken_date <= upper:
+                        return (0, 0)
+                    distance = (lower - candidate.taken_date).days if candidate.taken_date < lower else (candidate.taken_date - upper).days
+                    return (2, distance)
+
+                candidates.sort(key=_incremental_priority)
+            print(msg("cli.reconstruct_takeout_incremental_scanning", path=part_path.name,
+                      previous=len(previous), current=len(current)), file=sys.stderr)
+            result = reconstruct.reconstruct(video_path, None, on_progress=_progress,
+                                              asset_candidates=candidates)
+            zip_takeout = True
+            video_unmatched = [item for item in result.data.get("x_reconstruct_unmatched", [])
+                               if str(item.get("where", "")).startswith("video ")]
+            incremental_finalize = not video_unmatched or takeout_final
+            if not incremental_finalize:
+                result.asset_candidates = _save_takeout_session(session_dir, video_path, result, takeout_module)
+                for unmatched in result.data.get("x_reconstruct_unmatched", []):
+                    guess = unmatched.get("best_guess")
+                    if guess in result.asset_candidates:
+                        unmatched["best_guess"] = result.asset_candidates[guess].display_name
+                matched = sum(len(track.get("clips", [])) for track in result.data.get("timeline", {}).get("tracks", [])
+                              if track.get("type") == "video")
+                print(msg("cli.reconstruct_takeout_incremental_progress", matched=matched,
+                          pending=len(video_unmatched), session=session_dir), file=sys.stderr)
+                return 0
+            # Final output needs only assets used by confident clips. Avoid
+            # copying every near-match into the session, and reuse any complete
+            # files left behind by an earlier interrupted session save.
+            _reuse_takeout_session_assets(session_dir, result, takeout_module)
+            for unmatched in result.data.get("x_reconstruct_unmatched", []):
+                guess = unmatched.get("best_guess")
+                if guess in result.asset_candidates:
+                    unmatched["best_guess"] = result.asset_candidates[guess].display_name
+        elif args.album:
+            with tempfile.TemporaryDirectory(prefix="video-as-code-album-") as tmp:
+                album_dir = Path(tmp)
+                staged: dict[str, tuple[gphotos.AlbumItem, str]] = {}
+                print(msg("cli.reconstruct_album_loading"), file=sys.stderr)
+                items = gphotos.list_album(args.album)
+                for index, item in enumerate(items, 1):
+                    name = gphotos.original_filename(item)
+                    staged_name = f"{item.media_id}{Path(name).suffix.lower()}"
+                    print(msg("cli.reconstruct_album_item", i=index, n=len(items)), file=sys.stderr)
+                    gphotos.download(item, album_dir / staged_name)
+                    staged[staged_name] = (item, name)
+
+                result = reconstruct.reconstruct(video_path, album_dir, on_progress=_progress)
+                result.data["project"]["sources"] = {"album": args.album}
+                staged_names = {Path(name).stem: original for name, (_, original) in staged.items()}
+                for entry in result.data.get("bin", []):
+                    item_record = staged.get(Path(entry.get("path", "")).name)
+                    if item_record is None:
+                        continue
+                    item, original_name = item_record
+                    entry.pop("path", None)
+                    entry["source"] = {
+                        "name": original_name,
+                        "taken": sources_lock.taken_local(item.taken_ms, item.tz_offset_ms),
+                        "size": [item.width, item.height],
+                        "id": item.media_id,
+                    }
+                for unmatched in result.data.get("x_reconstruct_unmatched", []):
+                    guess = unmatched.get("best_guess")
+                    if guess:
+                        unmatched["best_guess"] = staged_names.get(Path(guess).stem, guess)
+        else:
+            assert assets_dir is not None
+            if not assets_dir.is_dir():
+                print(msg("cli.reconstruct_assets_path_invalid", path=assets_dir), file=sys.stderr)
+                return 2
+            archive_paths = sorted(path for path in assets_dir.rglob("*")
+                                   if path.is_file() and path.suffix.lower() == ".zip") if takeout else []
+            if archive_paths:
+                candidates = takeout_module.scan_zip_folder(
+                    assets_dir, reconstruct.guess_kind, archive_paths=archive_paths,
+                    prefer_from=preferred_from, prefer_to=preferred_to,
+                )
+                if not candidates:
+                    raise takeout_module.TakeoutError(msg("takeout.no_media"))
+                if preferred_from or preferred_to:
+                    lower = preferred_from or dt.date.min
+                    upper = preferred_to or dt.date.max
+
+                    def _candidate_priority(candidate):
+                        if candidate.taken_date is None:
+                            return (1, 0)
+                        if lower <= candidate.taken_date <= upper:
+                            return (0, 0)
+                        distance = (lower - candidate.taken_date).days if candidate.taken_date < lower else (candidate.taken_date - upper).days
+                        return (2, distance)
+
+                    candidates.sort(key=_candidate_priority)
+                    print(msg("cli.reconstruct_takeout_priority", from_date=preferred_from or "…",
+                              to_date=preferred_to or "…"), file=sys.stderr)
+                print(msg("cli.reconstruct_takeout_zip_count", n=len(candidates)), file=sys.stderr)
+                result = reconstruct.reconstruct(video_path, None, on_progress=_progress,
+                                                  asset_candidates=candidates)
+                zip_takeout = True
+                del candidates
+                for unmatched in result.data.get("x_reconstruct_unmatched", []):
+                    guess = unmatched.get("best_guess")
+                    if guess in result.asset_candidates:
+                        unmatched["best_guess"] = result.asset_candidates[guess].display_name
+            else:
+                if preferred_from or preferred_to:
+                    print(msg("cli.reconstruct_takeout_dates_need_zip"), file=sys.stderr)
+                    return 2
+                if takeout and not reconstruct.asset_files(assets_dir):
+                    raise takeout_module.TakeoutError(msg("takeout.no_media"))
+                result = reconstruct.reconstruct(video_path, assets_dir, on_progress=_progress)
+    except (reconstruct.ReconstructError, gphotos.GPhotosError, takeout_module.TakeoutError, OSError, ValueError) as exc:
         print(msg("cli.reconstruct_error", path=video_path, exc=exc), file=sys.stderr)
         return 1
+
+    if publish_photos and incremental_takeout:
+        from . import photos_api
+        try:
+            photos_api.check_client()
+        except photos_api.PhotosApiError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+
+    entries = result.data.get("bin", [])
+    if zip_takeout and not publish_photos:
+        try:
+            asset_dir = _persist_takeout_matches(result, output, move_incremental=incremental_takeout)
+            if asset_dir:
+                print(msg("cli.reconstruct_local_assets", path=asset_dir), file=sys.stderr)
+        except (OSError, KeyError) as exc:
+            print(msg("cli.reconstruct_error", path=video_path, exc=exc), file=sys.stderr)
+            return 1
+
+    if publish_photos:
+        # For ordinary folders, keep a local draft before upload. ZIP mode
+        # defers any persistent extraction until it is actually needed.
+        if not zip_takeout:
+            try:
+                output.write_text(_dump_yaml(result.data), encoding="utf-8")
+            except OSError as exc:
+                print(msg("cli.write_failed", path=output, exc=exc), file=sys.stderr)
+                return 1
+        photos_extensions = {".avif", ".bmp", ".gif", ".heic", ".ico", ".jpg", ".jpeg", ".png",
+                             ".tif", ".tiff", ".webp", ".3gp", ".3g2", ".asf", ".avi", ".divx",
+                             ".m2t", ".m2ts", ".m4v", ".mkv", ".mmv", ".mod", ".mov", ".mp4",
+                             ".mpg", ".mts", ".tod", ".wmv"}
+
+        def _source(entry):
+            key = entry.get("path", "")
+            if zip_takeout and key in result.asset_candidates:
+                return result.asset_candidates[key]
+            return Path(key)
+
+        def _source_name(source):
+            return Path(source.member).name if hasattr(source, "member") else source.name
+
+        def _source_size(source):
+            return source.size if hasattr(source, "size") else source.stat().st_size
+
+        def _source_kind(source):
+            if hasattr(source, "kind"):
+                return source.kind
+            return reconstruct.guess_kind(source)
+
+        upload_entries = []
+        for entry in entries:
+            source = _source(entry)
+            suffix = Path(_source_name(source)).suffix.lower()
+            if _source_kind(source) in ("image", "video") and suffix in photos_extensions:
+                upload_entries.append((entry, source))
+        local_entries = [entry for entry in entries if entry not in [item[0] for item in upload_entries]]
+
+        if not upload_entries:
+            print(msg("cli.reconstruct_no_matches"), file=sys.stderr)
+            if zip_takeout:
+                try:
+                    _persist_takeout_matches(result, output, move_incremental=incremental_takeout)
+                except (OSError, KeyError) as exc:
+                    print(msg("cli.reconstruct_error", path=video_path, exc=exc), file=sys.stderr)
+                    return 1
+        elif not sys.stdin.isatty():
+            print(msg("cli.reconstruct_publish_interactive"), file=sys.stderr)
+            if zip_takeout:
+                try:
+                    _persist_takeout_matches(result, output, move_incremental=incremental_takeout)
+                    output.write_text(_dump_yaml(result.data), encoding="utf-8")
+                except (OSError, KeyError) as exc:
+                    print(msg("cli.reconstruct_error", path=video_path, exc=exc), file=sys.stderr)
+                    return 1
+            return 2
+        else:
+            try:
+                total_bytes = sum(_source_size(source) for _, source in upload_entries)
+                print(msg("cli.reconstruct_publish_summary", n=len(upload_entries), mb=round(total_bytes / 1e6),
+                          unmatched=len(result.data.get("x_reconstruct_unmatched", [])),
+                          local=len(local_entries)), file=sys.stderr)
+                for _, source in upload_entries:
+                    print(msg("cli.reconstruct_upload_candidate", name=_source_name(source),
+                              mb=round(_source_size(source) / 1e6)), file=sys.stderr)
+                answer = input(msg("cli.reconstruct_publish_confirm"))
+                if answer.strip().lower() not in ("s", "si", "sí", "y", "yes"):
+                    if zip_takeout:
+                        _persist_takeout_matches(result, output, move_incremental=incremental_takeout)
+                    print(msg("cli.reconstruct_upload_declined"), file=sys.stderr)
+                else:
+                    token = photos_api.access_token(_progress)
+                    api = photos_api.Api(token)
+                    album = api.create_album(msg("cli.reconstruct_album_title", title=video_path.stem))
+                    uploaded: list[tuple[str, str]] = []
+                    for index, (_entry, source) in enumerate(upload_entries, 1):
+                        filename = _source_name(source)
+                        print(msg("cli.reconstruct_uploading", i=index, n=len(upload_entries), name=filename),
+                              file=sys.stderr)
+                        if hasattr(source, "open_stream"):
+                            with source.open_stream() as stream:
+                                upload_token = api.upload_stream(filename, source.size, stream)
+                        else:
+                            upload_token = api.upload(source)
+                        uploaded.append((filename, upload_token))
+                    created = api.add_to_album(album["id"], uploaded)
+                    print(msg("cli.reconstruct_album_created", url=album.get("productUrl", "https://photos.google.com/")),
+                          file=sys.stderr)
+                    print(msg("cli.reconstruct_share_instructions"), file=sys.stderr)
+                    share_url = input(msg("cli.reconstruct_share_prompt")).strip()
+                    album_items = gphotos.list_album(share_url)
+                    by_id = {item.media_id: item for item in album_items}
+                    if any(not item.get("id") or item["id"] not in by_id for item in created):
+                        raise gphotos.GPhotosError(msg("cli.reconstruct_album_items_missing"))
+                    remote_sources = []
+                    for (entry, _source_ref), media in zip(upload_entries, created):
+                        item = by_id[media["id"]]
+                        remote_sources.append((entry, {
+                            "name": gphotos.original_filename(item),
+                            "taken": sources_lock.taken_local(item.taken_ms, item.tz_offset_ms),
+                            "size": [item.width, item.height], "id": item.media_id,
+                        }))
+                    if zip_takeout and local_entries:
+                        _persist_takeout_matches(result, output, local_entries,
+                                                 move_incremental=incremental_takeout)
+                    result.data["project"]["sources"] = {"album": share_url}
+                    for entry, source_record in remote_sources:
+                        entry.pop("path", None)
+                        entry["source"] = source_record
+            except (photos_api.PhotosApiError, gphotos.GPhotosError, takeout_module.TakeoutError, OSError, KeyError) as exc:
+                print(msg("cli.reconstruct_error", path=video_path, exc=exc), file=sys.stderr)
+                if zip_takeout:
+                    try:
+                        _persist_takeout_matches(result, output, move_incremental=incremental_takeout)
+                        output.write_text(_dump_yaml(result.data), encoding="utf-8")
+                    except (takeout_module.TakeoutError, OSError, KeyError) as fallback_exc:
+                        print(msg("cli.reconstruct_error", path=video_path, exc=fallback_exc), file=sys.stderr)
+                print(msg("cli.reconstruct_local_fallback", output=output), file=sys.stderr)
+                return 1
 
     try:
         output.write_text(_dump_yaml(result.data), encoding="utf-8")
     except OSError as exc:
         print(msg("cli.write_failed", path=output, exc=exc), file=sys.stderr)
         return 1
+    if incremental_finalize and incremental_session_dir is not None:
+        # The finalized YAML now owns local matched media under *_assets, or
+        # refers to the remote album. Session candidates are no longer needed.
+        shutil.rmtree(incremental_session_dir / "assets", ignore_errors=True)
+        (incremental_session_dir / "session.json").unlink(missing_ok=True)
     print(msg("cli.reconstruct_done", output=output))
     for w in result.warnings:
         print(msg("cli.warning_prefix", w=w), file=sys.stderr)
@@ -657,7 +1149,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_reconstruct = sub.add_parser("reconstruct", help=msg("cli.help.reconstruct"))
     p_reconstruct.add_argument("video", help=msg("cli.help.reconstruct_video"))
-    p_reconstruct.add_argument("assets_dir", help=msg("cli.help.reconstruct_assets_dir"))
+    p_reconstruct.add_argument("assets_dir", nargs="?", help=msg("cli.help.reconstruct_assets_dir"))
+    p_reconstruct.add_argument("--album", help=msg("cli.help.reconstruct_album"))
+    p_reconstruct.add_argument("--takeout", nargs="?", const="", metavar="DIR", help=msg("cli.help.reconstruct_takeout"))
+    p_reconstruct.add_argument("--takeout-from", type=dt.date.fromisoformat, metavar="YYYY-MM-DD",
+                               help=msg("cli.help.reconstruct_takeout_from"))
+    p_reconstruct.add_argument("--takeout-to", type=dt.date.fromisoformat, metavar="YYYY-MM-DD",
+                               help=msg("cli.help.reconstruct_takeout_to"))
+    p_reconstruct.add_argument("--takeout-part", metavar="ZIP", help=msg("cli.help.reconstruct_takeout_part"))
+    p_reconstruct.add_argument("--takeout-session", metavar="DIR", help=msg("cli.help.reconstruct_takeout_session"))
+    p_reconstruct.add_argument("--takeout-final", action="store_true", help=msg("cli.help.reconstruct_takeout_final"))
+    p_reconstruct.add_argument("--publish-to-photos", action="store_true", help=msg("cli.help.reconstruct_publish_photos"))
     p_reconstruct.add_argument("-o", "--output", help=msg("cli.help.reconstruct_output"))
     p_reconstruct.set_defaults(func=cmd_reconstruct)
 

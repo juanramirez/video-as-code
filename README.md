@@ -801,15 +801,17 @@ survives each rebuild (`git pull` in the worktree first, to have it).
 
 ```bash
 video-as-code reconstruct rendered.mp4 assets/ [-o output.yaml]
+video-as-code reconstruct rendered.mp4 --album 'https://photos.app.goo.gl/…' [-o output.yaml]
+video-as-code reconstruct rendered.mp4 --takeout [DIR] [--publish-to-photos] [-o output.yaml]
 ```
 
 Unlike `video-as-code import`, this doesn't start from a `.kdenlive` project — it
 starts from an already-**rendered** video (a flat `.mp4`, no edit
-metadata) plus a folder of the source assets that presumably went into
-it, and tries to recover which asset appears where, trimmed how, and with
-what fades, by comparing pixel/audio content rather than parsing
-structured XML. There is no guaranteed correct answer here (see
-`ROADMAP.md` for how the matching works and its known limitations) —
+metadata) plus either a folder or a shared Google Photos album of the source
+assets that presumably went into it, and tries to recover which asset appears
+where, trimmed how, and with what fades, by comparing pixel/audio content
+rather than parsing structured XML. There is no guaranteed correct answer here
+(see `ROADMAP.md` for how the matching works and its known limitations) —
 segments it isn't confident about are never silently guessed; they're
 kept under `x_reconstruct_unmatched:` in the output YAML for you to
 review by hand, the same way `video-as-code import` handles `x_kdenlive_raw:`.
@@ -820,23 +822,47 @@ project, not a finished YAML.
 See `docs/reconstructing.md` for a short step-by-step howto of this
 whole flow.
 
+`--takeout` scans a Google Photos Takeout folder. If it finds ZIP archives,
+it reads them directly, decompressing only a few candidates at a time; an
+already-extracted folder also works. It stops when every video segment has
+a confident match. For a local YAML, only matched media is kept beside the
+YAML. Run it without `DIR` to print Google's Takeout walkthrough.
+
+Optional `--takeout-from`/`--takeout-to` dates prioritize candidates using
+Takeout sidecars and camera-style filenames. They don't exclude other files:
+the scan checks the rest if any segment remains unmatched. With
+`--publish-to-photos`, matched ZIP entries stream directly into a new
+app-owned album. After one sign-in and confirmation, the CLI asks you to
+enable link sharing once and paste the link; the YAML then refers to remote
+album items. Google requires OAuth setup; the CLI explains the steps when
+its client JSON is missing. See `docs/reconstructing.md` for the full
+Takeout and Google Cloud setup.
+
+If the full Takeout export does not fit on disk, use `--takeout-part ZIP`
+with `--takeout-session DIR` for each part in turn. Delete each processed ZIP
+before downloading the next; the session retains only matched and best-guess
+media. The last part should include `--takeout-final` if some video segments
+remain unmatched. If every segment matches earlier, the command finalizes
+automatically. See `docs/reconstructing.md` for examples.
+
 ### Language
 
 All user-facing text (validation errors, CLI output, import warnings) goes
 through a small message catalog (`i18n.py`), keyed by token and looked up at
 call time. English is the source of truth and the fallback for any locale
-or key that isn't translated. Set `VIDEO_AS_CODE_LANG=es` to get the Spanish
-catalog:
+or key that isn't translated. The tool detects the user's locale from
+`LC_ALL`, `LC_MESSAGES`, or `LANG` automatically. Set `LOCALE=es` (or a tag
+such as `es_ES.UTF-8`) to override it; `VIDEO_AS_CODE_LANG` has the highest
+priority:
 
 ```bash
 VIDEO_AS_CODE_LANG=es video-as-code validate project.yaml
 ```
 
-We deliberately don't read the system `LANG`/`LC_ALL`: locale selection is
-opt-in and explicit, so behavior doesn't silently change across machines
-and test runs stay deterministic. Code comments, docstrings, and this
-README are always in English regardless of `VIDEO_AS_CODE_LANG` — that setting only
-affects what a `video-as-code` *user* sees at runtime.
+The priority is `VIDEO_AS_CODE_LANG`, `LOCALE`, then the standard system
+locale variables (`LC_ALL`, `LC_MESSAGES`, `LANG`). Code comments,
+docstrings, and this README are always in English; locale settings only
+affect what a `video-as-code` *user* sees at runtime.
 
 ## Current status
 
