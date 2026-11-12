@@ -596,12 +596,14 @@ class Importer:
                 result["focus_blur"] = round(blur, 3)
             return result
         if service == "freeze":
-            # `frame` is a plain user-facing value (0-based from this
-            # clip's own first visible frame, same as `_add_freeze_filter`
-            # writes it) - any value round-trips, same bar `chroma_key`/
-            # `focus_rect` already hold to.
+            # `frame` is a position in the source (`_add_freeze_filter`
+            # writes the entry's `in` + the clip-relative frame, as
+            # kdenlive does): back to the clip's own timeline. One before
+            # the entry's `in` isn't representable as `freeze_at:`.
             try:
-                frame = _parse_frame_value(props.get("frame", "0"), self.fps)
+                frame = _parse_frame_value(props.get("frame", "0"), self.fps) - entry_in
+                if frame < 0:
+                    raise ValueError(frame)
             except ValueError:
                 self.raw_items.append(
                     RawItem(msg("reverse.unrecognized_filter", ctx=ctx, service=service, kid=kid or "?"), _pretty(filter_el))
