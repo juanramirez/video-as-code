@@ -1,10 +1,9 @@
 """Message catalog for every string a `video-as-code` user sees: validation errors,
 CLI output, import warnings. English is the source of truth and the
 fallback — both for locales that don't exist and for keys missing from a
-locale that does. Pick a locale by setting `VIDEO_AS_CODE_LANG` (e.g. `es`); it's
-opt-in only (we don't read the system `LANG`/`LC_ALL`), so behavior stays
-explicit and test runs stay deterministic regardless of the machine's
-locale.
+locale that does. Pick a locale with `VIDEO_AS_CODE_LANG` or `LOCALE` (e.g.
+`es` or `es_ES.UTF-8`). If none is set, the system locale variables are
+checked in the standard precedence order (`LC_ALL`, `LC_MESSAGES`, `LANG`).
 """
 from __future__ import annotations
 
@@ -390,6 +389,92 @@ _EN: dict[str, str] = {
         "'reconstruct' needs the optional numpy/Pillow dependencies. "
         "Install them with: pip install video-as-code[reconstruct]"
     ),
+    "reconstruct.assets_required": "No candidate assets were supplied.",
+    "cli.reconstruct_assets_required": """Reconstruction needs a source library.
+
+Choose one:
+  1. Local folder
+     Search files you have already gathered in one folder.
+     video-as-code reconstruct {video} FOLDER
+  2. Shared album
+     Search only photos and videos already in a Google Photos shared album.
+     video-as-code reconstruct {video} --album ALBUM_URL
+  3. Whole Google Photos library
+     Search a Takeout export locally, then upload only matched files to a new album.
+     video-as-code reconstruct {video} --takeout DIR --publish-to-photos
+
+New to Takeout? Run this first for a step-by-step guide:
+  video-as-code reconstruct {video} --takeout""",
+    "cli.reconstruct_assets_path_invalid": "Assets folder '{path}' does not exist or is not a folder.",
+    "cli.reconstruct_upload_declined": "Upload canceled; the reconstruction YAML will be saved with local paths.",
+    "cli.reconstruct_takeout_guide": """Google Photos Takeout guide:
+1. Open https://takeout.google.com/ and sign in to the Google account that owns the photos.
+2. Choose 'Deselect all', then select 'Google Photos'.
+3. Choose 'Next step' and 'Create export'. Keep the default one-time export.
+4. Google will email you when it is ready; this can take hours or days. Download every ZIP part.
+5. Put all downloaded ZIP parts in one folder (for example ~/Downloads/photos-takeout/). Leave them zipped: the CLI scans them directly. An already-extracted folder also works.
+6. Run again: video-as-code reconstruct VIDEO --takeout ~/Downloads/photos-takeout/ --publish-to-photos
+
+Takeout exports the whole Photos library; it cannot export a chosen date range. The CLI uses capture dates from sidecars and camera-style filenames to prioritize likely candidates. It decompresses only a few at a time and stops when every video segment has a confident match.
+
+If the complete export will not fit on disk, download one ZIP part at a time and run:
+  video-as-code reconstruct VIDEO --takeout-part ZIP --takeout-session SESSION
+After a successful run, you can delete that ZIP and download the next part. Repeat with the same session folder. If every video segment matches, the YAML is saved automatically. Otherwise add --takeout-final to the last part; unmatched segments will be flagged for review. Keep the session folder until the YAML is finished.""",
+    "cli.reconstruct_publish_needs_takeout": "--publish-to-photos requires --takeout DIR.",
+    "cli.reconstruct_choose_source": "Choose one source: a local assets folder, --takeout DIR, or --album URL.",
+    "cli.reconstruct_no_matches": "No matched image/video file that Google Photos can store. The YAML can still be saved locally.",
+    "cli.reconstruct_publish_interactive": "Publishing requires an interactive terminal so you can review the upload and share the album.",
+    "cli.reconstruct_publish_summary": "Matched {n} uploadable file(s) ({mb} MB); {unmatched} segment(s) need review and {local} other matched file(s) will stay local. Only the uploadable matches will be copied to Google Photos.",
+    "cli.reconstruct_upload_candidate": "  - {name} ({mb} MB)",
+    "cli.reconstruct_publish_confirm": "Upload these copies to your Google Photos account? This uses its storage. [y/N] ",
+    "cli.reconstruct_album_title": "{title} · video-as-code",
+    "cli.reconstruct_uploading": "Uploading {i}/{n}: {name}",
+    "cli.reconstruct_album_created": "Created the new album: {url}",
+    "cli.reconstruct_share_instructions": "In Google Photos, open the album, choose Share, turn on link sharing, and copy the link. This is the only manual album step; the CLI will use that link in the YAML.",
+    "cli.reconstruct_share_prompt": "Paste the shared album link here: ",
+    "cli.reconstruct_album_items_missing": "The shared album does not yet show every uploaded item. Check that link sharing is enabled, wait for video processing if needed, then retry.",
+    "cli.reconstruct_local_fallback": "The local-path draft is available at {output}; it was kept so you don't have to run matching again.",
+    "cli.reconstruct_local_assets": "Matched files needed by the local YAML were extracted to {path}.",
+    "cli.reconstruct_takeout_zip_count": "Found {n} supported media file(s) in the Takeout ZIPs. Only a few will be decompressed at a time; matching stops when all video segments have confident matches.",
+    "takeout.no_zip_files": "No Takeout ZIP files found under '{path}'. Pass an extracted Takeout folder or a folder containing its ZIP parts.",
+    "takeout.bad_zip": "Can't read Takeout archive '{path}': {error}",
+    "takeout.no_media": "No supported photos or videos were found in the Takeout data.",
+    "cli.reconstruct_takeout_dates_need_zip": "Takeout date hints require a folder containing Takeout ZIP archives.",
+    "cli.reconstruct_takeout_date_order": "--takeout-from must be on or before --takeout-to.",
+    "cli.reconstruct_takeout_priority": "Prioritizing media dated {from_date} to {to_date}; if any segment remains unmatched, the scan continues through the other files.",
+    "cli.reconstruct_takeout_incremental_usage": "Incremental mode requires --takeout-part ZIP and --takeout-session DIR, without another source option.",
+    "cli.reconstruct_takeout_final_needs_part": "--takeout-final can only be used with --takeout-part ZIP.",
+    "cli.reconstruct_takeout_part_invalid": "Takeout ZIP '{path}' does not exist or is not a file.",
+    "cli.reconstruct_takeout_part_zip": "Takeout part '{path}' must be a ZIP file.",
+    "cli.reconstruct_takeout_incremental_scanning": "Scanning Takeout part '{path}' ({current} media files; {previous} retained candidates from earlier parts)...",
+    "cli.reconstruct_takeout_incremental_progress": "Matched {matched} video segment(s); {pending} remain. Keep this session directory, delete this ZIP if you need the space, then run --takeout-part with the next ZIP. On the last part, add --takeout-final. Session: {session}",
+    "cli.reconstruct_takeout_session_video": "Takeout session '{path}' belongs to a different or changed render video.",
+    "cli.reconstruct_takeout_session_missing": "A retained candidate is missing from the Takeout session: '{path}'.",
+    "cli.reconstruct_takeout_session_invalid": "Can't read Takeout session '{path}': {error}",
+    "cli.reconstruct_takeout_session_space": "Not enough free space for retained Takeout matches: need about {needed} MB more, but only {free} MB are available in '{path}'. Free space or move --takeout-session to a larger drive, then retry.",
+    "cli.reconstruct_assets_space": "Not enough free space to save matched source files: need about {needed} MB, but only {free} MB are available in '{path}'. Free space or choose another output location.",
+    "photos_api.no_client": "Google Photos upload needs an OAuth desktop client JSON. In Google Cloud, create/select a project, enable the Google Photos Library API, configure the OAuth consent screen and add your account as a test user, then create an OAuth client ID of type 'Desktop app'. Save its downloaded JSON as '{path}' (or set VIDEO_AS_CODE_PHOTOS_CLIENT). Start here: {url}",
+    "photos_api.bad_client": "Can't read OAuth client file '{path}': {error}",
+    "photos_api.network": "Google Photos request failed: {error}",
+    "photos_api.auth_error": "Google Photos sign-in failed: {error}",
+    "photos_api.browser_done": "Signed in to Google Photos. You can close this tab.",
+    "photos_api.sign_in": "Sign in to Google Photos in the browser window. If it doesn't open, visit: {url}",
+    "photos_api.api_error": "Google Photos API error (HTTP {status}): {error}",
+    "photos_api.item_error": "Google Photos could not add '{name}': {error}",
+    "photos_api.result_count": "Google Photos created {actual} of {expected} requested album items.",
+    "photos_api.stream_ended": "The ZIP stream for '{filename}' ended at {offset} of {size} bytes.",
+    "reconstruct.progress.takeout_processing": "Starting Takeout candidate {i}/{n} ({kind}): {name}",
+    "reconstruct.progress.takeout_image": "Extracting image signature: {name}",
+    "reconstruct.progress.takeout_video_probe": "Reading video metadata: {name}",
+    "reconstruct.progress.takeout_video_frames": "Sampling video frames (this may take a while): {name}",
+    "reconstruct.progress.takeout_compare": "Comparing video against {n} rendered segments: {name}",
+    "reconstruct.progress.takeout_video_audio": "Checking audio from visually relevant video: {name}",
+    "reconstruct.progress.takeout_candidate_done": "Finished Takeout candidate {i}/{n}: {name}",
+    "reconstruct.progress.takeout_match_count": "Confident Takeout matches so far: {matched}/{total} video segments ({remaining} remaining).",
+    "reconstruct.progress.takeout_render_match_count": "Confident matches from the scanned Takeout candidates: {matched}/{total} segments (checked {checked}/{total}).",
+    "reconstruct.progress.takeout_matches_complete": "Every video segment has a confident match after {n} candidates; stopping the Takeout scan.",
+    "cli.reconstruct_album_loading": "Listing and downloading the Google Photos album...",
+    "cli.reconstruct_album_item": "  Downloading album item {i}/{n}...",
     "reconstruct.ffmpeg_or_ffprobe_missing": (
         "ffmpeg/ffprobe not found on PATH; 'reconstruct' needs them to decode "
         "frames and audio. Install ffmpeg (which bundles ffprobe) and make "
@@ -593,9 +678,17 @@ _EN: dict[str, str] = {
     "gallery.ffmpeg_unavailable": "ffmpeg is not available on PATH; the gallery needs it to make its samples",
     "gallery.ffmpeg_failed": "ffmpeg failed making the gallery's samples: {stderr}",
     "cli.transitions_no_openshot": "(OpenShot's transitions weren't found: install openshot-qt, or set {env} to its transitions folder)",
-    "cli.help.reconstruct": "Reconstructs a YAML from an already-rendered video + an assets folder (best-effort, content-based matching)",
+    "cli.help.reconstruct": "Reconstructs a YAML from a rendered video and candidate assets (best-effort, content-based matching)",
     "cli.help.reconstruct_video": "Path to the already-rendered video file",
     "cli.help.reconstruct_assets_dir": "Path to the folder of candidate source assets",
+    "cli.help.reconstruct_album": "Use every media item in this shared Google Photos album as a candidate source",
+    "cli.help.reconstruct_takeout": "Scan a Google Photos Takeout folder (ZIPs are read directly; extracted folders also work); without DIR, print the walkthrough",
+    "cli.help.reconstruct_takeout_from": "Prioritize files with capture dates on or after this date (YYYY-MM-DD); other files remain as fallback candidates",
+    "cli.help.reconstruct_takeout_to": "Prioritize files with capture dates on or before this date (YYYY-MM-DD); other files remain as fallback candidates",
+    "cli.help.reconstruct_takeout_part": "Process one Takeout ZIP as part of a low-disk incremental session",
+    "cli.help.reconstruct_takeout_session": "Directory for retaining only the best candidates between ZIP parts",
+    "cli.help.reconstruct_takeout_final": "Mark this as the last ZIP; save the YAML even if some segments remain unmatched",
+    "cli.help.reconstruct_publish_photos": "Upload only confidently matched Takeout files to a new Google Photos album and create remote YAML sources",
     "cli.help.reconstruct_output": "Output path (default: same name with .yaml extension)",
     "cli.render_missing_melt": (
         "'melt' (the MLT engine kdenlive itself renders with) was not found "
@@ -615,6 +708,58 @@ _EN: dict[str, str] = {
     "cli.stretch_bad_time": "Not a time: '{time}' (seconds, or minutes:seconds, like 80, 1:20 or 1:20.5)",
     "cli.stretch_outside": "From {start} to {end} isn't a stretch of the video: it lasts {length}",
     "cli.help.doctor": "Checks what this machine has of what video-as-code uses (melt and its modules, ffmpeg, the plugins, optional tools) and says how to get what's missing",
+    "cli.help.clean": "Deletes the files that can be regenerated (.work/, .derived/, .proxies/...) once it has checked that the sources they come from still answer; what it can't check stays, with the reason. See provenance.yaml",
+    "cli.help.clean_paths": "Only these files or folders (relative to the project's folder)",
+    "cli.help.clean_dry_run": "Check the sources and say what would be deleted, deleting nothing",
+    "cli.help.provenance": "Records in provenance.yaml what a generated file or folder is made from and how, so `clean` can later delete it",
+    "cli.help.provenance_path": "The file or folder (inside the project's folder)",
+    "cli.help.provenance_item": "Made from this item of the project's album (original file name; {{name}} = each file's own name); repeatable",
+    "cli.help.provenance_album": "With --item: the item is in this other album, not the project's",
+    "cli.help.provenance_url": "Made from this link (YouTube, Drive, http); repeatable",
+    "cli.help.provenance_reference": "Made from the project's reference video (sources.reference)",
+    "cli.help.provenance_link": "Made from what this `url:` bin clip downloaded (as the lock records it); repeatable",
+    "cli.help.provenance_file": "Made from this other file of the project; repeatable",
+    "cli.help.provenance_recipe": "The script that makes it again (a file of the project)",
+    "cli.help.provenance_command": "The command line that makes it again",
+    "cli.help.provenance_note": "A free-text note",
+    "provenance.registered": "{path}: registered ({n} source(s))",
+    "provenance.registry_invalid": "{path} isn't a valid provenance registry: {exc}",
+    "provenance.entry_invalid": "{path}, entry '{entry}': {why}",
+    "provenance.outside_project": "'{path}' is not inside the project's folder ({base}): clean never deletes there",
+    "provenance.no_album": "the project has no album link (project.sources.album) to look the item up in",
+    "provenance.item_gone": "'{name}' is no longer in the album",
+    "provenance.item_there": "album item '{name}' is there",
+    "provenance.url_there": "{url} answers",
+    "provenance.youtube_there": "{url} is still reachable (yt-dlp)",
+    "provenance.check_failed": "couldn't check {what}: {exc}",
+    "provenance.size_differs": "{what}, but it is {now} bytes now and {recorded} when recorded",
+    "provenance.link_unlocked": "link '{id}' has no url in sources.lock.yaml",
+    "provenance.no_reference": "the project has no reference link (project.sources.reference)",
+    "provenance.file_changed": "{path} no longer holds what was recorded (sha256 differs)",
+    "provenance.file_present": "{path} is on disk",
+    "provenance.file_via": "{path} would be downloaded again: {detail}",
+    "provenance.file_gone": "{path} is gone and nothing records where it came from",
+    "provenance.file_gone_unchecked": "{path} is gone and can't be regenerated: {why}",
+    "provenance.file_regenerable": "{path} is gone but can be regenerated",
+    "provenance.recipe_missing": "the recipe '{recipe}' doesn't exist",
+    "provenance.no_recipe": "no recipe or command to make it again is recorded",
+    "provenance.no_sources": "no sources are recorded for it",
+    "provenance.input_unknown": "its input '{name}' isn't in sources.lock.yaml (nor derived from something that is)",
+    "clean.would_remove": "would delete  {group}: {files} file(s), {size}",
+    "clean.removed": "deleted       {group}: {files} file(s), {size}",
+    "clean.kept": "kept          {group}: {files} file(s), {size}",
+    "clean.unregistered": "not registered {group}: {files} file(s), {size} (kept: nothing says where they come from; see `video-as-code provenance`)",
+    "clean.nothing": "Nothing registered to clean: the files need a provenance.yaml entry or a .input.json sidecar.",
+    "cli.help.clean_yes": "Don't ask for the typed confirmation (for scripts): deletes everything that was checked",
+    "clean.would_free": "{size} would be deleted for good.",
+    "clean.cancelled": "Cancelled: nothing was deleted.",
+    "clean.not_interactive": "Not a terminal, so the confirmation can't be asked: nothing was deleted (--dry-run to look, --yes-i-am-sure to delete without asking).",
+    "clean.confirm_banner": "Danger: {files} file(s), {size}, will be DELETED FOR GOOD (no trash). No copy of these files has been located anywhere: only their sources were checked, and only for today. If a source is gone or changes and you don't have a copy somewhere else, this data will be LOST.",
+    "clean.confirm_phrase": "Yes, I am sure",
+    "clean.confirm_prompt": "To continue, type exactly \"{phrase}\" (anything else cancels):",
+    "clean.total": "Freed {size}.",
+    "clean.total_dry": "Would free {size}.",
+    "clean.warning": "Warning: a source that answers today may stop answering tomorrow (an album unshared, a video made private, a link that moves, yt-dlp breaking). What was deleted now depends on those sources, and 'answers' doesn't prove it still holds identical bytes (YouTube and a bare reachable link aren't compared against a hash). Keep your own copy of anything irreplaceable.",
     "doctor.header": "video-as-code doctor - Python {python}, {system}",
     "doctor.group_needed": "Needed:",
     "doctor.group_melt": "melt's modules ({melt}) - without one, what uses it renders as nothing:",
@@ -715,7 +860,7 @@ _EN: dict[str, str] = {
     "split.audio_short": "The sound came out short twice ({got} s of {want} s): stopping rather than cut the picture to it",
     "split.concat": "Joining the segments and the sound",
     "split.concat_failed": "ffmpeg failed joining the segments: {detail}",
-    "cli.help.lang": "Output language (overrides VIDEO_AS_CODE_LANG for this run)",
+    "cli.help.lang": "Output language (overrides environment locale settings for this run)",
     "cli.write_failed": "Error writing '{path}': {exc}",
 }
 
@@ -1099,6 +1244,92 @@ _ES: dict[str, str] = {
         "'reconstruct' necesita las dependencias opcionales numpy/Pillow. "
         "Instálalas con: pip install video-as-code[reconstruct]"
     ),
+    "reconstruct.assets_required": "No se indicó ningún asset candidato.",
+    "cli.reconstruct_assets_required": """Falta indicar la biblioteca de origen.
+
+Elige una opción:
+  1. Carpeta local
+     Busca entre los archivos que ya hayas reunido en una carpeta.
+     video-as-code reconstruct {video} CARPETA
+  2. Álbum compartido
+     Busca sólo entre las fotos y vídeos que ya estén en un álbum compartido de Google Fotos.
+     video-as-code reconstruct {video} --album URL_DEL_ÁLBUM
+  3. Biblioteca completa de Google Fotos
+     Busca localmente en un Takeout y sube sólo las coincidencias a un álbum nuevo.
+     video-as-code reconstruct {video} --takeout CARPETA --publish-to-photos
+
+¿Es tu primera vez con Takeout? Ejecuta primero este comando para ver la guía paso a paso:
+  video-as-code reconstruct {video} --takeout""",
+    "cli.reconstruct_assets_path_invalid": "La carpeta de assets '{path}' no existe o no es una carpeta.",
+    "cli.reconstruct_upload_declined": "Subida cancelada; se guardará el YAML de reconstrucción con rutas locales.",
+    "cli.reconstruct_takeout_guide": """Guía de Google Fotos Takeout:
+1. Abre https://takeout.google.com/ e inicia sesión con la cuenta que tiene las fotos.
+2. Pulsa «Desmarcar todo» y marca «Google Fotos».
+3. Pulsa «Siguiente paso» y «Crear exportación». Deja la exportación única.
+4. Google te avisará por correo cuando esté lista; puede tardar horas o días. Descarga todas las partes ZIP.
+5. Pon todas las partes ZIP descargadas en una carpeta (por ejemplo ~/Descargas/fotos-takeout/). Déjalas comprimidas: el CLI las analiza directamente. También acepta una carpeta ya descomprimida.
+6. Vuelve a ejecutar: video-as-code reconstruct VIDEO --takeout ~/Descargas/fotos-takeout/ --publish-to-photos
+
+Takeout exporta toda la biblioteca de Fotos; no permite elegir un rango de fechas. El CLI usa las fechas de captura de los JSON auxiliares y los nombres típicos de cámara para priorizar candidatos. Sólo descomprime unos pocos a la vez y para cuando cada plano tiene una coincidencia fiable.
+
+Si la exportación completa no cabe en el disco, descarga una parte ZIP cada vez y ejecuta:
+  video-as-code reconstruct VIDEO --takeout-part ZIP --takeout-session SESIÓN
+Tras ejecutarlo correctamente, puedes borrar ese ZIP y descargar la parte siguiente. Repite con la misma carpeta de sesión. Si todos los planos tienen coincidencia, el YAML se guarda automáticamente. Si quedan planos, añade --takeout-final a la última parte; los pendientes quedarán marcados para revisión. Conserva la carpeta de sesión hasta terminar el YAML.""",
+    "cli.reconstruct_publish_needs_takeout": "--publish-to-photos requiere --takeout DIR.",
+    "cli.reconstruct_choose_source": "Elige una fuente: carpeta local de assets, --takeout DIR o --album URL.",
+    "cli.reconstruct_no_matches": "No hay imágenes o vídeos emparejados que Google Fotos pueda almacenar. El YAML local aún se puede guardar.",
+    "cli.reconstruct_publish_interactive": "La publicación requiere un terminal interactivo para revisar la subida y compartir el álbum.",
+    "cli.reconstruct_publish_summary": "Emparejados {n} archivos compatibles ({mb} MB); {unmatched} segmentos requieren revisión y {local} otros archivos emparejados se quedarán locales. Sólo se copiarán a Google Fotos las coincidencias compatibles.",
+    "cli.reconstruct_upload_candidate": "  - {name} ({mb} MB)",
+    "cli.reconstruct_publish_confirm": "¿Subir estas copias a tu cuenta de Google Fotos? Ocuparán espacio. [s/N] ",
+    "cli.reconstruct_album_title": "{title} · video-as-code",
+    "cli.reconstruct_uploading": "Subiendo {i}/{n}: {name}",
+    "cli.reconstruct_album_created": "Álbum nuevo creado: {url}",
+    "cli.reconstruct_share_instructions": "En Google Fotos, abre el álbum, pulsa Compartir, activa el enlace compartido y cópialo. Es el único paso manual del álbum; el CLI usará ese enlace en el YAML.",
+    "cli.reconstruct_share_prompt": "Pega aquí el enlace del álbum compartido: ",
+    "cli.reconstruct_album_items_missing": "El álbum compartido todavía no muestra todos los elementos subidos. Comprueba que el enlace esté activado y, si hay vídeos, espera a que se procesen; después vuelve a intentarlo.",
+    "cli.reconstruct_local_fallback": "El borrador con rutas locales está en {output}; se conserva para que no tengas que repetir el emparejamiento.",
+    "cli.reconstruct_local_assets": "Los archivos emparejados que necesita el YAML local se han extraído en {path}.",
+    "cli.reconstruct_takeout_zip_count": "Encontrados {n} archivos multimedia compatibles en los ZIP de Takeout. Sólo se descomprimirán unos pocos a la vez; el análisis para cuando todos los planos tienen coincidencias fiables.",
+    "takeout.no_zip_files": "No se encontraron ZIP de Takeout dentro de '{path}'. Indica una carpeta Takeout ya descomprimida o una carpeta con sus partes ZIP.",
+    "takeout.bad_zip": "No se puede leer el archivo Takeout '{path}': {error}",
+    "takeout.no_media": "No se encontraron fotos o vídeos compatibles en los datos de Takeout.",
+    "cli.reconstruct_takeout_dates_need_zip": "Las fechas de prioridad de Takeout requieren una carpeta que contenga ZIP de Takeout.",
+    "cli.reconstruct_takeout_date_order": "--takeout-from debe ser anterior o igual a --takeout-to.",
+    "cli.reconstruct_takeout_priority": "Se priorizan los archivos fechados entre {from_date} y {to_date}; si queda algún plano sin coincidencia, se continúa con los demás archivos.",
+    "cli.reconstruct_takeout_incremental_usage": "El modo incremental requiere --takeout-part ZIP y --takeout-session CARPETA, sin otra opción de origen.",
+    "cli.reconstruct_takeout_final_needs_part": "--takeout-final sólo se puede usar junto con --takeout-part ZIP.",
+    "cli.reconstruct_takeout_part_invalid": "El ZIP de Takeout '{path}' no existe o no es un archivo.",
+    "cli.reconstruct_takeout_part_zip": "La parte de Takeout '{path}' debe ser un archivo ZIP.",
+    "cli.reconstruct_takeout_incremental_scanning": "Analizando la parte Takeout '{path}' ({current} archivos multimedia; {previous} candidatos conservados de partes anteriores)...",
+    "cli.reconstruct_takeout_incremental_progress": "Emparejados {matched} planos; quedan {pending}. Conserva la carpeta de sesión, borra este ZIP si necesitas espacio y ejecuta --takeout-part con el siguiente ZIP. En el último, añade --takeout-final. Sesión: {session}",
+    "cli.reconstruct_takeout_session_video": "La sesión Takeout '{path}' pertenece a otro vídeo renderizado o a una versión modificada.",
+    "cli.reconstruct_takeout_session_missing": "Falta un candidato conservado en la sesión Takeout: '{path}'.",
+    "cli.reconstruct_takeout_session_invalid": "No se puede leer la sesión Takeout '{path}': {error}",
+    "cli.reconstruct_takeout_session_space": "No hay espacio suficiente para conservar las coincidencias de Takeout: hacen falta unos {needed} MB más y sólo hay {free} MB libres en '{path}'. Libera espacio o mueve --takeout-session a un disco con más capacidad y vuelve a intentarlo.",
+    "cli.reconstruct_assets_space": "No hay espacio suficiente para guardar los archivos fuente emparejados: hacen falta unos {needed} MB y sólo hay {free} MB libres en '{path}'. Libera espacio o elige otra ubicación de salida.",
+    "photos_api.no_client": "Para subir a Google Fotos hace falta un JSON de cliente OAuth de escritorio. En Google Cloud, crea o elige un proyecto, activa Google Photos Library API, configura la pantalla de consentimiento OAuth y añade tu cuenta como usuario de prueba. Después crea un ID de cliente OAuth de tipo «Aplicación de escritorio». Guarda el JSON descargado como '{path}' (o define VIDEO_AS_CODE_PHOTOS_CLIENT). Empieza aquí: {url}",
+    "photos_api.bad_client": "No se puede leer el archivo de cliente OAuth '{path}': {error}",
+    "photos_api.network": "Falló la petición a Google Fotos: {error}",
+    "photos_api.auth_error": "Falló el inicio de sesión en Google Fotos: {error}",
+    "photos_api.browser_done": "Sesión iniciada en Google Fotos. Ya puedes cerrar esta pestaña.",
+    "photos_api.sign_in": "Inicia sesión en Google Fotos en la ventana del navegador. Si no se abre, visita: {url}",
+    "photos_api.api_error": "Error de Google Photos API (HTTP {status}): {error}",
+    "photos_api.item_error": "Google Fotos no pudo añadir '{name}': {error}",
+    "photos_api.result_count": "Google Fotos creó {actual} de los {expected} elementos solicitados.",
+    "photos_api.stream_ended": "El flujo ZIP de '{filename}' terminó en el byte {offset} de {size}.",
+    "reconstruct.progress.takeout_processing": "Iniciando candidato Takeout {i}/{n} ({kind}): {name}",
+    "reconstruct.progress.takeout_image": "Extrayendo firma de imagen: {name}",
+    "reconstruct.progress.takeout_video_probe": "Leyendo metadatos del vídeo: {name}",
+    "reconstruct.progress.takeout_video_frames": "Muestreando fotogramas del vídeo (puede tardar): {name}",
+    "reconstruct.progress.takeout_compare": "Comparando el vídeo con {n} planos del render: {name}",
+    "reconstruct.progress.takeout_video_audio": "Comprobando el audio de un vídeo relevante: {name}",
+    "reconstruct.progress.takeout_candidate_done": "Terminado candidato Takeout {i}/{n}: {name}",
+    "reconstruct.progress.takeout_match_count": "Coincidencias fiables encontradas en Takeout: {matched}/{total} planos ({remaining} pendientes).",
+    "reconstruct.progress.takeout_render_match_count": "Coincidencias fiables entre los candidatos Takeout analizados: {matched}/{total} planos (revisados {checked}/{total}).",
+    "reconstruct.progress.takeout_matches_complete": "Todos los planos tienen coincidencias fiables tras analizar {n} candidatos; se detiene la búsqueda en Takeout.",
+    "cli.reconstruct_album_loading": "Listando y descargando el álbum de Google Fotos...",
+    "cli.reconstruct_album_item": "  Descargando elemento {i}/{n} del álbum...",
     "reconstruct.ffmpeg_or_ffprobe_missing": (
         "No se ha encontrado ffmpeg/ffprobe en el PATH; 'reconstruct' los "
         "necesita para decodificar frames y audio. Instala ffmpeg (trae "
@@ -1302,9 +1533,17 @@ _ES: dict[str, str] = {
     "gallery.ffmpeg_unavailable": "ffmpeg no está en el PATH; la galería lo necesita para hacer sus muestras",
     "gallery.ffmpeg_failed": "ffmpeg falló al hacer las muestras de la galería: {stderr}",
     "cli.transitions_no_openshot": "(no se encuentran las transiciones de OpenShot: instala openshot-qt o apunta {env} a su carpeta de transiciones)",
-    "cli.help.reconstruct": "Reconstruye un YAML a partir de un vídeo ya renderizado + una carpeta de assets (best-effort, matching por contenido)",
+    "cli.help.reconstruct": "Reconstruye un YAML a partir de un vídeo renderizado y assets candidatos (best-effort, matching por contenido)",
     "cli.help.reconstruct_video": "Ruta al archivo de vídeo ya renderizado",
     "cli.help.reconstruct_assets_dir": "Ruta a la carpeta de assets candidatos",
+    "cli.help.reconstruct_album": "Usa todos los elementos de este álbum compartido de Google Fotos como fuentes candidatas",
+    "cli.help.reconstruct_takeout": "Analiza una carpeta de Google Fotos Takeout (lee los ZIP directamente; también acepta carpetas descomprimidas); sin DIR, muestra la guía",
+    "cli.help.reconstruct_takeout_from": "Prioriza archivos capturados desde esta fecha (AAAA-MM-DD); los demás quedan como candidatos de reserva",
+    "cli.help.reconstruct_takeout_to": "Prioriza archivos capturados hasta esta fecha (AAAA-MM-DD); los demás quedan como candidatos de reserva",
+    "cli.help.reconstruct_takeout_part": "Procesa un ZIP de Takeout como parte de una sesión incremental que ahorra disco",
+    "cli.help.reconstruct_takeout_session": "Carpeta donde guardar sólo los mejores candidatos entre partes ZIP",
+    "cli.help.reconstruct_takeout_final": "Marca este como el último ZIP; guarda el YAML aunque queden planos sin emparejar",
+    "cli.help.reconstruct_publish_photos": "Sube sólo los archivos Takeout emparejados con confianza a un álbum nuevo y crea fuentes remotas en el YAML",
     "cli.help.reconstruct_output": "Ruta de salida (por defecto: mismo nombre con extensión .yaml)",
     "cli.render_missing_melt": (
         "No se encontró 'melt' (el motor MLT con el que renderiza el propio "
@@ -1324,6 +1563,58 @@ _ES: dict[str, str] = {
     "cli.stretch_bad_time": "No es un momento: '{time}' (segundos, o minutos:segundos, como 80, 1:20 o 1:20.5)",
     "cli.stretch_outside": "De {start} a {end} no es un tramo del vídeo: dura {length}",
     "cli.help.doctor": "Comprueba qué tiene este equipo de lo que usa video-as-code (melt y sus módulos, ffmpeg, los plugins, herramientas opcionales) y dice cómo conseguir lo que falte",
+    "cli.help.clean": "Borra los archivos regenerables (.work/, .derived/, .proxies/...) una vez comprobado que las fuentes de las que salen siguen respondiendo; lo que no pueda comprobar se queda, con el motivo. Ver provenance.yaml",
+    "cli.help.clean_paths": "Solo estos archivos o carpetas (relativos a la carpeta del proyecto)",
+    "cli.help.clean_dry_run": "Comprueba las fuentes y dice qué se borraría, sin borrar nada",
+    "cli.help.provenance": "Anota en provenance.yaml de qué y cómo se hace un archivo o carpeta generados, para que `clean` pueda borrarlos después",
+    "cli.help.provenance_path": "El archivo o carpeta (dentro de la carpeta del proyecto)",
+    "cli.help.provenance_item": "Sale de este elemento del álbum del proyecto (nombre de archivo original; {{name}} = el nombre de cada archivo); repetible",
+    "cli.help.provenance_album": "Con --item: el elemento está en este otro álbum, no en el del proyecto",
+    "cli.help.provenance_url": "Sale de este enlace (YouTube, Drive, http); repetible",
+    "cli.help.provenance_reference": "Sale del vídeo de referencia del proyecto (sources.reference)",
+    "cli.help.provenance_link": "Sale de lo que descargó este clip `url:` del bin (según el lock); repetible",
+    "cli.help.provenance_file": "Sale de este otro archivo del proyecto; repetible",
+    "cli.help.provenance_recipe": "El script que lo vuelve a hacer (un archivo del proyecto)",
+    "cli.help.provenance_command": "La línea de comandos que lo vuelve a hacer",
+    "cli.help.provenance_note": "Una nota libre",
+    "provenance.registered": "{path}: registrado ({n} fuente(s))",
+    "provenance.registry_invalid": "{path} no es un registro de procedencia válido: {exc}",
+    "provenance.entry_invalid": "{path}, entrada '{entry}': {why}",
+    "provenance.outside_project": "'{path}' no está dentro de la carpeta del proyecto ({base}): clean nunca borra ahí",
+    "provenance.no_album": "el proyecto no tiene enlace de álbum (project.sources.album) donde buscar el elemento",
+    "provenance.item_gone": "'{name}' ya no está en el álbum",
+    "provenance.item_there": "el elemento '{name}' del álbum está",
+    "provenance.url_there": "{url} responde",
+    "provenance.youtube_there": "{url} sigue accesible (yt-dlp)",
+    "provenance.check_failed": "no se pudo comprobar {what}: {exc}",
+    "provenance.size_differs": "{what}, pero ahora son {now} bytes y al anotarlo eran {recorded}",
+    "provenance.link_unlocked": "el enlace '{id}' no tiene url en sources.lock.yaml",
+    "provenance.no_reference": "el proyecto no tiene enlace de referencia (project.sources.reference)",
+    "provenance.file_changed": "{path} ya no contiene lo anotado (el sha256 difiere)",
+    "provenance.file_present": "{path} está en disco",
+    "provenance.file_via": "{path} se descargaría de nuevo: {detail}",
+    "provenance.file_gone": "{path} ya no está y nada anota de dónde salió",
+    "provenance.file_gone_unchecked": "{path} ya no está y no se puede regenerar: {why}",
+    "provenance.file_regenerable": "{path} ya no está pero se puede regenerar",
+    "provenance.recipe_missing": "la receta '{recipe}' no existe",
+    "provenance.no_recipe": "no hay receta ni comando anotados para volver a hacerlo",
+    "provenance.no_sources": "no hay fuentes anotadas para él",
+    "provenance.input_unknown": "su entrada '{name}' no está en sources.lock.yaml (ni sale de algo que lo esté)",
+    "clean.would_remove": "se borraría   {group}: {files} archivo(s), {size}",
+    "clean.removed": "borrado        {group}: {files} archivo(s), {size}",
+    "clean.kept": "conservado     {group}: {files} archivo(s), {size}",
+    "clean.unregistered": "sin registrar  {group}: {files} archivo(s), {size} (se quedan: nada dice de dónde salen; ver `video-as-code provenance`)",
+    "clean.nothing": "Nada registrado que limpiar: los archivos necesitan una entrada en provenance.yaml o un sidecar .input.json.",
+    "cli.help.clean_yes": "No pedir la confirmación escrita (para scripts): borra todo lo comprobado",
+    "clean.would_free": "Se borrarían {size} para siempre.",
+    "clean.cancelled": "Cancelado: no se ha borrado nada.",
+    "clean.not_interactive": "No es un terminal, así que no se puede pedir la confirmación: no se ha borrado nada (--dry-run para mirar, --yes-i-am-sure para borrar sin preguntar).",
+    "clean.confirm_banner": "Peligro: {files} archivo(s), {size}, se BORRARÁN PARA SIEMPRE (sin papelera). No se ha localizado ninguna copia de estos archivos en ningún sitio: solo se comprobaron sus fuentes, y solo para hoy. Si una fuente desaparece o cambia y no tienes una copia en otro sitio, estos datos se PERDERÁN.",
+    "clean.confirm_phrase": "Sí, estoy seguro",
+    "clean.confirm_prompt": "Para continuar, escribe exactamente \"{phrase}\" (cualquier otra cosa cancela):",
+    "clean.total": "Liberados {size}.",
+    "clean.total_dry": "Se liberarían {size}.",
+    "clean.warning": "Aviso: una fuente que responde hoy puede dejar de responder mañana (un álbum que se deja de compartir, un vídeo que pasa a privado, un enlace que cambia, yt-dlp roto). Lo borrado depende ahora de esas fuentes, y que 'responda' no prueba que siga teniendo los mismos bytes (YouTube y un enlace sin más no se comparan con un hash). Guarda tu propia copia de lo irreemplazable.",
     "doctor.header": "video-as-code doctor - Python {python}, {system}",
     "doctor.group_needed": "Imprescindible:",
     "doctor.group_melt": "Módulos de melt ({melt}); sin uno, lo que lo usa sale en blanco:",
@@ -1424,7 +1715,7 @@ _ES: dict[str, str] = {
     "split.audio_short": "El sonido salió corto dos veces ({got} s de {want} s): se para en vez de recortar la imagen a su duración",
     "split.concat": "Uniendo los tramos y el sonido",
     "split.concat_failed": "ffmpeg falló uniendo los tramos: {detail}",
-    "cli.help.lang": "Idioma de salida (sobrescribe VIDEO_AS_CODE_LANG para esta ejecución)",
+    "cli.help.lang": "Idioma de salida (sobrescribe el idioma del entorno para esta ejecución)",
     "cli.write_failed": "Error al escribir '{path}': {exc}",
 }
 
@@ -1432,15 +1723,21 @@ CATALOGS: dict[str, dict[str, str]] = {"en": _EN, "es": _ES}
 
 
 def _detect_locale() -> str:
-    lang = (os.environ.get("VIDEO_AS_CODE_LANG") or "").strip().lower()
-    return lang if lang in CATALOGS else "en"
+    # Explicit app settings win. Otherwise use the user's locale environment
+    # following the standard POSIX precedence (LC_ALL, LC_MESSAGES, LANG).
+    for raw in (os.environ.get("VIDEO_AS_CODE_LANG"), os.environ.get("LOCALE"),
+                os.environ.get("LC_ALL"), os.environ.get("LC_MESSAGES"), os.environ.get("LANG")):
+        lang = (raw or "").strip().lower().replace("-", "_").split(".", 1)[0].split("_", 1)[0]
+        if lang in CATALOGS:
+            return lang
+    return "en"
 
 
 LOCALE = _detect_locale()
 
 
 def set_locale(lang: str) -> None:
-    """Overrides `VIDEO_AS_CODE_LANG` for the current process - used by the CLI's
+    """Overrides the environment locale for the current process - used by the CLI's
     `--lang` flag, which needs to win over the environment variable and
     take effect before `build_parser()` builds its (already-localized)
     help text."""

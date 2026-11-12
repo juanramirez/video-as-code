@@ -29,6 +29,8 @@ possible in-progress fade rather than assuming plain content throughout.
 from __future__ import annotations
 
 import concurrent.futures
+import collections
+import hashlib
 import json
 import subprocess
 import tempfile
@@ -42,6 +44,7 @@ from PIL import Image
 
 from . import probe
 from .i18n import msg
+from .takeout import TakeoutAsset
 from .timecode import resolve_fps
 
 SIGNATURE_SIZE = 8  # frame signatures are SIGNATURE_SIZE x SIGNATURE_SIZE x 3 floats
@@ -251,12 +254,20 @@ def guess_kind(path: Path) -> str:
 
 
 def asset_files(assets_dir: Path) -> list[Path]:
-    return sorted(p for p in assets_dir.iterdir() if p.is_file() and guess_kind(p) != "unknown")
+    # Takeout unpacks media into nested product/year folders. Walk the tree;
+    # its JSON sidecars are naturally excluded by guess_kind().
+    return sorted(p for p in assets_dir.rglob("*") if p.is_file() and guess_kind(p) != "unknown")
+
+
+def _asset_name(assets_dir: Path, path: Path) -> str:
+    """A stable bank key that preserves Takeout subfolders and avoids
+    collisions between files with the same camera-generated basename."""
+    return path.relative_to(assets_dir).as_posix()
 
 
 @dataclass
 class VisualAsset:
-    path: Path
+    path: Optional[Path]
     kind: str  # "video" | "image"
     signatures: list[np.ndarray]  # coarse-sampled, in order; a single-item list for images
     duration_s: float
@@ -264,7 +275,7 @@ class VisualAsset:
 
 @dataclass
 class AudioAsset:
-    path: Path
+    path: Optional[Path]
     waveform: np.ndarray
     duration_s: float
 
@@ -292,16 +303,17 @@ def build_visual_bank(
     paths = [p for p in asset_files(assets_dir) if guess_kind(p) in ("image", "video")]
 
     def _process(path: Path) -> tuple[str, VisualAsset]:
+        name = _asset_name(assets_dir, path)
         kind = guess_kind(path)
         if kind == "image":
             if on_progress:
                 on_progress(msg("reconstruct.progress.visual_asset_image", name=path.name))
-            return path.name, VisualAsset(path=path, kind=kind, signatures=[extract_image_signature(path)], duration_s=0.0)
+            return name, VisualAsset(path=path, kind=kind, signatures=[extract_image_signature(path)], duration_s=0.0)
         if on_progress:
             on_progress(msg("reconstruct.progress.visual_asset_video", name=path.name))
         duration = probe.probe_duration_seconds(str(path))
         signatures = extract_frame_signatures(path, fps=fps)
-        return path.name, VisualAsset(path=path, kind=kind, signatures=signatures, duration_s=duration)
+        return name, VisualAsset(path=path, kind=kind, signatures=signatures, duration_s=duration)
 
     bank: dict[str, VisualAsset] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -328,13 +340,17 @@ def build_audio_bank(
         if on_progress:
             on_progress(msg("reconstruct.progress.audio_asset", name=path.name))
         try:
-            waveform = extract_audio_waveform(path, tmp_dir, sample_rate=sample_rate)
+            # Separate scratch WAVs even when two Takeout subfolders contain
+            # the same basename.
+            unique_tmp = tmp_dir / hashlib.sha1(_asset_name(assets_dir, path).encode()).hexdigest()[:12]
+            unique_tmp.mkdir()
+            waveform = extract_audio_waveform(path, unique_tmp, sample_rate=sample_rate)
         except ReconstructError:
             return None  # e.g. a video asset with no audio stream
         if waveform.size == 0:
             return None
         duration = probe.probe_duration_seconds(str(path))
-        return path.name, AudioAsset(path=path, waveform=waveform, duration_s=duration)
+        return _asset_name(assets_dir, path), AudioAsset(path=path, waveform=waveform, duration_s=duration)
 
     bank: dict[str, AudioAsset] = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
@@ -343,6 +359,130 @@ def build_audio_bank(
                 name, asset = result
                 bank[name] = asset
     return bank
+
+
+def build_takeout_banks(
+    candidates: list[TakeoutAsset],
+    tmp_dir: Path,
+    *,
+    segment_signatures: Optional[list[list[np.ndarray]]] = None,
+    render_waveform: Optional[np.ndarray] = None,
+    on_progress: Optional[Callable[[str], None]] = None,
+    max_workers: int = BANK_MAX_WORKERS,
+) -> tuple[dict[str, VisualAsset], dict[str, AudioAsset]]:
+    """Build signatures from Takeout ZIP entries while materializing only a
+    few files at a time. Audio is checked only for videos that confidently
+    match a visual segment, keeping the audio bank bounded too."""
+    def process(candidate: TakeoutAsset, candidate_number: int):
+        if on_progress:
+            on_progress(msg("reconstruct.progress.takeout_processing", i=candidate_number,
+                            n=len(candidates), name=candidate.display_name, kind=candidate.kind))
+        with tempfile.TemporaryDirectory(prefix="takeout-item-", dir=tmp_dir) as work:
+            work_dir = Path(work)
+            with candidate.materialize(work_dir) as path:
+                visual = None
+                audio = None
+                if candidate.kind == "image":
+                    if on_progress:
+                        on_progress(msg("reconstruct.progress.takeout_image", name=candidate.display_name))
+                    visual = VisualAsset(path=None, kind="image", signatures=[extract_image_signature(path)], duration_s=0.0)
+                elif candidate.kind == "video":
+                    if on_progress:
+                        on_progress(msg("reconstruct.progress.takeout_video_probe", name=candidate.display_name))
+                    duration = probe.probe_duration_seconds(str(path))
+                    if on_progress:
+                        on_progress(msg("reconstruct.progress.takeout_video_frames", name=candidate.display_name))
+                    visual = VisualAsset(
+                        path=None,
+                        kind="video",
+                        signatures=extract_frame_signatures(path, fps=1 / COARSE_SAMPLE_INTERVAL),
+                        duration_s=duration,
+                    )
+                relevant_video = False
+                if candidate.kind == "video" and visual is not None:
+                    if on_progress:
+                        on_progress(msg("reconstruct.progress.takeout_compare", name=candidate.display_name,
+                                        n=len(segment_signatures or [])))
+                    for signatures in segment_signatures or []:
+                        match = identify_visual_asset(signatures, {candidate.key: visual})
+                        if match is not None and match.mean_distance <= VIDEO_MATCH_DISTANCE_THRESHOLD:
+                            relevant_video = True
+                            break
+                if relevant_video and render_waveform is not None and render_waveform.size:
+                    if on_progress:
+                        on_progress(msg("reconstruct.progress.takeout_video_audio", name=candidate.display_name))
+                    try:
+                        waveform = extract_audio_waveform(path, work_dir)
+                    except ReconstructError:
+                        waveform = np.array([], dtype=np.float64)
+                    if waveform.size:
+                        duration = probe.probe_duration_seconds(str(path))
+                        audio = AudioAsset(path=None, waveform=waveform, duration_s=duration)
+                return candidate.key, visual, audio
+
+    visual_bank: dict[str, VisualAsset] = {}
+    audio_bank: dict[str, AudioAsset] = {}
+    best_visual: dict[int, tuple[str, float]] = {}
+    confident_visual: dict[int, str] = {}
+    best_audio_score = float("-inf")
+    processed_count = 0
+    missing_segments = set(range(len(segment_signatures or [])))
+    # Keep the temporary disk footprint bounded (at most two source files,
+    # plus their small audio scratch WAVs) while allowing some parallelism.
+    workers = min(max_workers, 2)
+    candidate_iter = iter(enumerate(candidates, 1))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        pending = collections.deque()
+        for _ in range(workers):
+            item = next(candidate_iter, None)
+            if item is None:
+                break
+            candidate_number, candidate = item
+            pending.append((candidate_number, candidate, pool.submit(process, candidate, candidate_number)))
+        while pending:
+            candidate_number, candidate, future = pending.popleft()
+            name, visual, audio = future.result()
+            processed_count += 1
+            if visual is not None:
+                visual_bank[name] = visual
+                if segment_signatures:
+                    for index in tuple(missing_segments):
+                        match = identify_visual_asset(segment_signatures[index], {name: visual})
+                        if match is None:
+                            continue
+                        if match.mean_distance <= VIDEO_MATCH_DISTANCE_THRESHOLD:
+                            confident_visual[index] = name
+                            missing_segments.discard(index)
+                        elif index not in best_visual or match.mean_distance < best_visual[index][1]:
+                            best_visual[index] = (name, match.mean_distance)
+                retained_names = set(confident_visual.values()) | {
+                    best_visual[index][0] for index in missing_segments if index in best_visual
+                }
+                visual_bank = {key: asset for key, asset in visual_bank.items() if key in retained_names}
+                if on_progress and segment_signatures:
+                    on_progress(msg("reconstruct.progress.takeout_match_count",
+                                    matched=len(confident_visual), total=len(segment_signatures),
+                                    remaining=len(missing_segments)))
+            if audio is not None and render_waveform is not None:
+                audio_match = identify_audio_asset(render_waveform, {name: audio})
+                if audio_match is not None and audio_match.score > best_audio_score:
+                    best_audio_score = audio_match.score
+                    audio_bank = {name: audio}
+            if on_progress:
+                on_progress(msg("reconstruct.progress.takeout_candidate_done", i=candidate_number,
+                                n=len(candidates), name=candidate.display_name))
+            if segment_signatures and not missing_segments:
+                if on_progress:
+                    on_progress(msg("reconstruct.progress.takeout_matches_complete", n=processed_count))
+                for _queued_number, _queued_candidate, queued_future in pending:
+                    queued_future.cancel()
+                break
+            next_item = next(candidate_iter, None)
+            if next_item is not None:
+                next_number, next_candidate = next_item
+                pending.append((next_number, next_candidate,
+                                pool.submit(process, next_candidate, next_number)))
+    return visual_bank, audio_bank
 
 
 # -- matching ------------------------------------------------------------------
@@ -635,6 +775,7 @@ def _active_audio_duration(waveform: np.ndarray, sample_rate: int, *, window_s: 
 class ReconstructResult:
     data: dict
     warnings: list[str] = field(default_factory=list)
+    asset_candidates: dict[str, TakeoutAsset] = field(default_factory=dict)
 
 
 def _make_asset_ids(names: set[str]) -> dict[str, str]:
@@ -668,8 +809,10 @@ def _quantized_duration(seconds: float, fps: float) -> float:
 
 def reconstruct(
     video_path: Path,
-    assets_dir: Path,
+    assets_dir: Optional[Path],
     on_progress: Optional[Callable[[str], None]] = None,
+    *,
+    asset_candidates: Optional[list[TakeoutAsset]] = None,
 ) -> ReconstructResult:
     """Top-level entry point: given an already-rendered video and a folder
     of candidate source assets, produces a video-as-code-compatible YAML dict by
@@ -700,7 +843,11 @@ def reconstruct(
         raise ReconstructError(msg("reconstruct.ffmpeg_or_ffprobe_missing"))
 
     video_path = video_path.resolve()
-    assets_dir = assets_dir.resolve()
+    if asset_candidates is None:
+        if assets_dir is None:
+            raise ReconstructError(msg("reconstruct.assets_required"))
+        assets_dir = assets_dir.resolve()
+    candidate_by_key = {candidate.key: candidate for candidate in asset_candidates or []}
     warnings: list[str] = []
     unmatched: list[dict] = []
 
@@ -710,22 +857,40 @@ def reconstruct(
         info = probe_video_info(video_path)
         fps, width, height = info["fps"], info["width"], info["height"]
 
-        try:
-            _report(msg("reconstruct.progress.building_visual_bank"))
-            visual_bank = build_visual_bank(assets_dir, on_progress=_report)
-            _report(msg("reconstruct.progress.building_audio_bank"))
-            audio_bank = build_audio_bank(assets_dir, tmp_dir, on_progress=_report)
-        except probe.ProbeError as exc:
-            raise ReconstructError(str(exc)) from exc
-        asset_ids = _make_asset_ids(set(visual_bank) | set(audio_bank))
-
         _report(msg("reconstruct.progress.extracting_render_signatures", name=video_path.name))
         coarse_signatures = extract_frame_signatures(video_path, fps=1 / COARSE_SAMPLE_INTERVAL)
         segments = segment_by_scene_cuts(coarse_signatures)
         _report(msg("reconstruct.progress.segments_found", n=len(segments)))
+        segment_signatures = []
+        for segment in segments:
+            start_idx = round(segment.start_s / COARSE_SAMPLE_INTERVAL)
+            end_idx = round(segment.end_s / COARSE_SAMPLE_INTERVAL)
+            segment_signatures.append(coarse_signatures[start_idx:end_idx])
+        full_waveform = extract_audio_waveform(video_path, tmp_dir)
+
+        try:
+            if asset_candidates is not None:
+                _report(msg("reconstruct.progress.building_visual_bank"))
+                visual_bank, audio_bank = build_takeout_banks(
+                    asset_candidates, tmp_dir, segment_signatures=segment_signatures,
+                    render_waveform=full_waveform, on_progress=_report
+                )
+                needed_candidates = set(visual_bank) | set(audio_bank)
+                candidate_by_key = {key: candidate for key, candidate in candidate_by_key.items()
+                                    if key in needed_candidates}
+            else:
+                assert assets_dir is not None
+                _report(msg("reconstruct.progress.building_visual_bank"))
+                visual_bank = build_visual_bank(assets_dir, on_progress=_report)
+                _report(msg("reconstruct.progress.building_audio_bank"))
+                audio_bank = build_audio_bank(assets_dir, tmp_dir, on_progress=_report)
+        except probe.ProbeError as exc:
+            raise ReconstructError(str(exc)) from exc
+        asset_ids = _make_asset_ids(set(visual_bank) | set(audio_bank))
 
         video_clips: list[dict] = []
         fine_asset_cache: dict[str, list[np.ndarray]] = {}
+        confident_segments = 0
 
         for seg_idx, segment in enumerate(segments):
             _report(
@@ -751,6 +916,9 @@ def reconstruct(
                     "confidence_pct": confidence_pct,  # 0-100, higher is better; see _video_confidence_pct
                 })
                 warnings.append(msg("reconstruct.no_confident_match", where=where, detail=_match_detail(match.asset_name if match else None, confidence_pct)))
+                if asset_candidates is not None:
+                    _report(msg("reconstruct.progress.takeout_render_match_count", matched=confident_segments,
+                                total=len(segments), checked=seg_idx + 1))
                 continue
 
             asset = visual_bank[match.asset_name]
@@ -762,7 +930,12 @@ def reconstruct(
                     video_path, fps=fps, start_s=segment.start_s, duration_s=duration_s
                 )
                 if match.asset_name not in fine_asset_cache:
-                    fine_asset_cache[match.asset_name] = extract_frame_signatures(asset.path, fps=fps)
+                    if asset.path is not None:
+                        fine_asset_cache[match.asset_name] = extract_frame_signatures(asset.path, fps=fps)
+                    else:
+                        candidate = candidate_by_key[match.asset_name]
+                        with candidate.materialize(tmp_dir) as source_path:
+                            fine_asset_cache[match.asset_name] = extract_frame_signatures(source_path, fps=fps)
                 trim = find_trim_offset(segment_fine, fine_asset_cache[match.asset_name])
                 in_s = (trim[0] / fps) if trim else 0.0
                 if in_s > 1e-6:
@@ -783,10 +956,13 @@ def reconstruct(
             if fade_out > 0:
                 clip["fade_out"] = round(fade_out, 3)
             video_clips.append(clip)
+            confident_segments += 1
+            if asset_candidates is not None:
+                _report(msg("reconstruct.progress.takeout_render_match_count", matched=confident_segments,
+                            total=len(segments), checked=seg_idx + 1))
 
         audio_clips: list[dict] = []
         _report(msg("reconstruct.progress.matching_audio"))
-        full_waveform = extract_audio_waveform(video_path, tmp_dir)
         if full_waveform.size > 0 and audio_bank:
             audio_match = identify_audio_asset(full_waveform, audio_bank)
             if audio_match is None or audio_match.score < AUDIO_MATCH_SCORE_THRESHOLD:
@@ -837,13 +1013,11 @@ def reconstruct(
 
         used_ids = {c["clip"] for c in video_clips} | {c["clip"] for c in audio_clips}
         name_by_id = {asset_id: name for name, asset_id in asset_ids.items()}
-        bin_entries = [
-            {
-                "id": used_id,
-                "path": str((visual_bank.get(name_by_id[used_id]) or audio_bank[name_by_id[used_id]]).path),
-            }
-            for used_id in sorted(used_ids)
-        ]
+        bin_entries = []
+        for used_id in sorted(used_ids):
+            name = name_by_id[used_id]
+            asset = visual_bank.get(name) or audio_bank[name]
+            bin_entries.append({"id": used_id, "path": str(asset.path) if asset.path is not None else name})
 
         tracks = []
         if video_clips:
@@ -865,4 +1039,4 @@ def reconstruct(
         if unmatched:
             data["x_reconstruct_unmatched"] = unmatched
 
-        return ReconstructResult(data=data, warnings=warnings)
+        return ReconstructResult(data=data, warnings=warnings, asset_candidates=candidate_by_key)
