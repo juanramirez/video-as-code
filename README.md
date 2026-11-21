@@ -85,7 +85,9 @@ long where few clips play, short where crossfades pile up - within
 `--max-mem` MB each (default: 60% of the memory available when it
 starts), and each melt runs in a memory-capped `systemd-run --user
 --scope` when available, so a wrong estimate kills that melt, not the
-session. Every segment's render is cached in `.render_cache/` next to the
+session. A melt that prints nothing for 15 minutes (`VIDEO_AS_CODE_MELT_STALL_S`
+changes it) is taken as hung and killed, so the render fails instead of
+stalling. Every segment's render is cached in `.render_cache/` next to the
 YAML, keyed by its trimmed project and the files it reads: after an edit
 only the segments it touches are rendered again. Each segment's frames and
 the sound's length are checked: one that comes out short (frames lost with

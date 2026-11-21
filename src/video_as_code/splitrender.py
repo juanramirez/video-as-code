@@ -46,6 +46,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -516,18 +517,78 @@ class Progress:
             pass  # showing progress is a nicety: never fail a render over it
 
 
-def _run_melt_with_progress(cmd: list[str], env: dict[str, str], on_frame: Callable[[int], None]) -> tuple[int, str]:
+# A melt that reports nothing for this long (seconds) is taken as hung and killed: a segment can take hours, but
+# melt writes its progress all the time. VIDEO_AS_CODE_MELT_STALL_S overrides it.
+MELT_STALL_S = 900.0
+
+
+def _stall_seconds() -> float:
+    try:
+        return float(os.environ.get("VIDEO_AS_CODE_MELT_STALL_S", MELT_STALL_S))
+    except ValueError:
+        return MELT_STALL_S
+
+
+def _kill_when_idle(proc: subprocess.Popen, stall_s: float, last_activity: Callable[[], float],
+                    stalled: threading.Event) -> threading.Thread:
+    """Starts a thread that kills `proc` once `last_activity()` (a time.monotonic() value) is `stall_s` old."""
+    def watch() -> None:
+        while proc.poll() is None:
+            if time.monotonic() - last_activity() > stall_s:
+                stalled.set()
+                proc.kill()
+                return
+            time.sleep(min(1.0, stall_s / 4))
+    thread = threading.Thread(target=watch, daemon=True)
+    thread.start()
+    return thread
+
+
+def _run_melt_with_progress(cmd: list[str], env: dict[str, str], on_frame: Callable[[int], None],
+                            stall_s: Optional[float] = None) -> tuple[int, str]:
     """Runs melt, passing each frame it reports ("Current Frame: N", on
-    stderr, \r-separated) to `on_frame`; returns (exit code, stderr's tail)."""
+    stderr, \r-separated) to `on_frame`; returns (exit code, stderr's tail).
+    A melt silent for `stall_s` seconds (default MELT_STALL_S) is killed:
+    it comes back with a non-zero code and a tail saying so."""
+    stall_s = _stall_seconds() if stall_s is None else stall_s
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, env=env)
     tail = b""
     assert proc.stderr is not None
+    seen = [time.monotonic()]
+    stalled = threading.Event()
+    _kill_when_idle(proc, stall_s, lambda: seen[0], stalled)
     while chunk := proc.stderr.read1(65536):
+        seen[0] = time.monotonic()
         tail = (tail + chunk)[-8192:]
         frames = _CURRENT_FRAME.findall(chunk)
         if frames:
             on_frame(int(frames[-1]))
-    return proc.wait(), tail.decode(errors="replace")
+    code = proc.wait()
+    text = tail.decode(errors="replace")
+    if stalled.is_set():
+        text += f"\nmelt printed nothing for {stall_s:g} s: killed as hung"
+    return code, text
+
+
+def _wait_for_audio(proc: subprocess.Popen, watched: list[Path], stall_s: Optional[float] = None) -> int:
+    """Waits for the sound's melt; one that neither exits nor grows any of `watched` (its log, its wav) for
+    `stall_s` seconds is killed, and comes back with its non-zero code."""
+    stall_s = _stall_seconds() if stall_s is None else stall_s
+
+    def size() -> int:
+        return sum(p.stat().st_size for p in watched if p.exists())
+
+    last, moved = size(), time.monotonic()
+    while True:
+        try:
+            return proc.wait(timeout=min(5.0, stall_s))
+        except subprocess.TimeoutExpired:
+            now_size = size()
+            if now_size != last:
+                last, moved = now_size, time.monotonic()
+            elif time.monotonic() - moved > stall_s:
+                proc.kill()
+                return proc.wait()
 
 
 def render(
@@ -650,7 +711,7 @@ def render(
         if audio_proc is not None:
             progress.phase("audio")
             report(msg("split.audio_wait"))
-            if audio_proc.wait() != 0 or not (tmp / "audio.wav").exists():
+            if _wait_for_audio(audio_proc, [tmp / "audio.log", tmp / "audio.wav"]) != 0 or not (tmp / "audio.wav").exists():
                 detail = (tmp / "audio.log").read_text(errors="replace").strip()[-300:]
                 progress.finish("failed")
                 raise SplitRenderError(msg("split.audio_failed", detail=detail))
