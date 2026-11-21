@@ -216,6 +216,11 @@ class Net:
                     detail = (run.stderr.strip().splitlines() or ["?"])[-1]
                     return Verdict(False, msg("provenance.check_failed", what=url, exc=detail))
                 return Verdict(True, msg("provenance.youtube_there", url=url))
+            if links.is_photos_album(url):
+                items = gphotos.list_album(url)
+                if not items:
+                    return Verdict(False, msg("provenance.album_empty", url=url))
+                return Verdict(True, msg("provenance.album_there", url=url, n=len(items)))
             target = url
             if kind == "drive":
                 file_id = links.drive_file_id(url)
