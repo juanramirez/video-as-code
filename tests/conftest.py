@@ -94,6 +94,15 @@ def openshot_transitions(_openshot_dir, tmp_path, monkeypatch) -> Path:
     return _openshot_dir
 
 
+@pytest.fixture
+def melt_new_enough(monkeypatch):
+    """For what only resolves a speed_ramp: whatever this machine's melt,
+    as if new enough for it (probe.SPEED_RAMP_MIN_MLT)."""
+    from video_as_code import probe
+
+    monkeypatch.setattr(probe, "melt_version", lambda melt: probe.SPEED_RAMP_MIN_MLT)
+
+
 _LOCAL_MLT_BUILD = Path.home() / "dev" / "mlt" / "install"
 
 
@@ -136,7 +145,14 @@ def _find_melt() -> tuple[str, dict] | None:
 
     exe = shutil.which("melt") or shutil.which("melt-7")
     if exe:
-        return exe, {"LC_ALL": "C"}
+        env = {"LC_ALL": "C"}
+        # the distributions' melt doesn't look in the multiarch folder
+        # either (Ubuntu 26.04's 7.36: no frei0r service at all without it)
+        if "FREI0R_PATH" not in os.environ:
+            frei0r_dirs = sorted(Path("/usr/lib").glob("*/frei0r-1"))
+            if frei0r_dirs:
+                env["FREI0R_PATH"] = ":".join(str(d) for d in frei0r_dirs)
+        return exe, env
 
     for base in sorted(Path("/snap/kdenlive").glob("*")):
         melt_bin = base / "usr" / "bin" / "melt-7"

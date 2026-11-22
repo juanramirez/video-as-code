@@ -191,7 +191,7 @@ def test_deterministic_output(tmp_path: Path, assets_dir: Path):
     assert text1 == text2
 
 
-def test_speed_ramp_source_in_offsets_time_map(tmp_path: Path, assets_dir: Path):
+def test_speed_ramp_source_in_offsets_time_map(tmp_path: Path, assets_dir: Path, melt_new_enough):
     """`source_in:` with `speed_ramp:` shifts every `time_map` value by
     that many source seconds (values are absolute source seconds), so the
     first output frame reads at source_in instead of 0."""

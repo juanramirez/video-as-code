@@ -42,6 +42,9 @@ lines.
 """
 from __future__ import annotations
 
+import functools
+import subprocess
+import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Optional
@@ -53,6 +56,72 @@ ALIGNMENT_CENTER = 4 | 128
 # font, used only to size/center the text box (see module docstring) -
 # verified by eye against real renders, not derived from font metrics.
 _AVG_CHAR_WIDTH_FACTOR = 0.55
+
+# Qt 6's font weights (100-900) and Qt 5's (0-99) for the same faces: Qt's
+# own table (QFont::Weight in each). Weights in between are interpolated.
+_QT5_WEIGHTS = [(100, 0), (200, 12), (300, 25), (400, 50), (500, 57), (600, 63), (700, 75), (800, 81), (900, 87)]
+
+
+def _interpolate(value: float, table: list[tuple[float, float]]) -> float:
+    for (x0, y0), (x1, y1) in zip(table, table[1:]):
+        if value <= x1:
+            return y0 + (y1 - y0) * (max(value, x0) - x0) / (x1 - x0)
+    return table[-1][1]
+
+
+def qt5_weight(weight: int) -> int:
+    """A Qt 6 font weight (100-900) in Qt 5's scale (0-99)."""
+    return round(_interpolate(weight, _QT5_WEIGHTS))
+
+
+def qt6_weight(weight: int) -> int:
+    """A Qt 5 font weight (0-99), as older files have it, in Qt 6's scale."""
+    return round(_interpolate(weight, [(b, a) for a, b in _QT5_WEIGHTS]))
+
+
+@functools.lru_cache(maxsize=None)
+def melt_weight_scale() -> int:
+    """5 or 6: the Qt whose font weights this machine's melt draws titles
+    with - 6 without a melt, or if it can't be told.
+
+    MLT's title producer passes `font-weight` straight to QFont::setWeight,
+    whose scale is Qt's own: 100-900 in Qt 6, 0-99 in Qt 5, where 700 is
+    out of range and ignored - bold coming out normal, silently. Which Qt
+    that is isn't in what melt says of itself: Debian 12's and 13's melt
+    have their Qt 5 module draw titles even with a Qt 6 one installed next
+    to it (checked by rendering, 2026-10-27), Ubuntu 26.04's has only Qt
+    6's. So it's asked the same way: a word at Qt 5's 50 and at its 75 -
+    the second bolder only where the scale is Qt 5's."""
+    from . import probe
+
+    melt = probe.find_melt()
+    if melt is None:
+        return 6
+    ink = []
+    with tempfile.TemporaryDirectory() as tmp:
+        for weight in (50, 75):
+            title = Path(tmp) / f"w{weight}.kdenlivetitle"
+            write_title_file(title, render_title_xml("Hello", width=160, height=90, duration_frames=1, font_size=40,
+                                                     font_weight=weight, weight_scale=6))
+            png = Path(tmp) / f"w{weight}.png"
+            project = Path(tmp) / f"w{weight}.mlt"
+            project.write_text(
+                '<mlt LC_NUMERIC="C"><profile width="160" height="90" frame_rate_num="25" frame_rate_den="1" '
+                'sample_aspect_num="1" sample_aspect_den="1" display_aspect_num="16" display_aspect_den="9" '
+                'progressive="1" colorspace="709"/><producer id="t">'
+                f'<property name="mlt_service">kdenlivetitle</property><property name="resource">{title}</property>'
+                '</producer></mlt>', encoding="utf-8")
+            try:
+                subprocess.run([melt, str(project), "out=0", "-consumer", f"avformat:{png}"], capture_output=True,
+                               env=probe.melt_env(), timeout=60)
+                gray = subprocess.run(["ffmpeg", "-v", "error", "-i", str(png), "-vf", "format=gray", "-f", "rawvideo", "-"],
+                                      capture_output=True, timeout=60).stdout
+            except (OSError, subprocess.SubprocessError):
+                return 6
+            if not gray:
+                return 6
+            ink.append(sum(gray) / len(gray))
+    return 5 if ink[1] > ink[0] * 1.1 else 6
 
 
 def render_title_xml(
@@ -70,6 +139,7 @@ def render_title_xml(
     outline: float = 0.0,
     outline_color: tuple[int, int, int, int] = (0, 0, 0, 255),
     shadow: Optional[tuple[tuple[int, int, int, int], int, int, int]] = None,
+    weight_scale: int = 6,
 ) -> str:
     def rgba(c: tuple[int, int, int, int]) -> str:
         return ",".join(str(v) for v in c)
@@ -114,8 +184,10 @@ def render_title_xml(
             "font-underline": "0",
             # Qt 6's scale (kdenlive writes QFont::weight(), 400 normal);
             # Qt 5's 50 rendered the same, but a font with a Thin face
-            # could pick it, and kdenlive's title editor would show it so
-            "font-weight": str(font_weight),
+            # could pick it, and kdenlive's title editor would show it so -
+            # unless the melt here is Qt 5's (weight_scale=5,
+            # melt_weight_scale), which ignores 700 there
+            "font-weight": str(font_weight if weight_scale == 6 else qt5_weight(font_weight)),
             "font-color": rgba(font_color),
             "font-outline": format(outline, "g"),
             "font-outline-color": rgba(outline_color),
@@ -200,8 +272,8 @@ def parse_title_xml(xml_text: str) -> Optional[dict]:
         weight = int(content.get("font-weight", 400))
     except ValueError:
         weight = 400
-    if weight < 100:  # Qt 5's scale (50 normal, 75 bold), as older files have it
-        weight = {50: 400, 75: 700}.get(weight, max(100, min(900, round(weight / 99 * 900 / 100) * 100)))
+    if weight < 100:  # Qt 5's scale (50 normal, 75 bold), as older files and a Qt 5 melt's have it
+        weight = round(qt6_weight(weight), -2)
     if weight != 400:
         title["font_weight"] = weight
     if content.get("font-italic", "0") not in ("", "0"):

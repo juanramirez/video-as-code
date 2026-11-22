@@ -603,7 +603,7 @@ def test_derive_fit_card_rounds_shades_and_dims(tmp_path: Path):
     assert px[100 * w + 150] > 240                      # its middle: the picture itself
     assert px[22 * w + 72] < 200                        # inside its bounding box, but outside the rounded corner
     assert 100 < px[100 * w + 3] < 160                  # far from it: the copy, dimmed to about half
-    assert px[100 * w + 68] < px[100 * w + 3] - 8       # just beside it (its blur is ~3 px at this width): the shadow
+    assert px[100 * w + 68] < px[100 * w + 3] - 5       # just beside it (its blur is ~3 px at this width): the shadow
 
 
 def test_derive_fit_card_on_a_video_keeps_its_shape_on_every_frame(tmp_path: Path):
@@ -623,7 +623,7 @@ def test_derive_fit_card_on_a_video_keeps_its_shape_on_every_frame(tmp_path: Pat
         assert px[o + 100 * w + 150] > 240                       # the picture
         assert px[o + 22 * w + 72] < 200                         # outside the rounded corner
         assert 100 < px[o + 100 * w + 3] < 160                   # the dimmed copy
-        assert px[o + 100 * w + 68] < px[o + 100 * w + 3] - 8    # the shadow
+        assert px[o + 100 * w + 68] < px[o + 100 * w + 3] - 5    # the shadow (ffmpeg 5.1's a little lighter: 7 below)
 
 
 class _Overlap:

@@ -34,7 +34,13 @@ video-as-code uses - melt, ffmpeg, each MLT module a feature needs
 builds and the optional tools - and, for what's missing, how to get it.
 A module missing from melt doesn't stop it: what uses it renders as
 nothing, silently, so it's worth running on a new machine. It exits 1
-only when something nothing renders without is missing.
+only when something nothing renders without is missing. It checks
+versions too, where an older one renders wrong without saying so:
+`speed_ramp:` needs MLT 7.22 or later (Debian 12's 7.12 ignores the
+ramp), `derive: {openshot: ...}` libopenshot 0.5.0 or later. Checked on
+Ubuntu 26.04, Ubuntu 24.04, Debian 13 and Debian 12; a melt that draws
+titles with Qt 5, as Debian's does, gets their font weights in Qt 5's
+scale (doctor says so).
 
 The rest of `video-as-code` (`build`/`validate`/`import`) only ever needs PyYAML —
 `reconstruct.py` is imported lazily, so skipping this extra doesn't affect

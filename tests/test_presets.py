@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from video_as_code import presets
+from video_as_code import presets, titles
 from video_as_code.errors import ValidationErrors
 from video_as_code.schema import load_and_resolve
 
@@ -79,7 +79,8 @@ def test_errors_say_where(tmp_path: Path, data: dict, expected: str):
     assert any(expected in e for e in errors), errors
 
 
-def test_a_whole_project(tmp_path: Path, assets_dir: Path):
+def test_a_whole_project(tmp_path: Path, assets_dir: Path, monkeypatch):
+    monkeypatch.setattr(titles, "melt_weight_scale", lambda: 6)  # (whatever this machine's melt)
     path = tmp_path / "project.yaml"
     path.write_text(
         f"""

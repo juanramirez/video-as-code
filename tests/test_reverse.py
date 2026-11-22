@@ -1001,7 +1001,7 @@ timeline:
     assert video_clip["speed"] == -1.0
 
 
-def test_speed_ramp_falls_to_raw_items_instead_of_silently_lost(tmp_path: Path, assets_dir: Path):
+def test_speed_ramp_falls_to_raw_items_instead_of_silently_lost(tmp_path: Path, assets_dir: Path, melt_new_enough):
     """`speed_ramp:` (v0.7's headline feature, MLT's `timeremap` link) is
     NOT reconstructed on import - regression test for a real gap this
     surfaced: `classify_producer` only ever reads a chain's own

@@ -7,11 +7,12 @@ from pathlib import Path
 
 import pytest
 
-from video_as_code import openshot_effects
+from video_as_code import openshot_effects, probe
 from video_as_code.errors import ValidationErrors
 from video_as_code.schema import load_and_resolve
 
-needs_openshot = pytest.mark.skipif(openshot_effects.python() is None, reason="needs python3-openshot")
+needs_openshot = pytest.mark.skipif(openshot_effects.python() is None or openshot_effects.too_old() is not None,
+                                    reason=f"needs python3-openshot, libopenshot {openshot_effects.MIN_VERSION} or later")
 
 
 def _parse(raw) -> tuple[tuple, list[str]]:
@@ -34,6 +35,14 @@ def test_checked_against_libopenshots_catalog():
     ]:
         _, errors = _parse(raw)
         assert errors and expected in errors[0], (raw, errors)
+
+
+def test_an_older_libopenshot_says_so(monkeypatch):
+    monkeypatch.setattr(openshot_effects, "catalog", lambda: {"Wave": {"props": {}}})
+    monkeypatch.setattr(openshot_effects, "version", lambda: "0.3.3")
+    _, errors = _parse([{"effect": "Wave"}])
+    assert len(errors) == 1 and "0.5.0" in errors[0] and "0.3.3" in errors[0]
+    assert probe.version_tuple("0.5.0+dfsg1") == (0, 5, 0) and probe.version_tuple("x") == ()
 
 
 def test_without_libopenshot_says_how_to_get_it(monkeypatch):
