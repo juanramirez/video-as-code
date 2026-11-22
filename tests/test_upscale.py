@@ -49,7 +49,7 @@ def _gif(path: Path, colors: list[tuple[int, int, int]], delays: list[int]) -> P
 
 def _delays(path: Path) -> list[int]:
     out = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries", "frame=duration_time", "-of", "csv=p=0", str(path)],
+        ["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries", "packet=duration_time", "-of", "csv=p=0", str(path)],
         capture_output=True, text=True,
     ).stdout.split()
     return [round(float(d) * 1000) for d in out]

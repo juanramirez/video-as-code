@@ -1169,6 +1169,13 @@ def _parse_clip_placement(item: Any, track_idx: int, clip_idx: int, errors: list
             if valid and item.get("in") not in (None, 0, 0.0):
                 errors.append(msg("validation.speed_ramp_in_not_supported", ctx=ctx))
                 valid = False
+            melt = probe.find_melt()
+            if valid and melt is not None and () < probe.melt_version(melt) < probe.SPEED_RAMP_MIN_MLT:
+                # (an older melt renders it, without following the ramp)
+                errors.append(msg("validation.speed_ramp_needs_newer_mlt", ctx=ctx,
+                                  version=".".join(map(str, probe.melt_version(melt))),
+                                  minimum=".".join(map(str, probe.SPEED_RAMP_MIN_MLT))))
+                valid = False
             if valid:
                 speed_ramp = parsed
 
@@ -1634,6 +1641,8 @@ def validate_and_resolve(doc: ProjectDoc) -> ResolvedProject:
                     outline=clip.outline,
                     outline_color=clip.outline_color,
                     shadow=clip.shadow,
+                    # (400 is the same in both scales: the melt asked only otherwise)
+                    weight_scale=titles.melt_weight_scale() if clip.font_weight != 400 else 6,
                 ),
             )
         elif kind == "image":

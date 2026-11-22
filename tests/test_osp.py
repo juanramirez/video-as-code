@@ -105,6 +105,7 @@ def test_an_openshot_derive_stays_an_effect(tmp_path: Path, assets_dir: Path, mo
     from video_as_code import derive
 
     monkeypatch.setattr(fx, "catalog", lambda: {"Negate": {"props": {}, "description": "", "audio": False}})
+    monkeypatch.setattr(fx, "version", lambda: "0.5.0")
     monkeypatch.setattr(derive, "ensure_all", lambda *a, **k: None)
     src = assets_dir / "clip.mp4"
     project = _write(tmp_path, f"""

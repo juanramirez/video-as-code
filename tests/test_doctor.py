@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from video_as_code import cli, doctor, gltransitions, openshot_effects, probe, splitrender, upscale
+from video_as_code import cli, doctor, gltransitions, openshot_effects, probe, splitrender, titles, upscale
 
 
 ALL = {
@@ -21,6 +21,8 @@ def machine(monkeypatch):
     monkeypatch.setattr(doctor.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(doctor, "_version", lambda cmd, word: "1.0")
     monkeypatch.setattr(doctor, "melt_services", lambda melt: dict(ALL))
+    monkeypatch.setattr(probe, "melt_version", lambda melt: (7, 36, 1))
+    monkeypatch.setattr(titles, "melt_weight_scale", lambda: 6)
     monkeypatch.setattr(gltransitions, "installed", lambda plugin=gltransitions.PLUGIN: True)
     monkeypatch.setattr(openshot_effects, "version", lambda: "0.5.0")
     monkeypatch.setattr(upscale, "find_binary", lambda: "/x/realesrgan-ncnn-vulkan")
@@ -69,6 +71,22 @@ def test_no_frei0r_at_all(machine):
                                                            for k, v in ALL.items()})
     _, text = _run()
     assert "sudo apt install frei0r-plugins" in text
+
+
+def test_versions_too_old(machine):
+    # (Debian 12's: MLT 7.12, libopenshot 0.2.7; Debian 13's libopenshot 0.3.3)
+    machine.setattr(probe, "melt_version", lambda melt: (7, 12, 0))
+    machine.setattr(openshot_effects, "version", lambda: "0.3.3")
+    code, text = _run()
+    assert code == 0
+    assert "– speed_ramp: (timeremap): this melt is 7.12.0; speed_ramp: needs MLT 7.22 or later" in text
+    assert "0.3.3; derive: {openshot: ...} needs 0.5.0 or later" in text
+
+
+def test_titles_drawn_with_qt5_said(machine):
+    machine.setattr(titles, "melt_weight_scale", lambda: 5)
+    code, text = _run()
+    assert code == 0 and "✓ title clips (kdenlivetitle): drawn with Qt 5" in text
 
 
 def test_the_real_melt_is_asked(melt):

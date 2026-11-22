@@ -45,6 +45,21 @@ def test_qt5_weights_read_on_qt6s_scale(old, new):
     assert titles.parse_title_xml(xml).get("font_weight") == new
 
 
+def test_qt5s_scale_both_ways():
+    assert [titles.qt5_weight(w) for w in (100, 400, 700, 900, 450)] == [0, 50, 75, 87, 54]
+    assert [titles.qt6_weight(w) for w in (0, 50, 75, 87)] == [100, 400, 700, 900]
+
+
+def test_a_qt5_melt_gets_its_own_scale(tmp_path: Path, monkeypatch):
+    # (Debian 12's and 13's melt draw titles with Qt 5, which ignores 700: bold came out normal)
+    monkeypatch.setattr(titles, "melt_weight_scale", lambda: 5)
+    resolved = load_and_resolve(_project(tmp_path, "font_weight: bold"))
+    (clip,) = [c for c in resolved.bin_clips if c.id == "card"]
+    xml = Path(clip.path).read_text(encoding="utf-8")
+    assert 'font-weight="75"' in xml
+    assert titles.parse_title_xml(xml)["font_weight"] == 700  # (read back as what was asked for)
+
+
 def _project(tmp_path: Path, title_keys: str) -> Path:
     path = tmp_path / "project.yaml"
     path.write_text(
@@ -63,7 +78,8 @@ timeline:
     return path
 
 
-def test_names_for_weights(tmp_path: Path):
+def test_names_for_weights(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(titles, "melt_weight_scale", lambda: 6)
     resolved = load_and_resolve(_project(tmp_path, "font_weight: bold, shadow: true"))
     (clip,) = [c for c in resolved.bin_clips if c.id == "card"]
     xml = Path(clip.path).read_text(encoding="utf-8")

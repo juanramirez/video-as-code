@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import functools
 import hashlib
+import itertools
 import json
 import os
 import shutil
@@ -46,6 +47,36 @@ def animation_duration_seconds(path: Path) -> float:
         return (float(data["op"]) - float(data.get("ip", 0))) / float(data["fr"])
     except (OSError, ValueError, KeyError, TypeError, ZeroDivisionError) as exc:
         raise ProbeError(msg("probe.animation_unreadable", path=path, exc=exc)) from exc
+
+
+# the oldest MLT speed_ramp: (a timeremap link, xmlgen.py) is known to work
+# with: Debian 12's 7.12 has the link but doesn't follow the ramp; Ubuntu
+# 24.04's 7.22 does, and every later one tried (7.30, 7.36, 7.41). Somewhere
+# between, MLT 7.14-7.20 changed chains and timeremap; which change it took
+# wasn't narrowed down (checked 2026-10-27)
+SPEED_RAMP_MIN_MLT = (7, 22)
+
+
+def version_tuple(text: str | None) -> tuple[int, ...]:
+    """"7.36.1" -> (7, 36, 1), "0.5.0+dfsg1" -> (0, 5, 0); () if it isn't one."""
+    parts = []
+    for part in (text or "").split("."):
+        digits = "".join(itertools.takewhile(str.isdigit, part))
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts)
+
+
+@functools.lru_cache(maxsize=None)
+def melt_version(melt: str) -> tuple[int, ...]:
+    """That melt's version (`melt -version`: "melt 7.36.1"); () if it doesn't say."""
+    try:
+        out = subprocess.run([melt, "-version"], capture_output=True, text=True, timeout=60, env=melt_env()).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ()
+    words = out.split()
+    return version_tuple(words[1]) if len(words) > 1 else ()
 
 
 def ffprobe_available() -> bool:

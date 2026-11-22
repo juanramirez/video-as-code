@@ -2471,6 +2471,11 @@ timeline:
     assert late_r > late_b + 20, f"expected the reversed clip to end red, got r={late_r} b={late_b}"
 
 
+def _needs_speed_ramp(melt) -> None:
+    if () < probe.melt_version(melt[0]) < probe.SPEED_RAMP_MIN_MLT:
+        pytest.skip(f"speed_ramp needs MLT {probe.SPEED_RAMP_MIN_MLT} or later")
+
+
 def test_melt_respects_speed_ramp(tmp_path: Path, melt):
     """Empirical check for `speed_ramp:` (v0.7's headline feature, MLT's
     `timeremap` link) through the generator's own actual output, not
@@ -2487,6 +2492,7 @@ def test_melt_respects_speed_ramp(tmp_path: Path, melt):
     `time_map` construction (dense per-frame sampling, verified
     separately to avoid a sparse-keyframe under-shoot bug found during
     research)."""
+    _needs_speed_ramp(melt)
     source = tmp_path / "source.mp4"
     segments = []
     for i, color in enumerate(["red", "green", "blue", "yellow"]):
@@ -2558,6 +2564,7 @@ def test_melt_respects_speed_ramp_source_in(tmp_path: Path, melt):
     should show green then blue - never the red of the source's first
     second. Proves MLT's timeremap reads `time_map` values as absolute
     source seconds (an offset map), with no trimmed copy of the file."""
+    _needs_speed_ramp(melt)
     source = tmp_path / "source.mp4"
     segments = []
     for i, color in enumerate(["red", "green", "blue", "yellow"]):

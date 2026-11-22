@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-from . import gltransitions, glfilters, openshot_effects, probe, splitrender, upscale, watch
+from . import gltransitions, glfilters, openshot_effects, probe, splitrender, titles, upscale, watch
 from .i18n import msg
 
 
@@ -92,8 +92,22 @@ def _modules(melt: str) -> list[Check]:
     for kind, service, what, fix in _MODULES:
         names = services[kind]
         found = any(n.startswith(service) for n in names) if service.endswith(".") else service in names
-        checks.append(Check(msg(what), found, "" if found else msg("doctor.not_in_melt", service=service), msg(fix)))
+        detail = "" if found else msg("doctor.not_in_melt", service=service)
+        if found and service == "kdenlivetitle" and titles.melt_weight_scale() == 5:
+            detail = msg("doctor.titles_qt5")
+        checks.append(Check(msg(what), found, detail, msg(fix)))
+    version = probe.melt_version(melt)
+    if version and version < probe.SPEED_RAMP_MIN_MLT:  # (the ramp's timeremap link is there: it doesn't work)
+        checks.append(Check(msg("doctor.speed_ramp"), False,
+                            msg("doctor.mlt_too_old", version=_dotted(version), minimum=_dotted(probe.SPEED_RAMP_MIN_MLT)),
+                            msg("doctor.fix_mlt_newer")))
+    else:
+        checks.append(Check(msg("doctor.speed_ramp"), True))
     return checks
+
+
+def _dotted(version: tuple[int, ...]) -> str:
+    return ".".join(map(str, version))
 
 
 def _plugins(melt: Optional[str]) -> list[Check]:
@@ -118,12 +132,19 @@ def _plugins(melt: Optional[str]) -> list[Check]:
 
 def _optional() -> list[Check]:
     openshot = openshot_effects.version()
+    old_openshot = openshot is not None and probe.version_tuple(openshot) < openshot_effects.MIN_VERSION
+    if openshot is None:
+        openshot_detail = msg("doctor.not_found")
+    elif old_openshot:
+        openshot_detail = msg("doctor.openshot_too_old", version=openshot, minimum=_dotted(openshot_effects.MIN_VERSION))
+    else:
+        openshot_detail = openshot
     esrgan = upscale.find_binary()
     player = watch.player_command(Path("x.mp4"), 0)
     kdenlive = shutil.which("kdenlive")
     reconstruct = all(importlib.util.find_spec(m) for m in ("numpy", "PIL"))
     return [
-        Check(msg("doctor.openshot"), openshot is not None, openshot or msg("doctor.not_found"), msg("doctor.fix_openshot")),
+        Check(msg("doctor.openshot"), openshot is not None and not old_openshot, openshot_detail, msg("doctor.fix_openshot")),
         Check(msg("doctor.esrgan"), esrgan is not None, str(esrgan) if esrgan else msg("doctor.esrgan_later"),
               "" if upscale.can_install() else msg("doctor.fix_esrgan")),
         Check(msg("doctor.player"), player is not None, player[0] if player else msg("doctor.not_found"),

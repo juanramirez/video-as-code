@@ -120,7 +120,7 @@ def test_proxies_are_cached(tmp_path: Path, long_video: Path, monkeypatch):
     assert errors == []
 
 
-def test_proxies_shift_a_speed_ramps_source_offset(tmp_path: Path, long_video: Path):
+def test_proxies_shift_a_speed_ramps_source_offset(tmp_path: Path, long_video: Path, melt_new_enough):
     project = _project(
         tmp_path,
         f"  - {{id: v, path: {long_video}}}",

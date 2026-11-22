@@ -34,12 +34,18 @@ import subprocess
 from pathlib import Path
 from typing import Any, Optional
 
+from . import probe
 from .errors import KdenliveAsCodeError
 from .i18n import msg
 from .mltdata import default_cache_root
 
 PYTHON_ENV = "VIDEO_AS_CODE_OPENSHOT_PYTHON"
 _SCRIPT = Path(__file__).parent / "openshot_render.py"
+# the oldest libopenshot derive: openshot is known to work with: 0.5.0
+# (Ubuntu 26.04's, Debian sid's) does; Debian 13's 0.3.3 writes a video
+# ffprobe can't read, and neither it nor Debian 12's 0.2.7 has LensFlare
+# (checked 2026-10-27)
+MIN_VERSION = (0, 5, 0)
 
 
 # effects that can't work in a render of ours: the message saying why
@@ -104,6 +110,12 @@ def _value_ok(kind: str, value: Any) -> bool:
     return isinstance(value, str)
 
 
+def too_old() -> Optional[str]:
+    """libopenshot's version, if it's older than MIN_VERSION."""
+    found = version()
+    return found if found and probe.version_tuple(found) < MIN_VERSION else None
+
+
 def parse(raw: Any, ctx: str, errors: list[str]) -> tuple[str, ...]:
     """derive:'s `openshot:` list, checked against libopenshot's own
     catalog - each effect as JSON, for the spec (its key) and the render."""
@@ -113,6 +125,11 @@ def parse(raw: Any, ctx: str, errors: list[str]) -> tuple[str, ...]:
     effects = catalog()
     if not effects:
         errors.append(msg("validation.openshot_missing", ctx=ctx, env=PYTHON_ENV))
+        return ()
+    old = too_old()
+    if old:
+        errors.append(msg("validation.openshot_too_old", ctx=ctx, version=old,
+                          minimum=".".join(map(str, MIN_VERSION)), env=PYTHON_ENV))
         return ()
     out = []
     for i, item in enumerate(raw):

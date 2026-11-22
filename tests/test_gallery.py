@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from video_as_code import cli, gallery, i18n
+from video_as_code import cli, gallery, i18n, lumas
 from video_as_code.schema import load_and_resolve
 
 
@@ -17,8 +17,10 @@ def samples(tmp_path_factory, assets_dir: Path) -> dict[str, Path]:
 
 
 @pytest.mark.parametrize("entry", gallery.CATALOG, ids=[e.name for e in gallery.CATALOG])
-def test_every_entry_is_a_valid_project(entry: gallery.Entry, samples: dict[str, Path], tmp_path: Path):
+def test_every_entry_is_a_valid_project(entry: gallery.Entry, samples: dict[str, Path], tmp_path: Path, melt_new_enough):
     project = entry.project
+    if "openshot/" in project and lumas.openshot_dir() is None:
+        pytest.skip("uses one of openshot-qt's transitions, and openshot-qt isn't installed here")
     for key, path in samples.items():
         project = project.replace("{" + key + "}", str(path))
     yaml_path = tmp_path / "project.yaml"

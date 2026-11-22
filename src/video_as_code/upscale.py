@@ -106,8 +106,9 @@ def install(report: Callable[[str], None] = lambda text: None) -> Path:
 
 
 def _frame_delays_ms(path: Path) -> list[int]:
+    # (each packet's: a gif's packet is a frame, and frames' own duration_time is ffprobe 6's - 5.1's has none)
     out = subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries", "frame=duration_time", "-of", "csv=p=0", str(path)],
+        ["ffprobe", "-v", "error", "-select_streams", "v", "-show_entries", "packet=duration_time", "-of", "csv=p=0", str(path)],
         capture_output=True, text=True, timeout=120,
     ).stdout.split()
     return [round(float(d) * 1000) for d in out if d not in ("", "N/A")]

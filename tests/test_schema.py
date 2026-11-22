@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from video_as_code import probe
 from video_as_code.errors import ValidationErrors
 from video_as_code.i18n import msg
 from video_as_code.schema import load_and_resolve, load_yaml
@@ -855,7 +856,7 @@ timeline:
     assert "stabilize" in str(exc.value)
 
 
-def test_speed_ramp_resolves(tmp_path: Path, assets_dir: Path):
+def test_speed_ramp_resolves(tmp_path: Path, assets_dir: Path, melt_new_enough):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
 bin:
@@ -878,6 +879,26 @@ timeline:
     assert placement.speed is None
     assert placement.speed_ramp == [(0, 1.0), (25, 2.0)]
     assert placement.out_frame - placement.in_frame + 1 == 50  # 2.0s @ 25fps
+
+
+def test_speed_ramp_on_a_melt_too_old_rejected(tmp_path: Path, assets_dir: Path, monkeypatch):
+    # (Debian 12's MLT 7.12 renders it at the clip's own speed, silently)
+    monkeypatch.setattr(probe, "find_melt", lambda: "/usr/bin/melt")
+    monkeypatch.setattr(probe, "melt_version", lambda melt: (7, 12, 0))
+    yaml_text = f"""
+project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
+bin:
+  - id: clip
+    path: {assets_dir / "clip.mp4"}
+timeline:
+  tracks:
+    - type: video
+      clips:
+        - {{clip: clip, start: 0, duration: 2.0, speed_ramp: [{{at: 0, speed: 2.0}}]}}
+"""
+    with pytest.raises(ValidationErrors) as exc:
+        load_and_resolve(_write_yaml(tmp_path, yaml_text))
+    assert "needs MLT 7.22 or later, and this melt is 7.12.0" in str(exc.value)
 
 
 def test_speed_ramp_conflicts_with_speed_rejected(tmp_path: Path, assets_dir: Path):
@@ -1100,7 +1121,7 @@ timeline:
 
 
 
-def test_speed_ramp_with_source_in_resolves(tmp_path: Path, assets_dir: Path):
+def test_speed_ramp_with_source_in_resolves(tmp_path: Path, assets_dir: Path, melt_new_enough):
     """`source_in:` alone (no `source_out:`) is the supported way to start
     a ramp later in the source - it only offsets where the ramp reads
     from, the placement's own range still starts at 0."""
@@ -1684,7 +1705,7 @@ timeline:
     assert "boomerang" in str(exc.value)
 
 
-def test_boomerang_conflicts_with_speed_ramp(tmp_path: Path, assets_dir: Path):
+def test_boomerang_conflicts_with_speed_ramp(tmp_path: Path, assets_dir: Path, melt_new_enough):
     yaml_text = f"""
 project: {{id: p1, title: T, fps: 25, width: 320, height: 240}}
 bin:
