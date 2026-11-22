@@ -173,7 +173,9 @@ kdenlive itself offers, and show differently:</p>
 <h2 id="5-iterate">5. Iterate</h2>
 <p>Change the YAML, re-run <code>validate</code>/<code>build</code>/<code>render</code> - or leave
 <code>video-as-code watch project.yaml</code> running: each save renders a light
-preview again (only what changed) and plays it from there. Since the YAML is
+preview again (only what changed) and plays it from there. To look at
+one moment at full quality, <code>render --from 1:20 --to 1:35</code> renders just
+that stretch. Since the YAML is
 what you check into version control, <code>git diff</code> on it is a real, readable
 diff of what changed in the edit - trims, timing, added clips - the same
 way it would be for code.</p>
@@ -188,7 +190,7 @@ way it would be for code.</p>
   file at all instead? See <a href="reconstructing.html"><code>docs/reconstructing.md</code></a>.</li>
 </ul>
 </main>
-<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-10-25, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-11-22, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
 <script>
 // a link here to a row opens nothing more, but shows it: scrolled to, below the bar
 if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }

@@ -160,6 +160,11 @@ couldn't match, for a person to review).</p>
 <td><code>4.0</code></td>
 <td>Length of a still image's producer. A still placed for longer than this is cut short at it: raise it if a still has to stay on screen longer.</td>
 </tr>
+<tr id="key-loudness">
+<td><code>loudness</code></td>
+<td>-</td>
+<td>Even loudness: every clip with sound on an audio track brought to this many LUFS (<code>-16</code>; <code>-14</code> is what YouTube plays at, <code>-23</code> broadcast) by a fixed gain, from its own measured loudness (EBU R128). Its peak kept under -1 dBTP and the boost under 20 dB, so a clip that can't reach it stays quieter. A clip's own <code>gain:</code> applies on top.</td>
+</tr>
 <tr id="key-notes">
 <td><code>notes</code></td>
 <td>-</td>
@@ -169,6 +174,11 @@ couldn't match, for a person to review).</p>
 <td><code>sources</code></td>
 <td>-</td>
 <td>Where clips come from and how the downloaded files are kept (below).</td>
+</tr>
+<tr id="key-publish">
+<td><code>publish</code></td>
+<td>-</td>
+<td>Where <code>video-as-code publish</code> puts the rendered video: for now <code>youtube:</code> (below).</td>
 </tr>
 </tbody>
 </table>
@@ -201,6 +211,59 @@ couldn't match, for a person to review).</p>
 <td><code>prune_after_days</code></td>
 <td><code>7</code></td>
 <td>Before each <code>render</code>, delete files the tool can bring back by itself (album items only <code>derive:</code> needs, stale generated files) that no <code>build</code>/<code>validate</code>/<code>render</code> has used for this many days. <code>0</code> = never. See README's <em><code>video-as-code fetch</code></em> section.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="projectpublishyoutube"><code>project.publish.youtube:</code></h3>
+<p>What <code>video-as-code publish project.yaml video.mp4</code> uploads to YouTube (see README's <em><code>video-as-code publish</code></em>).</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>title</code></td>
+<td>the project's <code>title</code></td>
+<td>The video's title on YouTube (at most 100 characters).</td>
+</tr>
+<tr id="key-description">
+<td><code>description</code></td>
+<td>-</td>
+<td>Its description.</td>
+</tr>
+<tr id="key-privacy">
+<td><code>privacy</code></td>
+<td><code>private</code></td>
+<td><code>private</code>, <code>unlisted</code> or <code>public</code>. Uploads from an API project Google hasn't audited stay private whatever this says: <code>publish</code> tells you, and how to change it by hand.</td>
+</tr>
+<tr id="key-playlists">
+<td><code>playlists</code></td>
+<td>-</td>
+<td>Playlist ids (<code>PL...</code>) to add it to.</td>
+</tr>
+<tr id="key-tags">
+<td><code>tags</code></td>
+<td>-</td>
+<td>Its tags.</td>
+</tr>
+<tr id="key-channel">
+<td><code>channel</code></td>
+<td>-</td>
+<td>The channel id (<code>UC...</code>) it must go to: checked against the signed-in account, so nothing goes to the wrong one.</td>
+</tr>
+<tr id="key-category">
+<td><code>category</code></td>
+<td><code>22</code></td>
+<td>YouTube's category number (<code>22</code> People &amp; Blogs, <code>10</code> Music, <code>19</code> Travel &amp; Events...).</td>
+</tr>
+<tr id="key-made_for_kids">
+<td><code>made_for_kids</code></td>
+<td><code>false</code></td>
+<td>Whether it's made for kids, as YouTube asks of every video.</td>
 </tr>
 </tbody>
 </table>
@@ -357,7 +420,12 @@ exactly one way to get its file:</p>
 <tr>
 <td><code>fps</code></td>
 <td><code>30</code></td>
-<td>Re-time to this frame rate.</td>
+<td>Re-time to this frame rate (frames dropped or repeated: a 25 fps video at 30 repeats one in five).</td>
+</tr>
+<tr id="key-interpolate">
+<td><code>interpolate</code></td>
+<td><code>true</code></td>
+<td>With <code>fps</code>: make the in-between frames by motion interpolation instead (ffmpeg's <code>minterpolate</code>), so a video at another frame rate doesn't judder. Slow: for short clips.</td>
 </tr>
 <tr id="key-reverse">
 <td><code>reverse</code></td>
@@ -588,7 +656,7 @@ required.</p>
 <tr id="key-freeze_at">
 <td><code>freeze_at</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-freeze-at" title="See it in the gallery">▶</a></td>
 <td>-</td>
-<td>Freeze the picture at this second of the clip (counted from its first visible frame). Alone, the whole clip shows that frame.</td>
+<td>Freeze the picture at this second of the clip (counted from its first visible frame, so after <code>in:</code>). Alone, the whole clip shows that frame.</td>
 </tr>
 <tr id="key-freeze_before">
 <td><code>freeze_before</code> / <code>freeze_after</code></td>
@@ -618,6 +686,10 @@ required.</p>
 <td><code>gain</code></td>
 <td>Audio level multiplier (<code>2.0</code> = twice as loud).</td>
 </tr>
+<tr>
+<td><code>loudness</code></td>
+<td>This clip's own target loudness, in LUFS, instead of <code>project.loudness</code>; <code>false</code> leaves it as it is. Only on an audio track.</td>
+</tr>
 <tr id="key-mute">
 <td><code>mute</code></td>
 <td><code>true</code> silences the clip's own sound.</td>
@@ -639,11 +711,11 @@ required.</p>
 </tr>
 <tr id="key-position">
 <td><code>position</code> <a class="to-gallery" href="../gallery/index.html#card-clip-position-size" title="See it in the gallery">▶</a>, <code>size</code></td>
-<td>Picture-in-picture: <code>[x, y]</code> and <code>[w, h]</code> in canvas pixels.</td>
+<td>Picture-in-picture: <code>[x, y]</code> and <code>[w, h]</code> in canvas pixels. The picture may run past the canvas's edges (only what's on it shows), not lie wholly outside it.</td>
 </tr>
 <tr id="key-position_keyframes">
 <td><code>position_keyframes</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-position-keyframes" title="See it in the gallery">▶</a></td>
-<td>Animated picture-in-picture: <code>[{at: 0, position: [x, y], size: [w, h]}, ...]</code>, first at <code>0</code>. Not together with <code>position</code>/<code>size</code>.</td>
+<td>Animated picture-in-picture: <code>[{at: 0, position: [x, y], size: [w, h]}, ...]</code>, first at <code>0</code>. Each keyframe, like <code>position</code>/<code>size</code>, may run past the canvas's edges - a full-frame card sliding in from above starts at a negative <code>y</code>. Not together with <code>position</code>/<code>size</code>.</td>
 </tr>
 <tr id="key-ken_burns_from">
 <td><code>ken_burns_from</code> <a class="to-gallery" href="../gallery/index.html#card-clip-time-ken-burns-from-to" title="See it in the gallery">▶</a>, <code>ken_burns_to</code></td>
@@ -869,7 +941,7 @@ as on a timeline clip.</p>
 <td><code>Marker</code></td>
 <td>Its label.</td>
 </tr>
-<tr id="key-category">
+<tr>
 <td><code>category</code></td>
 <td><code>0</code></td>
 <td>kdenlive's marker category (its colour).</td>
@@ -1186,7 +1258,7 @@ vec4 effect(vec2 uv) {
 <pre><code class="language-yaml">- {clip: beach, start: 0, duration: 4, glsl: {shader: looks/warm.glsl, params: {amount: 0.1}}}
 </code></pre>
 </main>
-<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-10-25, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-11-22, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
 <script>
 // a link here to a row opens nothing more, but shows it: scrolled to, below the bar
 if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }

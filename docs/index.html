@@ -111,22 +111,40 @@ also at <a href="https://video-as-code.juan-ramirez.es/">https://video-as-code.j
 </code></pre>
 <p><code>video-as-code docs</code> needs the optional <code>docs</code> extra (Python-Markdown):
 <code>pip install -e ".[docs]"</code>.</p>
+<p>Then <code>video-as-code doctor</code> says what this machine has of what
+video-as-code uses - melt, ffmpeg, each MLT module a feature needs
+(titles, compositing, frei0r, Lottie, stabilization...), the plugins it
+builds and the optional tools - and, for what's missing, how to get it.
+A module missing from melt doesn't stop it: what uses it renders as
+nothing, silently, so it's worth running on a new machine. It exits 1
+only when something nothing renders without is missing. It checks
+versions too, where an older one renders wrong without saying so:
+<code>speed_ramp:</code> needs MLT 7.22 or later (Debian 12's 7.12 ignores the
+ramp), <code>derive: {openshot: ...}</code> libopenshot 0.5.0 or later. Checked on
+Ubuntu 26.04, Ubuntu 24.04, Debian 13 and Debian 12; a melt that draws
+titles with Qt 5, as Debian's does, gets their font weights in Qt 5's
+scale (doctor says so).</p>
 <p>The rest of <code>video-as-code</code> (<code>build</code>/<code>validate</code>/<code>import</code>) only ever needs PyYAML —
 <code>reconstruct.py</code> is imported lazily, so skipping this extra doesn't affect
 anything else.</p>
 <h2 id="usage">Usage</h2>
 <pre><code class="language-bash">video-as-code render project.yaml [-o output.mp4] [--split] [--part P]  # render straight to video via melt
+video-as-code render project.yaml --from 1:20 --to 1:35  # just that stretch, to project_1m20s-1m35s.mp4
 video-as-code watch project.yaml [--proxy WxH]          # a preview again on every save, played from what changed
 video-as-code validate project.yaml                     # validate without rendering
 video-as-code build project.yaml [-o output.kdenlive]   # a .kdenlive, to open in kdenlive
 video-as-code build project.yaml --format openshot      # an OpenShot project (.osp) instead
 video-as-code import project.kdenlive [-o output.yaml]  # existing .kdenlive -&gt; YAML
 video-as-code fetch project.yaml [--verify] [--prune]   # download source:/url: clips
+video-as-code publish project.yaml video.mp4 [--dry-run]  # upload it to YouTube, as project.publish.youtube says
+video-as-code clean project.yaml [PATH...] [--dry-run]  # delete regenerable files once their sources are checked
+video-as-code provenance project.yaml PATH --item/--url/...  # record what a generated file is made from
 video-as-code transitions                               # every wipe shape a luma: can name
 video-as-code schema [-o schema.json]                   # the YAML's JSON Schema, for an editor
 video-as-code gallery [--with photo.jpg]                # every transition and effect, in the browser
 video-as-code docs [--with photo.jpg] [--public DIR]    # this documentation as a local web, the gallery in it
 video-as-code install-gl-transitions                    # build the plugin transition: gl needs (once)
+video-as-code doctor                                    # what's installed of what it uses, and how to get the rest
 </code></pre>
 <p><code>build</code> and <code>render</code> also take <code>--fetch</code>, to run <code>fetch</code> first, and
 <code>--proxy WxH</code> (e.g. <code>--proxy 480x270</code>) for a preview from light copies -
@@ -151,7 +169,11 @@ starts), and each melt runs in a memory-capped <code>systemd-run --user
 --scope</code> when available, so a wrong estimate kills that melt, not the
 session. Every segment's render is cached in <code>.render_cache/</code> next to the
 YAML, keyed by its trimmed project and the files it reads: after an edit
-only the segments it touches are rendered again.</p>
+only the segments it touches are rendered again. Each segment's frames and
+the sound's length are checked: one that comes out short (frames lost with
+the machine overloaded) is rendered once more, and a second short one stops
+the render rather than join a video with frames missing; a segment cached
+short is rendered again.</p>
 <p><code>video-as-code import</code> recognizes everything this generator knows how to produce
 (video/audio tracks, trimmed clips, fade to/from black, volume fades,
 per-clip mute, audio pan, speed changes (forward or reverse), title
@@ -198,6 +220,20 @@ first of mpv, vlc and ffplay found, or a command of your own in
 <code>VIDEO_AS_CODE_PLAYER</code> - <code>{file}</code> and <code>{start}</code> (seconds) replaced:
 <code>VIDEO_AS_CODE_PLAYER="mplayer -ss {start} {file}"</code>. Its cache
 is its own (<code>.render_cache/watch/</code>), apart from a full render's.</p>
+<h3 id="rendering-just-a-stretch-from-and-to">Rendering just a stretch: <code>--from</code> and <code>--to</code></h3>
+<pre><code class="language-bash">video-as-code render project.yaml --from 1:20 --to 1:35
+</code></pre>
+<p>renders only those 15 seconds, at full quality - to look at a transition
+or a cut as the final video will have it, without rendering all of it.
+Times are seconds (<code>80</code>, <code>80.5</code>) or minutes:seconds (<code>1:20</code>, <code>1:20.5</code>,
+<code>1:02:03</code> with hours); either may be left out (from the start, to the
+end). The file is <code>project_1m20s-1m35s.mp4</code>, so as not to replace the
+whole video's (<code>-o</code> names it). melt is given a copy of the project with
+only the clips that stretch plays, so it starts as fast as a short
+project does; with <code>--split</code>, the segments inside the stretch are the
+whole render's own, shared with its cache. The frames are the ones the
+whole render has there; the sound, though, starts at the stretch, so an
+effect that builds up over time (an echo, a compressor) starts afresh.</p>
 <h3 id="writing-the-yaml-in-an-editor-video-as-code-schema">Writing the YAML in an editor: <code>video-as-code schema</code></h3>
 <p>The project file has a JSON Schema: an editor that knows it completes
 keys and values as you type, shows what each key means (the text of
@@ -259,7 +295,11 @@ quality, as <code>&lt;capture date&gt;_&lt;id&gt;&lt;ext&gt;</code> (<code>20250
 <code>sources.lock.yaml</code> next to the YAML (album item id, size, sha256,
 capture time - machine-written, meant to be committed, never edited by
 hand) so later fetches go straight to it. Renaming a clip's <code>id</code> renames
-its local file on the next <code>fetch</code> instead of downloading it again. <code>build</code>/<code>render</code>
+its local file on the next <code>fetch</code> instead of downloading it again. A file
+copied into <code>dir</code> by hand under its original name is kept as it is (no
+download), but looked up in the album all the same: its item id and capture
+time are recorded and it's renamed to its dated name, so a fresh checkout
+can download it too. <code>build</code>/<code>render</code>
 never download on their own: a <code>source:</code> clip that isn't on disk yet is a
 validation error pointing at <code>fetch</code> (or <code>--fetch</code>). Add <code>.fetch_cache/</code>
 (file names already looked up in the album) to your <code>.gitignore</code>.</p>
@@ -402,8 +442,17 @@ input is on disk (and again only if the spec or the input itself
 changes), and <code>fetch</code> downloads album inputs and generates right away. An
 album item used only as a <code>derive:</code> input is still downloaded, under its
 own name; one that a plain <code>source:</code> clip also uses is the same file,
-downloaded once. The cache can always be deleted and rebuilt, so
+downloaded once. A new generation replaces the clip's older ones - only
+those its own YAML made: several YAMLs sharing a sources folder (a video's
+variants) can each have a clip by the same id without deleting each
+other's. The cache can always be deleted and rebuilt, so
 <code>&lt;dir&gt;/.derived/</code> belongs in your <code>.gitignore</code> too.</p>
+<p>Up to four derived clips are generated at once - fewer on a machine with
+fewer cores, or with less than ~1.5 GB of free memory for each: ffmpeg's motion interpolation and many of its filters use
+about one core each, so several side by side finish sooner. A clip made
+from another (<code>clip:</code>) waits for it; <code>upscale</code> and <code>openshot</code> ones,
+which take the GPU or most of the memory on their own, go one at a
+time.</p>
 <p><code>fetch --prune</code> then deletes the album items used only as <code>derive:</code>
 inputs once everything made from them is generated - often big originals
 of which a few seconds are used. The output's record of its input's
@@ -427,6 +476,139 @@ the first time just starts counting, and a file only on this machine
 (one the lock doesn't know) is never touched. YAML files sharing a
 sources folder (a project and its preview) share that record. <code>render
 --no-prune</code> skips it once.</p>
+<h3 id="video-as-code-clean-delete-what-can-be-regenerated-once-its-sources-are-checked"><code>video-as-code clean</code>: delete what can be regenerated, once its sources are checked</h3>
+<p>Generated files pile up: <code>.derived/</code> and <code>.proxies/</code>, and the <code>.work/</code>
+folder of a project's own scripts (frames, thumbnails, copies of album
+videos...). <code>clean</code> deletes them - but only a file whose origin is
+<strong>recorded</strong> and whose sources <strong>answer right now</strong>; anything it can't
+check stays, with the reason on screen. Start with <code>--dry-run</code>:</p>
+<pre><code class="language-bash">video-as-code clean project.yaml --dry-run              # check everything, delete nothing
+video-as-code clean project.yaml .work/enhance          # only that file or folder; asks you to type a phrase first
+</code></pre>
+<pre><code>would delete  .work/invitados: 1 file(s), 1.60 GB
+kept          .work/escenario: 1 file(s), 1.80 GB
+    'MVI_0207.MOV' is no longer in the album
+not registered .work/shots: 41 file(s), 45.0 MB (kept: nothing says where they come from; ...)
+</code></pre>
+<p><strong>Where a file's origin is recorded</strong> - <code>clean</code> reads all three:</p>
+<table>
+<thead>
+<tr>
+<th>What</th>
+<th>Recorded in</th>
+<th>Source it resolves to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.derived/</code> and <code>.proxies/</code> files</td>
+<td>their <code>&lt;file&gt;.input.json</code> sidecar (input name + sha256, written by <code>derive</code>)</td>
+<td>the sha256 is looked up in <code>sources.lock.yaml</code>: an album item, a <code>url:</code> download or the reference video (a derived-from-a-derived follows the chain)</td>
+</tr>
+<tr>
+<td>Anything else - <code>.work/</code>, outputs of your scripts</td>
+<td><code>provenance.yaml</code>, next to the project YAML</td>
+<td>what the entry lists</td>
+</tr>
+<tr>
+<td>Album items, links, the reference</td>
+<td><code>sources.lock.yaml</code></td>
+<td>(these are sources, never deleted by <code>clean</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>provenance.yaml</code></strong> is for what your own scripts make. It's plain YAML,
+meant to be committed; a script (or you) adds to it with
+<code>video-as-code provenance</code>, or by editing it:</p>
+<pre><code class="language-yaml">files:
+  - path: .work/invitados            # a file, or a folder (each file in it is judged on its own)
+    sources:                         # ALL of them must answer
+      - item: &quot;{name}&quot;               # the project's album item named like the file ({name} = its file name)
+    recipe: recipes/fetch_album_video.py   # a file that must exist in the project...
+    command: python recipes/fetch_album_video.py MVI_0209.MOV   # ...and/or the command line
+  - path: .work/enhance
+    sources:
+      - reference: true              # project.sources.reference, as the YAML spells it
+    recipe: recipes/enhance_missing.sh
+</code></pre>
+<pre><code class="language-bash"># the same from a script's last line (paths as you'd give them from where you run it):
+video-as-code provenance project.yaml .work/enhance --reference --recipe recipes/enhance_missing.sh
+video-as-code provenance project.yaml .work/escenario --item MVI_0207.MOV --command 'fetch_album_video.py ...'
+</code></pre>
+<p>A source is exactly one of: <code>item: NAME</code> (an item of the project's album,
+or of <code>album: URL</code>; <code>media_id:</code> pins one), <code>url: URL</code>, <code>reference: true</code>,
+<code>link: BIN_ID</code> (a <code>url:</code> clip, as the lock records it) or <code>file: PATH</code>
+(another file of the project; add <code>sha256:</code> to also require its content;
+if it is gone it counts only when it is itself regenerable - an entry or
+sidecar covers it and <em>its</em> sources answer - or it is the reference). A
+file needs a <code>recipe:</code> (that exists) or a <code>command:</code>, and at least one
+source. An entry deeper in the tree overrides its folder's. Paths outside
+the project's folder are refused.</p>
+<p><strong>What "answers" means</strong>, per kind of source: an album item is still in
+the album and its download responds (its size matching the lock's, if
+locked); a Drive or http link responds with a file, not a page (size
+checked against the lock's, if there); a YouTube link is reachable with
+<code>yt-dlp --simulate</code>.</p>
+<p><strong>Limits - read these before deleting gigabytes:</strong></p>
+<ul>
+<li>A passing check is a snapshot. The album may be unshared, the video
+  made private or removed, a link rot, or <code>yt-dlp</code> break <strong>tomorrow</strong>;
+  <code>clean</code> prints this warning every run. What it deletes is only as safe
+  as its sources are durable: keep your own copy of anything irreplaceable.</li>
+<li>"Answers" is not "is the same bytes": YouTube (and a link with no
+  recorded size) is only checked for reachability, not against a hash.</li>
+<li>It doesn't check that the recipe still works, or that its tools
+  (ffmpeg, Real-ESRGAN...) and time are at hand, only that it's recorded
+  and the file exists. Output of a CPU-only upscale can take days to redo.</li>
+<li>Without network, or without <code>yt-dlp</code>, nothing can be verified, so
+  nothing is deleted.</li>
+<li>Files nothing records (the rest of <code>.work/</code>) are never touched; <code>clean</code>
+  lists them per folder so you can register them. Fetched <code>assets/</code> and
+  <code>reference/</code> files are not <code>clean</code>'s job: that's <code>fetch --prune</code> and
+  <code>render</code>'s automatic pruning.</li>
+<li><code>clean</code> deletes for good (no trash). Without <code>--dry-run</code> it shows what
+  it found, warns in capitals that no copy of those files has been
+  located (only their sources were checked), and deletes only if you type
+  exactly <code>Yes, I am sure</code> (<code>Sí, estoy seguro</code> in a Spanish locale;
+  anything else cancels). Without a terminal it refuses to ask and deletes
+  nothing, unless you pass <code>--yes-i-am-sure</code> to skip the question (scripts).</li>
+</ul>
+<h3 id="video-as-code-publish-the-video-onto-youtube"><code>video-as-code publish</code>: the video onto YouTube</h3>
+<pre><code class="language-yaml">project:
+  id: xmas
+  title: &quot;Christmas 2025&quot;
+  fps: 30
+  width: 1920
+  height: 1080
+  publish:
+    youtube:
+      description: &quot;The year in pictures&quot;
+      privacy: unlisted               # private (the default), unlisted or public
+      playlists: [PLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx]
+      tags: [navidad]
+      channel: UCxxxxxxxxxxxxxxxxxxxxxx  # optional: checked against the account
+</code></pre>
+<pre><code class="language-sh">video-as-code publish project.yaml output/xmas.mp4 --dry-run  # what it would do
+video-as-code publish project.yaml output/xmas.mp4            # asks, then uploads
+</code></pre>
+<p>uploads the rendered video (the title is the project's unless <code>title:</code>
+says another), adds it to the playlists and records it in
+<code>publish.lock.yaml</code> next to the YAML - commit it. Run again with the same
+file and only the title, description, tags and privacy are updated; with
+a different file it stops, and <code>--replace</code> uploads it as a new video
+(YouTube can't swap a video's file; the old one stays until you delete
+it). It never uploads as a side effect of <code>render</code>, and asks first
+(<code>--yes</code> doesn't). All keys: <a href="project-yaml.html"><code>docs/project-yaml.md</code></a>.</p>
+<p>It signs in with <strong>your own OAuth client</strong> for the YouTube Data API,
+created once in Google Cloud: run <code>publish</code> without one and it says how,
+step by step; save its JSON as <code>~/.config/video-as-code/youtube_client.json</code>
+(or point <code>VIDEO_AS_CODE_YOUTUBE_CLIENT</code> at it). The first time opens the
+browser to sign in; the sign-in is kept in
+<code>~/.config/video-as-code/youtube_token.json</code>, readable only by you -
+never in the YAML. An upload costs ~1600 of the API's 10 000 daily quota
+units, so ~6 a day. Until Google audits your API project, YouTube keeps
+its uploads <strong>private</strong> whatever <code>privacy:</code> says: <code>publish</code> notices,
+and tells you how to change it in YouTube Studio.</p>
 <h3 id="openshots-transitions-luma-openshotname">OpenShot's transitions: <code>luma: openshot/&lt;name&gt;</code></h3>
 <p>A <code>wipe</code> can also take any of the 412 transitions of
 <a href="https://www.openshot.org">OpenShot</a>, on top of this project's own 12
@@ -497,6 +679,19 @@ window): melt then renders them in the same pass as everything else.
 The shaders are bundled (MIT, two BSD; see
 <code>src/video_as_code/gltransitions_data/LICENSE</code>). See
 <a href="project-yaml.html"><code>docs/project-yaml.md</code></a>.</p>
+<h3 id="even-loudness-loudness">Even loudness: <code>loudness:</code></h3>
+<pre><code class="language-yaml">project: {id: trip, title: Trip, fps: 25, width: 1920, height: 1080, loudness: -16}
+</code></pre>
+<p>brings every clip with sound on an audio track to -16 LUFS: each is
+measured (EBU R128, over the stretch of its file it plays) and given the
+fixed gain that takes it there - a quiet phone video and a loud song end
+up alike. It's a <code>volume</code> filter like <code>gain:</code>'s, so kdenlive shows it,
+and a clip's own <code>gain:</code> applies on top. Within a clip, loud and quiet
+parts keep their difference: it isn't a compressor. A clip whose peak
+would go over -1 dBTP, or that needs more than 20 dB, stays quieter
+than the target rather than clipping or turning hiss up. A clip can say
+its own target (<code>loudness: -20</code>) or stay out (<code>loudness: false</code>).
+Measurements are cached in <code>.render_cache/loudness.json</code>.</p>
 <h3 id="presets-presets-use-and-presets_file">Presets: <code>presets:</code>, <code>use:</code> and <code>presets_file:</code></h3>
 <p>A set of keys used again and again - a transition with its duration, a
 look - can be named once and used by name, anywhere the file has a map:</p>
@@ -659,14 +854,16 @@ in <code>gh-pages</code>; <code>--public</code> leaves that file alone too, so t
 survives each rebuild (<code>git pull</code> in the worktree first, to have it).</p>
 <h3 id="video-as-code-reconstruct-recovering-a-yaml-from-a-rendered-video"><code>video-as-code reconstruct</code>: recovering a YAML from a rendered video</h3>
 <pre><code class="language-bash">video-as-code reconstruct rendered.mp4 assets/ [-o output.yaml]
+video-as-code reconstruct rendered.mp4 --album 'https://photos.app.goo.gl/…' [-o output.yaml]
+video-as-code reconstruct rendered.mp4 --takeout [DIR] [--publish-to-photos] [-o output.yaml]
 </code></pre>
 <p>Unlike <code>video-as-code import</code>, this doesn't start from a <code>.kdenlive</code> project — it
 starts from an already-<strong>rendered</strong> video (a flat <code>.mp4</code>, no edit
-metadata) plus a folder of the source assets that presumably went into
-it, and tries to recover which asset appears where, trimmed how, and with
-what fades, by comparing pixel/audio content rather than parsing
-structured XML. There is no guaranteed correct answer here (see
-<code>ROADMAP.md</code> for how the matching works and its known limitations) —
+metadata) plus either a folder or a shared Google Photos album of the source
+assets that presumably went into it, and tries to recover which asset appears
+where, trimmed how, and with what fades, by comparing pixel/audio content
+rather than parsing structured XML. There is no guaranteed correct answer here
+(see <code>ROADMAP.md</code> for how the matching works and its known limitations) —
 segments it isn't confident about are never silently guessed; they're
 kept under <code>x_reconstruct_unmatched:</code> in the output YAML for you to
 review by hand, the same way <code>video-as-code import</code> handles <code>x_kdenlive_raw:</code>.</p>
@@ -674,19 +871,40 @@ review by hand, the same way <code>video-as-code import</code> handles <code>x_k
 project, not a finished YAML.</p>
 <p>See <a href="reconstructing.html"><code>docs/reconstructing.md</code></a> for a short step-by-step howto of this
 whole flow.</p>
+<p><code>--takeout</code> scans a Google Photos Takeout folder. If it finds ZIP archives,
+it reads them directly, decompressing only a few candidates at a time; an
+already-extracted folder also works. It stops when every video segment has
+a confident match. For a local YAML, only matched media is kept beside the
+YAML. Run it without <code>DIR</code> to print Google's Takeout walkthrough.</p>
+<p>Optional <code>--takeout-from</code>/<code>--takeout-to</code> dates prioritize candidates using
+Takeout sidecars and camera-style filenames. They don't exclude other files:
+the scan checks the rest if any segment remains unmatched. With
+<code>--publish-to-photos</code>, matched ZIP entries stream directly into a new
+app-owned album. After one sign-in and confirmation, the CLI asks you to
+enable link sharing once and paste the link; the YAML then refers to remote
+album items. Google requires OAuth setup; the CLI explains the steps when
+its client JSON is missing. See <a href="reconstructing.html"><code>docs/reconstructing.md</code></a> for the full
+Takeout and Google Cloud setup.</p>
+<p>If the full Takeout export does not fit on disk, use <code>--takeout-part ZIP</code>
+with <code>--takeout-session DIR</code> for each part in turn. Delete each processed ZIP
+before downloading the next; the session retains only matched and best-guess
+media. The last part should include <code>--takeout-final</code> if some video segments
+remain unmatched. If every segment matches earlier, the command finalizes
+automatically. See <a href="reconstructing.html"><code>docs/reconstructing.md</code></a> for examples.</p>
 <h3 id="language">Language</h3>
 <p>All user-facing text (validation errors, CLI output, import warnings) goes
 through a small message catalog (<code>i18n.py</code>), keyed by token and looked up at
 call time. English is the source of truth and the fallback for any locale
-or key that isn't translated. Set <code>VIDEO_AS_CODE_LANG=es</code> to get the Spanish
-catalog:</p>
+or key that isn't translated. The tool detects the user's locale from
+<code>LC_ALL</code>, <code>LC_MESSAGES</code>, or <code>LANG</code> automatically. Set <code>LOCALE=es</code> (or a tag
+such as <code>es_ES.UTF-8</code>) to override it; <code>VIDEO_AS_CODE_LANG</code> has the highest
+priority:</p>
 <pre><code class="language-bash">VIDEO_AS_CODE_LANG=es video-as-code validate project.yaml
 </code></pre>
-<p>We deliberately don't read the system <code>LANG</code>/<code>LC_ALL</code>: locale selection is
-opt-in and explicit, so behavior doesn't silently change across machines
-and test runs stay deterministic. Code comments, docstrings, and this
-README are always in English regardless of <code>VIDEO_AS_CODE_LANG</code> — that setting only
-affects what a <code>video-as-code</code> <em>user</em> sees at runtime.</p>
+<p>The priority is <code>VIDEO_AS_CODE_LANG</code>, <code>LOCALE</code>, then the standard system
+locale variables (<code>LC_ALL</code>, <code>LC_MESSAGES</code>, <code>LANG</code>). Code comments,
+docstrings, and this README are always in English; locale settings only
+affect what a <code>video-as-code</code> <em>user</em> sees at runtime.</p>
 <h2 id="current-status">Current status</h2>
 <p>Verified by the test suite (<code>pytest</code>):</p>
 <ul>
@@ -766,7 +984,7 @@ own licenses, run as they are, not bundled: melt/MLT (LGPL), kdenlive
 realesrgan-ncnn-vulkan (MIT; its models BSD-3-Clause), which <code>fetch</code>
 offers to download from its own releases.</p>
 </main>
-<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-10-25, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
+<footer>video-as-code · <a href="https://github.com/juanramirez/video-as-code">GitHub</a> · <a href="https://github.com/juanramirez/video-as-code/blob/HEAD/LICENSE">MIT License</a><br>Built with video-as-code docs --public on 2026-11-22, with melt 7.36.1: the gallery&#x27;s previews are real renders, over generated pictures.</footer>
 <script>
 // a link here to a row opens nothing more, but shows it: scrolled to, below the bar
 if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({block: "center"}); }
