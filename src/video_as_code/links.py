@@ -65,6 +65,17 @@ def kind(url: str) -> str:
     return "http"
 
 
+_PHOTOS_ALBUM_HOSTS = {"photos.app.goo.gl"}
+
+
+def is_photos_album(url: str) -> bool:
+    """A Google Photos album share link: `photos.app.goo.gl/...` or `photos.google.com/share/...`.
+    It answers with a web page, never with a file: `gphotos.list_album` is how to read it."""
+    parsed = urllib.parse.urlparse(url)
+    host = (parsed.hostname or "").lower()
+    return host in _PHOTOS_ALBUM_HOSTS or (host == "photos.google.com" and parsed.path.startswith("/share/"))
+
+
 def drive_file_id(url: str) -> Optional[str]:
     """The file id in a Drive link: `/file/d/<id>/...` or `?id=<id>`."""
     parsed = urllib.parse.urlparse(url)

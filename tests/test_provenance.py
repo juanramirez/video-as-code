@@ -319,3 +319,32 @@ def test_net_url_failures_are_verdicts_not_exceptions(tmp_path: Path, monkeypatc
     assert not verdict.ok and "offline" in verdict.detail
     monkeypatch.setattr(gphotos, "_open", lambda r: _Response({"Content-Type": "text/html"}))
     assert not net.url("https://drive.google.com/file/d/abc/view", None).ok  # a page, not the file
+
+
+def test_net_url_checks_a_photos_album_by_listing_it(tmp_path: Path, monkeypatch):
+    # an album link answers with a web page: it is there if gphotos.list_album finds items in it
+    asked = []
+
+    def listing(url, on_progress=None):
+        asked.append(url)
+        return [object(), object()]
+
+    monkeypatch.setattr(gphotos, "list_album", listing)
+    monkeypatch.setattr(gphotos, "_open", lambda r: pytest.fail("an album is not fetched as a file"))
+    net = provenance.Net(None, tmp_path)
+    verdict = net.url("https://photos.app.goo.gl/abc", None)
+    assert verdict.ok and "2 items" in verdict.detail and asked == ["https://photos.app.goo.gl/abc"]
+    assert net.url("https://photos.google.com/share/AF1Qip?key=k", None).ok
+
+
+def test_net_url_photos_album_gone_or_unreachable_is_not_ok(tmp_path: Path, monkeypatch):
+    net = provenance.Net(None, tmp_path)
+    monkeypatch.setattr(gphotos, "list_album", lambda url, on_progress=None: [])
+    assert not net.url("https://photos.app.goo.gl/abc", None).ok
+
+    def offline(url, on_progress=None):
+        raise gphotos.GPhotosError("offline")
+
+    monkeypatch.setattr(gphotos, "list_album", offline)
+    verdict = net.url("https://photos.app.goo.gl/abc", None)
+    assert not verdict.ok and "offline" in verdict.detail

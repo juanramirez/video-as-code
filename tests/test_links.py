@@ -112,3 +112,14 @@ def test_youtube_video_asks_for_the_whole_video_as_an_mp4(tmp_path: Path, monkey
     assert got == tmp_path / "reference" / "old.mp4"
     text = got.read_text()
     assert text.startswith("bestvideo[ext=mp4]+bestaudio[ext=m4a]") and "--merge-output-format mp4" in text
+
+
+@pytest.mark.parametrize("url, album", [
+    ("https://photos.app.goo.gl/DMVLyrK8tGfbfajN9", True),
+    ("https://photos.google.com/share/AF1QipX?key=k", True),
+    ("https://photos.google.com/photo/AF1QipX", False),
+    ("https://drive.google.com/file/d/abc/view", False),
+    ("https://example.com/photos.app.goo.gl", False),
+])
+def test_is_photos_album(url: str, album: bool):
+    assert links.is_photos_album(url) is album

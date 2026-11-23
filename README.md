@@ -521,8 +521,10 @@ or of `album: URL`; `media_id:` pins one), `url: URL`, `reference: true`,
 if it is gone it counts only when it is itself regenerable - an entry or
 sidecar covers it and *its* sources answer - or it is the reference). A
 file needs a `recipe:` (that exists) or a `command:`, and at least one
-source. An entry deeper in the tree overrides its folder's. Paths outside
-the project's folder are refused.
+source. A `url:` that is a Google Photos album link (`photos.app.goo.gl/...`,
+`photos.google.com/share/...`) counts as answering when the album lists at
+least one item. An entry deeper in the tree overrides its folder's. Paths
+outside the project's folder are refused.
 
 **What "answers" means**, per kind of source: an album item is still in
 the album and its download responds (its size matching the lock's, if
