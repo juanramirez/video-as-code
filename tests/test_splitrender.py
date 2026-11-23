@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -279,6 +280,44 @@ def test_melt_progress_reaches_the_callback():
     assert seen and seen[-1] == 12 and seen == sorted(seen)
     assert tail.strip().endswith("oops at the end")
 
+
+
+def test_a_melt_that_goes_silent_is_killed_and_reported():
+    script = "import sys, time\nsys.stderr.write('Current Frame: 5, percentage: 5\\r'); sys.stderr.flush()\ntime.sleep(60)\n"
+    seen: list[int] = []
+    started = time.monotonic()
+    code, tail = splitrender._run_melt_with_progress([sys.executable, "-c", script], dict(os.environ), seen.append, stall_s=1.0)
+    assert time.monotonic() - started < 30  # not the script's 60 s
+    assert code != 0 and seen == [5]
+    assert "killed as hung" in tail
+
+
+def test_a_melt_that_keeps_reporting_is_not_killed_for_taking_long():
+    script = "import sys, time\nfor f in range(6):\n    sys.stderr.write(f'Current Frame: {f}, percentage: {f}\\r'); sys.stderr.flush(); time.sleep(0.5)\n"
+    code, tail = splitrender._run_melt_with_progress([sys.executable, "-c", script], dict(os.environ), lambda f: None, stall_s=1.5)
+    assert code == 0 and "killed" not in tail
+
+
+def test_the_stall_limit_can_be_set_from_the_environment(monkeypatch):
+    assert splitrender._stall_seconds() == splitrender.MELT_STALL_S
+    monkeypatch.setenv("VIDEO_AS_CODE_MELT_STALL_S", "42")
+    assert splitrender._stall_seconds() == 42.0
+    monkeypatch.setenv("VIDEO_AS_CODE_MELT_STALL_S", "soon")
+    assert splitrender._stall_seconds() == splitrender.MELT_STALL_S
+
+
+def test_a_sound_melt_that_neither_exits_nor_writes_is_killed(tmp_path):
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    started = time.monotonic()
+    assert splitrender._wait_for_audio(proc, [tmp_path / "audio.log"], stall_s=1.0) != 0
+    assert time.monotonic() - started < 30
+
+
+def test_a_sound_melt_that_keeps_writing_is_waited_for(tmp_path):
+    log = tmp_path / "audio.log"
+    script = f"import time\nfor _ in range(6):\n    open({str(log)!r}, 'a').write('x'); time.sleep(0.5)\n"
+    proc = subprocess.Popen([sys.executable, "-c", script])
+    assert splitrender._wait_for_audio(proc, [log], stall_s=1.5) == 0
 
 
 # --- joining the segments ---------------------------------------------------------
